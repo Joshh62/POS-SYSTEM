@@ -4,14 +4,14 @@ from fastapi import FastAPI, Depends
 from sqlalchemy.orm import Session
 
 from app.database import engine, Base, SessionLocal
-from app import models
+from app import models, schemas
 
 app = FastAPI()
 
-# Create tables
+# Create database tables
 Base.metadata.create_all(bind=engine)
 
-# DB session
+# Database session dependency
 def get_db():
     db = SessionLocal()
     try:
@@ -19,10 +19,34 @@ def get_db():
     finally:
         db.close()
 
+# Root endpoint
 @app.get("/")
 def root():
-    return {"message": "working"}
+    return {"message": "POS backend running"}
 
+# Create Category (with JSON body)
 @app.post("/categories/")
-def create_category(db: Session = Depends(get_db)):
-    return {"message": "category endpoint working"}
+def create_category(category: schemas.CategoryCreate, db: Session = Depends(get_db)):
+    new_category = models.Category(category_name=category.category_name)
+
+    db.add(new_category)
+    db.commit()
+    db.refresh(new_category)
+
+    return new_category
+
+@app.post("/products/")
+def create_product(product: schemas.ProductCreate, db: Session = Depends(get_db)):
+    new_product = models.Product(
+        product_name=product.product_name,
+        barcode=product.barcode,
+        category_id=product.category_id,
+        cost_price=product.cost_price,
+        selling_price=product.selling_price
+    )
+
+    db.add(new_product)
+    db.commit()
+    db.refresh(new_product)
+
+    return new_product
