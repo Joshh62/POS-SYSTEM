@@ -50,3 +50,15 @@ def create_product(product: schemas.ProductCreate, db: Session = Depends(get_db)
     db.refresh(new_product)
 
     return new_product
+
+from fastapi import HTTPException
+
+@app.get("/product/barcode/{barcode}", response_model=schemas.ProductResponse)
+def get_product_by_barcode(barcode: str, db: Session = Depends(get_db)):
+
+    product = db.query(models.Product).filter(models.Product.barcode == barcode).first()
+
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+
+    return product

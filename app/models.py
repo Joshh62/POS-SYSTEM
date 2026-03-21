@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Numeric, ForeignKey
+from sqlalchemy import Column, DateTime, Integer, String, Numeric, ForeignKey
 from sqlalchemy.orm import relationship
 from app.database import Base
 
@@ -23,3 +23,31 @@ class Product(Base):
     reorder_level = Column(Integer, default=5)
 
     category = relationship("Category", back_populates="products")
+
+class SaleItem(Base):
+    __tablename__ = "sale_items"
+
+    sale_item_id = Column(Integer, primary_key=True, index=True)
+
+    sale_id = Column(Integer, ForeignKey("sales.sale_id"))
+
+    product_id = Column(Integer, ForeignKey("products.product_id"))
+
+    quantity = Column(Integer)
+
+    unit_price = Column(Numeric(12,2))
+
+    subtotal = Column(Numeric(12,2))
+    
+    products = relationship("Product", back_populates="sale_items")
+
+class Sale(Base):
+    __tablename__ = "sales"
+
+    sale_id = Column(Integer, primary_key=True, index=True)
+    sale_date = Column(DateTime)
+    user_id = Column(Integer)
+    total_amount = Column(Numeric(12,2))
+    status = Column(String)
+
+    products = relationship("Product", back_populates="sales")
