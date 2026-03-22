@@ -92,6 +92,16 @@ def create_sale(sale: schemas.SaleCreate, db: Session = Depends(get_db)):
         # Deduct stock
         product.stock_quantity -= item.quantity
 
+        movement = models.InventoryMovement(
+            product_id=item.product_id,
+            movement_type="sale",
+            quantity=item.quantity,
+            reference_id=new_sale.sale_id,
+            movement_date=datetime.utcnow()
+        )
+
+        db.add(movement)
+
         unit_price = product.selling_price
         subtotal = unit_price * item.quantity
 

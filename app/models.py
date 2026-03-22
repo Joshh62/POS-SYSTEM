@@ -55,3 +55,17 @@ class Sale(Base):
 
     items = relationship("SaleItem", back_populates="sale")
 
+class InventoryMovement(Base):
+    __tablename__ = "inventory_movements"
+
+    movement_id = Column(Integer, primary_key=True, index=True)
+
+    product_id = Column(Integer, ForeignKey("products.product_id"))
+
+    movement_type = Column(String)
+
+    quantity = Column(Integer)
+
+    reference_id = Column(Integer)
+
+    movement_date = Column(DateTime)
