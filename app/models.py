@@ -21,8 +21,10 @@ class Product(Base):
     cost_price = Column(Numeric(12,2))
     selling_price = Column(Numeric(12,2))
     reorder_level = Column(Integer, default=5)
+    stock_quantity = Column(Integer, default=0)
 
     category = relationship("Category", back_populates="products")
+    sale_items = relationship("SaleItem", back_populates="product")
 
 class SaleItem(Base):
     __tablename__ = "sale_items"
@@ -38,8 +40,9 @@ class SaleItem(Base):
     unit_price = Column(Numeric(12,2))
 
     subtotal = Column(Numeric(12,2))
-    
-    products = relationship("Product", back_populates="sale_items")
+
+    sale = relationship("Sale", back_populates="items")
+    product = relationship("Product")
 
 class Sale(Base):
     __tablename__ = "sales"
@@ -50,4 +53,5 @@ class Sale(Base):
     total_amount = Column(Numeric(12,2))
     status = Column(String)
 
-    products = relationship("Product", back_populates="sales")
+    items = relationship("SaleItem", back_populates="sale")
+
