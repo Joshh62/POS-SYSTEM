@@ -83,3 +83,18 @@ class SaleResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+from pydantic import BaseModel
+
+
+class RestockRequest(BaseModel):
+    product_id: int
+    quantity: int
+
+
+class RestockResponse(BaseModel):
+    product_id: int
+    new_stock: int
+
+    class Config:
+        from_attributes = True
