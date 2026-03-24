@@ -4,12 +4,24 @@ from datetime import datetime
 
 from app import models, schemas
 from app.database import get_db
+from dependencies import require_role
 
 router = APIRouter(
     prefix="/sales",
     tags=["Sales"]
 )
 
+@router.post("/sale")
+def create_sale(
+    sale: schemas.SaleCreate,
+    db: Session = Depends(get_db),
+    user = Depends(require_role(["admin","cashier"]))
+):
+    new_sale = models.Sale(**sale.dict())
+    db.add(new_sale)
+    db.commit()
+    db.refresh(new_sale)
+    return new_sale
 
 @router.post("/", response_model=schemas.SaleResponse)
 def create_sale(data: schemas.SaleCreate, db: Session = Depends(get_db)):
@@ -106,3 +118,4 @@ def scan_product(barcode: str, quantity: int, db: Session = Depends(get_db)):
         "quantity": quantity,
         "subtotal": subtotal
     }
+

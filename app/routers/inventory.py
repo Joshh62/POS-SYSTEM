@@ -4,6 +4,7 @@ from datetime import datetime
 
 from app import models, schemas
 from app.database import get_db
+from app.dependencies import require_role
 
 # Optional prefix keeps routes organized
 router = APIRouter(
@@ -11,8 +12,12 @@ router = APIRouter(
     tags=["Inventory"]
 )
 
-@router.post("/restock", response_model=schemas.RestockResponse)
-def restock_product(data: schemas.RestockRequest, db: Session = Depends(get_db)):
+@router.post("/product")
+def create_product(
+    product: schemas.ProductCreate,
+    db: Session = Depends(get_db),
+    user = Depends(require_role(["admin"]))
+):
 
     # Prevent invalid restock
     if data.quantity <= 0:
