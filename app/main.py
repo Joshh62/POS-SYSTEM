@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.database import engine, Base, get_db
 from app import models, schemas
-from app.routers import sales, inventory
+from app.routers import sales, inventory, reports, auth
 
 app = FastAPI(title="POS System API")
 
@@ -15,6 +15,8 @@ Base.metadata.create_all(bind=engine)
 # Routers
 app.include_router(sales.router)
 app.include_router(inventory.router)
+app.include_router(reports.router)
+app.include_router(auth.router)
 
 
 # Root

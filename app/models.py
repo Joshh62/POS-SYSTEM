@@ -69,3 +69,11 @@ class InventoryMovement(Base):
     reference_id = Column(Integer)
 
     movement_date = Column(DateTime)
+
+class User(Base):
+    __tablename__ = "users"
+
+    user_id = Column(Integer, primary_key=True, index=True)
+    username = Column(String, unique=True, index=True)
+    password_hash = Column(String)
+    role = Column(String)
