@@ -1,8 +1,10 @@
+from datetime import date
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from sqlalchemy import func
+
 from app.database import get_db
-from app.models import Sale
+from app.models import Product, SaleItem, Sale, User
 from app.dependencies import require_role
 
 router = APIRouter(
@@ -19,9 +21,9 @@ def daily_sales(
     today = date.today()
 
     result = db.query(
-        func.sum(models.Sale.total_amount)
+        func.sum(Sale.total_amount)
     ).filter(
-        func.date(models.Sale.sale_date) == today
+        func.date(Sale.sale_date) == today
     ).scalar()
 
     return {
@@ -32,28 +34,34 @@ def daily_sales(
 @router.get("/top-products")
 def top_products(
     db: Session = Depends(get_db),
-    user = Depends(require_role(["admin","manager"]))
+    user = Depends(require_role(["admin", "manager"]))
 ):
 
-    result = db.query(
-        models.Product.name,
-        func.sum(models.SaleItem.quantity).label("total_sold")
-    ).join(
-        models.SaleItem,
-        models.Product.product_id == models.SaleItem.product_id
-    ).group_by(
-        models.Product.name
-    ).order_by(
-        func.sum(models.SaleItem.quantity).desc()
-    ).limit(5).all()
+    results = (
+        db.query(
+            Product.product_name,
+            func.sum(SaleItem.quantity).label("total_sold")
+        )
+        .join(SaleItem, Product.product_id == SaleItem.product_id)
+        .group_by(Product.product_name)
+        .order_by(func.sum(SaleItem.quantity).desc())
+        .limit(10)
+        .all()
+    )
 
-    return result
+    return [
+        {
+            "product_name": r.product_name,
+            "total_sold": r.total_sold
+        }
+        for r in results
+    ]
 
 @router.get("/inventory-value")
 def inventory_value(db: Session = Depends(get_db)):
 
     value = db.query(
-        func.sum(models.Product.cost_price * models.Product.stock_quantity)
+        func.sum(Product.cost_price * Product.stock_quantity)
     ).scalar()
 
     return {
@@ -66,8 +74,8 @@ def low_stock(
     user = Depends(require_role(["admin","manager"]))
 ):
 
-    products = db.query(models.Product).filter(
-        models.Product.stock_quantity < 10
+    products = db.query(Product).filter(
+        Product.stock_quantity <= Product.reorder_level
     ).all()
 
     return products
@@ -79,7 +87,7 @@ def sales_volume(
 ):
 
     total_items = db.query(
-        func.sum(models.SaleItem.quantity)
+        func.sum(SaleItem.quantity)
     ).scalar()
 
     return {
@@ -89,7 +97,7 @@ def sales_volume(
 @router.get("/sales-summary")
 def sales_summary(
     db: Session = Depends(get_db),
-    user = Depends(require_role(["admin", "manager"]))
+    user = Depends(require_role(["admin","manager"]))
 ):
 
     total_sales = db.query(func.sum(Sale.total_amount)).scalar() or 0
@@ -97,5 +105,5 @@ def sales_summary(
 
     return {
         "total_sales": total_sales,
-        "total_transactions": total_transactions
+        "transactions": total_transactions
     }

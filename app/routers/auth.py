@@ -39,8 +39,12 @@ def login(
 ):
     user = db.query(User).filter(User.username == form_data.username).first()
 
+
     if not user:
         raise HTTPException(status_code=401, detail="Invalid username")
+
+    if not user.is_active:
+        raise HTTPException(status_code=403, detail="Account disabled")
 
     if not verify_password(form_data.password, user.password_hash):
         raise HTTPException(status_code=401, detail="Invalid password")
@@ -53,3 +57,16 @@ def login(
         "access_token": access_token,
         "token_type": "bearer"
     }
+
+@router.patch("/users/{user_id}/deactivate")
+def deactivate_user(user_id: int, db: Session = Depends(get_db)):
+
+    user = db.query(User).filter(User.user_id == user_id).first()
+
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    user.is_active = False
+    db.commit()
+
+    return {"message": "User deactivated"}
