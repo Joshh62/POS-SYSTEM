@@ -1,11 +1,9 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from sqlalchemy import func
-from datetime import date
-from app.dependencies import require_role
-
-from app import models
 from app.database import get_db
+from app.models import Sale
+from app.dependencies import require_role
 
 router = APIRouter(
     prefix="/reports",
@@ -91,5 +89,13 @@ def sales_volume(
 @router.get("/sales-summary")
 def sales_summary(
     db: Session = Depends(get_db),
-    user = Depends(require_role(["admin","manager"]))
+    user = Depends(require_role(["admin", "manager"]))
 ):
+
+    total_sales = db.query(func.sum(Sale.total_amount)).scalar() or 0
+    total_transactions = db.query(func.count(Sale.sale_id)).scalar() or 0
+
+    return {
+        "total_sales": total_sales,
+        "total_transactions": total_transactions
+    }

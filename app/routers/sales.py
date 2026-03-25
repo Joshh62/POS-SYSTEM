@@ -4,7 +4,7 @@ from datetime import datetime
 
 from app import models, schemas
 from app.database import get_db
-from dependencies import require_role
+from app.dependencies import require_role
 
 router = APIRouter(
     prefix="/sales",
