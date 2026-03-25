@@ -39,12 +39,17 @@ def login(
 ):
     user = db.query(User).filter(User.username == form_data.username).first()
 
-    if not user or not verify_password(form_data.password, user.password):
-        raise HTTPException(status_code=401, detail="Invalid credentials")
+    if not user:
+        raise HTTPException(status_code=401, detail="Invalid username")
 
-    token = create_access_token({"sub": user.username, "role": user.role})
+    if not verify_password(form_data.password, user.password_hash):
+        raise HTTPException(status_code=401, detail="Invalid password")
+
+    access_token = create_access_token(
+        data={"sub": user.username, "role": user.role}
+    )
 
     return {
-        "access_token": token,
+        "access_token": access_token,
         "token_type": "bearer"
     }
