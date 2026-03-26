@@ -11,18 +11,6 @@ router = APIRouter(
     tags=["Sales"]
 )
 
-@router.post("/sale")
-def create_sale(
-    sale: schemas.SaleCreate,
-    db: Session = Depends(get_db),
-    user = Depends(require_role(["admin","cashier"]))
-):
-    new_sale = models.Sale(**sale.dict())
-    db.add(new_sale)
-    db.commit()
-    db.refresh(new_sale)
-    return new_sale
-
 @router.post("/", response_model=schemas.SaleResponse)
 def create_sale(data: schemas.SaleCreate, db: Session = Depends(get_db)):
 

@@ -22,6 +22,12 @@ def register(user: schemas.UserCreate, db: Session = Depends(get_db)):
     username=user.username,
     password_hash=hashed,
     role=user.role
+
+    if len(user.password) < 6:
+    raise HTTPException(
+        status_code=400,
+        detail="Password must be at least 6 characters"
+    )
 )
 
 
@@ -50,8 +56,12 @@ def login(
         raise HTTPException(status_code=401, detail="Invalid password")
 
     access_token = create_access_token(
-        data={"sub": user.username, "role": user.role}
-    )
+    data={
+        "sub": user.username,
+        "user_id": user.user_id,
+        "role": user.role
+    }
+)
 
     return {
         "access_token": access_token,

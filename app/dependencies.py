@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app import models
 from app.auth import SECRET_KEY, ALGORITHM
+from typing import List
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
 
@@ -32,10 +33,13 @@ def get_current_user(
     if user is None:
         raise HTTPException(status_code=401, detail="User not found")
 
+    if not user.is_active:
+        raise HTTPException(status_code=403, detail="Account disabled")
+
     return user
 
 
-def require_role(allowed_roles: list):
+def require_role(allowed_roles: List[str]):
 
     def role_checker(user = Depends(get_current_user)):
 

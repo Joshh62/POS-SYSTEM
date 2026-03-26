@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func
 
 from app.database import get_db
-from app.models import Product, SaleItem, Sale, User
+from app.models import Product, SaleItem, Sale, User, AuditLog
 from app.dependencies import require_role
 
 router = APIRouter(
@@ -107,3 +107,69 @@ def sales_summary(
         "total_sales": total_sales,
         "transactions": total_transactions
     }
+
+@router.get("/sales-by-cashier")
+def sales_by_cashier(
+    db: Session = Depends(get_db),
+    user = Depends(require_role(["admin","manager"]))
+):
+
+    results = (
+        db.query(
+            User.full_name,
+            func.count(Sale.sale_id).label("transactions"),
+            func.sum(Sale.total_amount).label("total_sales")
+        )
+        .join(Sale, Sale.user_id == User.user_id)
+        .group_by(User.full_name)
+        .order_by(func.sum(Sale.total_amount).desc())
+        .all()
+    )
+
+    return [
+        {
+            "cashier": r.full_name,
+            "transactions": r.transactions,
+            "total_sales": r.total_sales
+        }
+        for r in results
+    ]
+
+@router.get("/profit")
+def profit_report(
+    db: Session = Depends(get_db),
+    user = Depends(require_role(["admin","manager"]))
+):
+
+    results = (
+        db.query(
+            Product.product_name,
+            func.sum(
+                (SaleItem.unit_price - Product.cost_price) * SaleItem.quantity
+            ).label("profit")
+        )
+        .join(SaleItem, Product.product_id == SaleItem.product_id)
+        .group_by(Product.product_name)
+        .order_by(func.sum(
+            (SaleItem.price - Product.cost_price) * SaleItem.quantity
+        ).desc())
+        .all()
+    )
+
+    return [
+        {
+            "product_name": r.product_name,
+            "profit": r.profit
+        }
+        for r in results
+    ]
+
+@router.get("/audit-logs")
+def audit_logs(
+    db: Session = Depends(get_db),
+    user = Depends(require_role(["admin"]))
+):
+
+    logs = db.query(AuditLog).order_by(AuditLog.created_at.desc()).limit(100).all()
+
+    return logs

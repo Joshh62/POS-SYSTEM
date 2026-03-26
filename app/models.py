@@ -1,3 +1,4 @@
+from datetime import datetime
 from sqlalchemy import Column, DateTime, Integer, String, Numeric, ForeignKey, Boolean
 from sqlalchemy.orm import relationship
 from app.database import Base
@@ -22,6 +23,7 @@ class Product(Base):
     selling_price = Column(Numeric(12,2))
     reorder_level = Column(Integer, default=5)
     stock_quantity = Column(Integer, default=0)
+    movements = relationship("InventoryMovement", backref="product")
 
     category = relationship("Category", back_populates="products")
     sale_items = relationship("SaleItem", back_populates="product")
@@ -48,7 +50,7 @@ class Sale(Base):
     __tablename__ = "sales"
 
     sale_id = Column(Integer, primary_key=True, index=True)
-    sale_date = Column(DateTime)
+    sale_date = Column(DateTime, default=datetime.utcnow)
     user_id = Column(Integer)
     total_amount = Column(Numeric(12,2))
     status = Column(String)
@@ -68,7 +70,7 @@ class InventoryMovement(Base):
 
     reference_id = Column(Integer)
 
-    movement_date = Column(DateTime)
+    movement_date = Column(DateTime, default=datetime.utcnow)
 
 class User(Base):
     __tablename__ = "users"
@@ -78,5 +80,16 @@ class User(Base):
     username = Column(String, unique=True, index=True)
     password_hash = Column(String)
     role = Column(String)
-    created_at = Column(DateTime)
+    created_at = Column(DateTime, default=datetime.utcnow)
     is_active = Column(Boolean, default=True)
+
+class AuditLog(Base):
+    __tablename__ = "audit_logs"
+
+    log_id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer)
+    action = Column(String)
+    table_name = Column(String)
+    record_id = Column(Integer)
+    description = Column(String)
+    created_at = Column(DateTime, default=datetime.utcnow)
