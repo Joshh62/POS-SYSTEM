@@ -259,3 +259,99 @@ def dashboard(
         "total_products": total_products,
         "low_stock_products": low_stock
     }
+
+
+@router.get("/daily-dashboard")
+def daily_dashboard(
+    db: Session = Depends(get_db),
+    user = Depends(require_role(["admin","manager"]))
+):
+
+    today = date.today()
+
+    # total sales today
+    total_sales = db.query(
+        func.sum(models.Sale.total_amount)
+    ).filter(
+        func.date(models.Sale.sale_date) == today
+    ).scalar()
+
+    # total transactions
+    total_transactions = db.query(
+        func.count(models.Sale.sale_id)
+    ).filter(
+        func.date(models.Sale.sale_date) == today
+    ).scalar()
+
+    # profit today
+    profit = db.query(
+        func.sum(
+            (models.SaleItem.unit_price - models.Product.cost_price)
+            * models.SaleItem.quantity
+        )
+    ).join(
+        models.Product,
+        models.Product.product_id == models.SaleItem.product_id
+    ).join(
+        models.Sale,
+        models.Sale.sale_id == models.SaleItem.sale_id
+    ).filter(
+        func.date(models.Sale.sale_date) == today
+    ).scalar()
+
+    # best selling product
+    top_product = db.query(
+        models.Product.product_name,
+        func.sum(models.SaleItem.quantity).label("qty")
+    ).join(
+        models.SaleItem,
+        models.Product.product_id == models.SaleItem.product_id
+    ).join(
+        models.Sale,
+        models.Sale.sale_id == models.SaleItem.sale_id
+    ).filter(
+        func.date(models.Sale.sale_date) == today
+    ).group_by(
+        models.Product.product_name
+    ).order_by(
+        func.sum(models.SaleItem.quantity).desc()
+    ).first()
+
+    return {
+        "date": today,
+        "total_sales": total_sales or 0,
+        "total_transactions": total_transactions or 0,
+        "total_profit": profit or 0,
+        "top_product": top_product[0] if top_product else None
+    }
+
+
+
+@router.get("/stock-valuation")
+def stock_valuation(
+    db: Session = Depends(get_db),
+    user = Depends(require_role(["admin","manager"]))
+):
+
+    products = db.query(models.Product).all()
+
+    inventory = []
+    total_value = 0
+
+    for product in products:
+
+        stock_value = product.stock_quantity * product.cost_price
+        total_value += stock_value
+
+        inventory.append({
+            "product_id": product.product_id,
+            "product_name": product.product_name,
+            "stock_quantity": product.stock_quantity,
+            "cost_price": product.cost_price,
+            "stock_value": stock_value
+        })
+
+    return {
+        "total_inventory_value": total_value,
+        "products": inventory
+    }

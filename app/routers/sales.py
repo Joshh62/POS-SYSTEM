@@ -11,19 +11,28 @@ router = APIRouter(
     tags=["Sales"]
 )
 
-@router.post("/", response_model=schemas.SaleResponse)
-def create_sale(data: schemas.SaleCreate, db: Session = Depends(get_db)):
+@router.post("/")
+def create_sale(
+    data: schemas.SaleCreate,
+    db: Session = Depends(get_db),
+    user = Depends(require_role(["admin","manager","cashier"]))
+):
 
     total_amount = 0
     sale_items = []
 
     # Create empty sale first
+
+
     new_sale = models.Sale(
         sale_date=datetime.utcnow(),
-        user_id=data.user_id,
+        user_id=user.user_id,
+        customer_id=data.customer_id,
         total_amount=0,
         status="completed"
     )
+    
+    
 
     db.add(new_sale)
     db.commit()
@@ -66,7 +75,7 @@ def create_sale(data: schemas.SaleCreate, db: Session = Depends(get_db)):
         # record inventory movement
         movement = models.InventoryMovement(
             product_id=item.product_id,
-            movement_type="sale",
+            movement_type="SALE",
             quantity=item.quantity,
             reference_id=new_sale.sale_id,
             movement_date=datetime.utcnow()
@@ -153,3 +162,34 @@ def get_receipt(
         "total_amount": sale.total_amount
     }
 
+
+
+@router.get("/scan/{barcode}")
+def scan_product(
+    barcode: str,
+    db: Session = Depends(get_db),
+    user = Depends(require_role(["admin","manager","cashier"]))
+):
+
+    product = db.query(models.Product).filter(
+        models.Product.barcode == barcode
+    ).first()
+
+    if not product:
+        raise HTTPException(
+            status_code=404,
+            detail="Product not found"
+        )
+
+    if product.stock_quantity <= 0:
+        raise HTTPException(
+            status_code=400,
+            detail="Product out of stock"
+        )
+
+    return {
+        "product_id": product.product_id,
+        "product_name": product.product_name,
+        "selling_price": product.selling_price,
+        "stock_quantity": product.stock_quantity
+    }

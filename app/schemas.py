@@ -69,7 +69,7 @@ class SaleItemResponse(BaseModel):
 # ---------------------------
 
 class SaleCreate(BaseModel):
-    user_id: int
+    customer_id: int | None = None
     items: List[SaleItemCreate]
 
 
@@ -162,3 +162,19 @@ class PurchaseOrderResponse(BaseModel):
         from_attributes = True
 
 
+class CustomerCreate(BaseModel):
+    full_name: str
+    phone: str | None = None
+    email: str | None = None
+    address: str | None = None
+
+
+class CustomerResponse(BaseModel):
+    customer_id: int
+    full_name: str
+    phone: str | None
+    email: str | None
+    address: str | None
+
+    class Config:
+        from_attributes = True

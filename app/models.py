@@ -46,16 +46,21 @@ class SaleItem(Base):
     sale = relationship("Sale", back_populates="items")
     product = relationship("Product")
 
+
 class Sale(Base):
     __tablename__ = "sales"
 
     sale_id = Column(Integer, primary_key=True, index=True)
     sale_date = Column(DateTime, default=datetime.utcnow)
+
     user_id = Column(Integer)
+    customer_id = Column(Integer, ForeignKey("customers.customer_id"), nullable=True)
+
     total_amount = Column(Numeric(12,2))
     status = Column(String)
 
     items = relationship("SaleItem", back_populates="sale")
+
 
 class InventoryMovement(Base):
     __tablename__ = "inventory_movements"
@@ -82,6 +87,16 @@ class User(Base):
     role = Column(String)
     created_at = Column(DateTime, default=datetime.utcnow)
     is_active = Column(Boolean, default=True)
+
+class Customer(Base):
+    __tablename__ = "customers"
+
+    customer_id = Column(Integer, primary_key=True, index=True)
+    full_name = Column(String, nullable=False)
+    phone = Column(String, unique=True)
+    email = Column(String)
+    address = Column(String)
+    created_at = Column(DateTime, default=datetime.utcnow)
 
 class AuditLog(Base):
     __tablename__ = "audit_logs"

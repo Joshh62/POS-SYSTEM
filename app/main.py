@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from app.routers import suppliers, purchases
 from app.database import engine, Base, get_db
 from app import models, schemas
-from app.routers import sales, inventory, reports, auth
+from app.routers import sales, inventory, reports, auth, customers
 
 app = FastAPI(title="POS System API")
 
@@ -19,7 +19,7 @@ app.include_router(reports.router)
 app.include_router(auth.router)
 app.include_router(suppliers.router)
 app.include_router(purchases.router)
-
+app.include_router(customers.router)
 
 # Root
 @app.get("/")
