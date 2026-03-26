@@ -1,3 +1,4 @@
+from app import models
 from datetime import date
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
@@ -11,6 +12,7 @@ router = APIRouter(
     prefix="/reports",
     tags=["Reports"]
 )
+
 
 @router.get("/daily-sales")
 def daily_sales(
@@ -30,6 +32,7 @@ def daily_sales(
         "date": today,
         "total_sales": result or 0
     }
+
 
 @router.get("/top-products")
 def top_products(
@@ -57,6 +60,7 @@ def top_products(
         for r in results
     ]
 
+
 @router.get("/inventory-value")
 def inventory_value(db: Session = Depends(get_db)):
 
@@ -67,6 +71,7 @@ def inventory_value(db: Session = Depends(get_db)):
     return {
         "total_inventory_value": value or 0
     }
+
 
 @router.get("/low-stock")
 def low_stock(
@@ -79,6 +84,7 @@ def low_stock(
     ).all()
 
     return products
+
 
 @router.get("/sales-volume")
 def sales_volume(
@@ -94,6 +100,7 @@ def sales_volume(
         "items_sold": total_items or 0
     }
 
+
 @router.get("/sales-summary")
 def sales_summary(
     db: Session = Depends(get_db),
@@ -107,6 +114,7 @@ def sales_summary(
         "total_sales": total_sales,
         "transactions": total_transactions
     }
+
 
 @router.get("/sales-by-cashier")
 def sales_by_cashier(
@@ -135,6 +143,7 @@ def sales_by_cashier(
         for r in results
     ]
 
+
 @router.get("/profit")
 def profit_report(
     db: Session = Depends(get_db),
@@ -151,7 +160,7 @@ def profit_report(
         .join(SaleItem, Product.product_id == SaleItem.product_id)
         .group_by(Product.product_name)
         .order_by(func.sum(
-            (SaleItem.price - Product.cost_price) * SaleItem.quantity
+            (SaleItem.unit_price - Product.cost_price) * SaleItem.quantity
         ).desc())
         .all()
     )
@@ -164,6 +173,7 @@ def profit_report(
         for r in results
     ]
 
+
 @router.get("/audit-logs")
 def audit_logs(
     db: Session = Depends(get_db),
@@ -173,3 +183,79 @@ def audit_logs(
     logs = db.query(AuditLog).order_by(AuditLog.created_at.desc()).limit(100).all()
 
     return logs
+
+
+@router.get("/inventory-history")
+def inventory_history(
+    db: Session = Depends(get_db),
+    user = Depends(require_role(["admin","manager"]))
+):
+
+    movements = (
+        db.query(
+            Product.product_name,
+            models.InventoryMovement.movement_type,
+            models.InventoryMovement.quantity,
+            models.InventoryMovement.reference_id,
+            models.InventoryMovement.movement_date
+        )
+        .join(
+            models.InventoryMovement,
+            Product.product_id == models.InventoryMovement.product_id
+        )
+        .order_by(models.InventoryMovement.movement_date.desc())
+        .all()
+    )
+
+    return [
+        {
+            "product": m.product_name,
+            "movement_type": m.movement_type,
+            "quantity": m.quantity,
+            "reference_id": m.reference_id,
+            "date": m.movement_date
+        }
+        for m in movements
+    ]
+
+
+@router.get("/dashboard")
+def dashboard(
+    db: Session = Depends(get_db),
+    user = Depends(require_role(["admin","manager"]))
+):
+
+    today = date.today()
+
+    # total sales today
+    today_sales = db.query(
+        func.sum(Sale.total_amount)
+    ).filter(
+        func.date(Sale.sale_date) == today
+    ).scalar() or 0
+
+    # total transactions today
+    transactions = db.query(
+        func.count(Sale.sale_id)
+    ).filter(
+        func.date(Sale.sale_date) == today
+    ).scalar() or 0
+
+    # total products
+    total_products = db.query(
+        func.count(Product.product_id)
+    ).scalar()
+
+    # low stock count
+    low_stock = db.query(
+        func.count(Product.product_id)
+    ).filter(
+        Product.stock_quantity <= Product.reorder_level
+    ).scalar()
+
+    return {
+        "today_sales": today_sales,
+        "total_transactions_today": transactions,
+        "total_products": total_products,
+        "low_stock_products": low_stock
+    }

@@ -93,3 +93,40 @@ class AuditLog(Base):
     record_id = Column(Integer)
     description = Column(String)
     created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class Supplier(Base):
+    __tablename__ = "suppliers"
+
+    supplier_id = Column(Integer, primary_key=True, index=True)
+    supplier_name = Column(String, nullable=False)
+    contact_person = Column(String)
+    phone = Column(String)
+    email = Column(String)
+    address = Column(String)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class PurchaseOrder(Base):
+    __tablename__ = "purchase_orders"
+
+    po_id = Column(Integer, primary_key=True, index=True)
+    supplier_id = Column(Integer, ForeignKey("suppliers.supplier_id"))
+    order_date = Column(DateTime, default=datetime.utcnow)
+    status = Column(String, default="pending")
+
+    items = relationship("PurchaseOrderItem", back_populates="purchase_order")
+
+
+class PurchaseOrderItem(Base):
+    __tablename__ = "purchase_order_items"
+
+    po_item_id = Column(Integer, primary_key=True, index=True)
+    po_id = Column(Integer, ForeignKey("purchase_orders.po_id"))
+    product_id = Column(Integer, ForeignKey("products.product_id"))
+    quantity = Column(Integer)
+    unit_cost = Column(Numeric(12,2))
+
+    purchase_order = relationship("PurchaseOrder", back_populates="items")
+
+

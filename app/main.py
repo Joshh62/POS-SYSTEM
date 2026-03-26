@@ -2,7 +2,7 @@ print("MAIN FILE LOADED")
 
 from fastapi import FastAPI, Depends, HTTPException
 from sqlalchemy.orm import Session
-
+from app.routers import suppliers, purchases
 from app.database import engine, Base, get_db
 from app import models, schemas
 from app.routers import sales, inventory, reports, auth
@@ -17,6 +17,8 @@ app.include_router(sales.router)
 app.include_router(inventory.router)
 app.include_router(reports.router)
 app.include_router(auth.router)
+app.include_router(suppliers.router)
+app.include_router(purchases.router)
 
 
 # Root
@@ -54,6 +56,16 @@ def get_product_by_barcode(barcode: str, db: Session = Depends(get_db)):
     return product
 
 
+@app.get("/products/search")
+def search_products(q: str, db: Session = Depends(get_db)):
+
+    products = db.query(models.Product).filter(
+        models.Product.product_name.ilike(f"%{q}%")
+    ).all()
+
+    return products
+
+
 # Low Stock Products
 @app.get("/low-stock/")
 def low_stock_products(db: Session = Depends(get_db)):
@@ -64,3 +76,5 @@ def low_stock_products(db: Session = Depends(get_db)):
     ).all()
 
     return products
+
+

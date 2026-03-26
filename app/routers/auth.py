@@ -15,21 +15,20 @@ router = APIRouter(
 @router.post("/register", response_model=schemas.UserResponse)
 def register(user: schemas.UserCreate, db: Session = Depends(get_db)):
 
+    if len(user.password) < 6:
+        raise HTTPException(
+            status_code=400,
+            detail="Password must be at least 6 characters"
+        )
+
     hashed = hash_password(user.password)
 
     new_user = models.User(
-    full_name=user.full_name,
-    username=user.username,
-    password_hash=hashed,
-    role=user.role
-
-    if len(user.password) < 6:
-    raise HTTPException(
-        status_code=400,
-        detail="Password must be at least 6 characters"
+        full_name=user.full_name,
+        username=user.username,
+        password_hash=hashed,
+        role=user.role
     )
-)
-
 
     db.add(new_user)
     db.commit()

@@ -107,3 +107,49 @@ def scan_product(barcode: str, quantity: int, db: Session = Depends(get_db)):
         "subtotal": subtotal
     }
 
+
+@router.get("/{sale_id}/receipt")
+def get_receipt(
+    sale_id: int,
+    db: Session = Depends(get_db),
+    user = Depends(require_role(["admin","manager","cashier"]))
+):
+
+    sale = db.query(models.Sale).filter(
+        models.Sale.sale_id == sale_id
+    ).first()
+
+    if not sale:
+        raise HTTPException(status_code=404, detail="Sale not found")
+
+    items = db.query(models.SaleItem).filter(
+        models.SaleItem.sale_id == sale_id
+    ).all()
+
+    cashier = db.query(models.User).filter(
+        models.User.user_id == sale.user_id
+    ).first()
+
+    receipt_items = []
+
+    for item in items:
+
+        product = db.query(models.Product).filter(
+            models.Product.product_id == item.product_id
+        ).first()
+
+        receipt_items.append({
+            "product": product.product_name,
+            "quantity": item.quantity,
+            "unit_price": item.unit_price,
+            "subtotal": item.subtotal
+        })
+
+    return {
+        "sale_id": sale.sale_id,
+        "date": sale.sale_date,
+        "cashier": cashier.full_name if cashier else None,
+        "items": receipt_items,
+        "total_amount": sale.total_amount
+    }
+
