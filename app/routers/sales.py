@@ -23,80 +23,97 @@ def create_sale(
     user = Depends(require_role(["admin","manager","cashier"]))
 ):
 
+    if not data.items:
+        raise HTTPException(status_code=400, detail="Sale must contain items")
+
     total_amount = 0
-    sale_items = []
 
-    # Create empty sale first
-    new_sale = models.Sale(
-        sale_date=datetime.utcnow(),
-        user_id=user.user_id,
-        customer_id=data.customer_id,
-        payment_method=data.payment_method,
-        total_amount=0,
-        status="completed"
-    )
-    
+    try:
 
-    db.add(new_sale)
-    db.commit()
-    db.refresh(new_sale)
+        # Create sale
+        new_sale = models.Sale(
+            sale_date=datetime.utcnow(),
+            user_id=user.user_id,
+            customer_id=data.customer_id,
+            payment_method=data.payment_method,
+            total_amount=0,
+            status="completed"
+        )
 
-    for item in data.items:
+        db.add(new_sale)
+        db.flush()  # generates sale_id without committing
 
-        product = db.query(models.Product).filter(
-            models.Product.product_id == item.product_id
-        ).first()
+        # Load all products in ONE query
+        product_ids = [item.product_id for item in data.items]
 
-        if not product:
-            raise HTTPException(status_code=404, detail=f"Product {item.product_id} not found")
+        products = db.query(models.Product).filter(
+            models.Product.product_id.in_(product_ids)
+        ).all()
 
-        if product.stock_quantity < item.quantity:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Insufficient stock for {product.product_name}"
+        product_map = {p.product_id: p for p in products}
+
+        # Process sale items
+        for item in data.items:
+
+            product = product_map.get(item.product_id)
+
+            if not product:
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"Product {item.product_id} not found"
+                )
+
+            if product.stock_quantity < item.quantity:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Insufficient stock for {product.product_name}"
+                )
+
+            unit_price = product.selling_price
+            subtotal = unit_price * item.quantity
+
+            total_amount += subtotal
+
+            # Create sale item
+            sale_item = models.SaleItem(
+                sale_id=new_sale.sale_id,
+                product_id=item.product_id,
+                quantity=item.quantity,
+                unit_price=unit_price,
+                subtotal=subtotal
             )
 
-        unit_price = product.selling_price
-        subtotal = unit_price * item.quantity
+            db.add(sale_item)
 
-        total_amount += subtotal
+            # Deduct stock
+            product.stock_quantity -= item.quantity
 
-        # create sale item
-        sale_item = models.SaleItem(
-            sale_id=new_sale.sale_id,
-            product_id=item.product_id,
-            quantity=item.quantity,
-            unit_price=unit_price,
-            subtotal=subtotal
-        )
+            # Record inventory movement
+            movement = models.InventoryMovement(
+                product_id=item.product_id,
+                movement_type="SALE",
+                quantity=item.quantity,
+                reference_id=new_sale.sale_id,
+                movement_date=datetime.utcnow()
+            )
 
-        db.add(sale_item)
+            db.add(movement)
 
-        # deduct stock
-        product.stock_quantity -= item.quantity
+        # Update sale total
+        new_sale.total_amount = total_amount
 
-        # record inventory movement
-        movement = models.InventoryMovement(
-            product_id=item.product_id,
-            movement_type="SALE",
-            quantity=item.quantity,
-            reference_id=new_sale.sale_id,
-            movement_date=datetime.utcnow()
-        )
+        db.commit()
+        db.refresh(new_sale)
 
-        db.add(movement)
+        return new_sale
 
-        sale_items.append(sale_item)
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
 
-    # update sale total
-    new_sale.total_amount = total_amount
-
-    db.commit()
-
-    return new_sale
 
 @router.post("/scan")
-def scan_product(barcode: str, quantity: int, db: Session = Depends(get_db)):
+def scan_product_with_quantity(barcode: str, quantity: int, db: Session = Depends(get_db)):
 
     product = db.query(models.Product).filter(
         models.Product.barcode == barcode
@@ -168,7 +185,7 @@ def get_receipt(
 
 
 @router.get("/scan/{barcode}")
-def scan_product(
+def scan_product_by_barcode(
     barcode: str,
     db: Session = Depends(get_db),
     user = Depends(require_role(["admin","manager","cashier"]))
@@ -274,7 +291,8 @@ def generate_invoice(
 def refund_sale(
     sale_id: int,
     reason: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    user = Depends(require_role(["admin","manager"]))
 ):
 
     sale = db.query(models.Sale).filter(
@@ -284,27 +302,52 @@ def refund_sale(
     if not sale:
         raise HTTPException(status_code=404, detail="Sale not found")
 
+    if sale.status == "refunded":
+        raise HTTPException(status_code=400, detail="Sale already refunded")
+
     items = db.query(models.SaleItem).filter(
         models.SaleItem.sale_id == sale_id
     ).all()
 
-    for item in items:
+    try:
 
-        product = db.query(models.Product).filter(
-            models.Product.product_id == item.product_id
-        ).first()
+        for item in items:
 
-        product.stock_quantity += item.quantity
+            product = db.query(models.Product).filter(
+                models.Product.product_id == item.product_id
+            ).first()
 
-    refund = models.Refund(
-        sale_id=sale_id,
-        reason=reason
-    )
+            if not product:
+                continue
 
-    db.add(refund)
+            # Restore stock
+            product.stock_quantity += item.quantity
 
-    sale.status = "refunded"
+            # Record movement
+            movement = models.InventoryMovement(
+                product_id=item.product_id,
+                movement_type="REFUND",
+                quantity=item.quantity,
+                reference_id=sale_id,
+                movement_date=datetime.utcnow()
+            )
 
-    db.commit()
+            db.add(movement)
 
-    return {"message": "Sale refunded"}
+        # Record refund
+        refund = models.Refund(
+            sale_id=sale_id,
+            reason=reason
+        )
+
+        db.add(refund)
+
+        sale.status = "refunded"
+
+        db.commit()
+
+        return {"message": "Sale refunded successfully"}
+
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))

@@ -23,10 +23,11 @@ class Product(Base):
     selling_price = Column(Numeric(12,2))
     reorder_level = Column(Integer, default=5)
     stock_quantity = Column(Integer, default=0)
-    movements = relationship("InventoryMovement", backref="product")
+    movements = relationship("InventoryMovement", back_populates="product")
 
     category = relationship("Category", back_populates="products")
     sale_items = relationship("SaleItem", back_populates="product")
+    branch = relationship("Branch", back_populates="products")
 
 class SaleItem(Base):
     __tablename__ = "sale_items"
@@ -44,7 +45,7 @@ class SaleItem(Base):
     subtotal = Column(Numeric(12,2))
 
     sale = relationship("Sale", back_populates="items")
-    product = relationship("Product")
+    product = relationship("Product", back_populates="sale_items")
 
 
 class Sale(Base):
@@ -64,6 +65,10 @@ class Sale(Base):
 
     items = relationship("SaleItem", back_populates="sale")
 
+    branch_id = Column(Integer, ForeignKey("branches.branch_id"))
+
+    branch = relationship("Branch", back_populates="sales")
+
 
 class InventoryMovement(Base):
     __tablename__ = "inventory_movements"
@@ -79,6 +84,8 @@ class InventoryMovement(Base):
     reference_id = Column(Integer)
 
     movement_date = Column(DateTime, default=datetime.utcnow)
+
+    product = relationship("Product", back_populates="movements")
 
 class User(Base):
     __tablename__ = "users"
@@ -155,5 +162,24 @@ class Refund(Base):
     sale_id = Column(Integer, ForeignKey("sales.sale_id"))
     refund_date = Column(DateTime, default=datetime.utcnow)
     reason = Column(String)
+    sale = relationship("Sale")
 
 
+class StockAdjustment(Base):
+    __tablename__ = "stock_adjustments"
+
+    adjustment_id = Column(Integer, primary_key=True)
+    product_id = Column(Integer, ForeignKey("products.product_id"))
+    quantity = Column(Integer)
+    reason = Column(String)
+    adjustment_date = Column(DateTime, default=datetime.utcnow)
+
+
+class Branch(Base):
+    __tablename__ = "branches"
+
+    branch_id = Column(Integer, primary_key=True)
+    branch_name = Column(String)
+    location = Column(String)
+    products = relationship("Product", back_populates="branch")
+    sales = relationship("Sale", back_populates="branch")

@@ -74,16 +74,14 @@ def inventory_value(db: Session = Depends(get_db)):
 
 
 @router.get("/low-stock")
-def low_stock(
+def get_low_stock(
     db: Session = Depends(get_db),
-    user = Depends(require_role(["admin","manager"]))
+    user = Depends(require_role(["admin", "manager"]))
 ):
-
-    products = db.query(Product).filter(
+    return db.query(Product).filter(
+        Product.reorder_level.isnot(None), # Avoid NULL errors
         Product.stock_quantity <= Product.reorder_level
-    ).all()
-
-    return products
+    ).order_by(Product.stock_quantity.asc()).all()
 
 
 @router.get("/sales-volume")
