@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from datetime import datetime
 from typing import List
 
@@ -15,8 +15,7 @@ class CategoryResponse(BaseModel):
     category_id: int
     category_name: str
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 # ---------------------------
@@ -40,8 +39,7 @@ class ProductResponse(BaseModel):
     cost_price: float
     selling_price: float
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 # ---------------------------
@@ -60,8 +58,7 @@ class SaleItemResponse(BaseModel):
     unit_price: float
     subtotal: float
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 # ---------------------------
@@ -70,7 +67,8 @@ class SaleItemResponse(BaseModel):
 
 class SaleCreate(BaseModel):
     customer_id: int | None = None
-    items: List[SaleItemCreate]
+    payment_method: str
+    items: list[SaleItemCreate]
 
 
 class SaleResponse(BaseModel):
@@ -81,8 +79,7 @@ class SaleResponse(BaseModel):
     status: str
     items: List[SaleItemResponse]
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 from pydantic import BaseModel
 
@@ -96,8 +93,7 @@ class RestockResponse(BaseModel):
     product_id: int
     new_stock: int
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 class UserCreate(BaseModel):
     full_name: str
@@ -117,8 +113,7 @@ class UserResponse(BaseModel):
     username: str
     role: str
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class SupplierCreate(BaseModel):
@@ -137,8 +132,7 @@ class SupplierResponse(BaseModel):
     email: str | None
     address: str | None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class PurchaseOrderItemCreate(BaseModel):
@@ -158,8 +152,7 @@ class PurchaseOrderResponse(BaseModel):
     order_date: datetime
     status: str
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class CustomerCreate(BaseModel):
@@ -176,5 +169,6 @@ class CustomerResponse(BaseModel):
     email: str | None
     address: str | None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
+
+

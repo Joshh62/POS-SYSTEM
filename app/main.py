@@ -1,38 +1,23 @@
-print("MAIN FILE LOADED")
-
 from fastapi import FastAPI
-from sqlalchemy.orm import Session
 
-from app.database import engine, Base
-from app.routers import (
-    sales,
-    suppliers,
-    purchases,
-    inventory,
-    reports,
-    auth,
-    customers,
-    products,
-    category
-)
+from app.routers import sales
+from app.routers import products
+from app.routers import inventory
+from app.routers import reports
+from app.routers import auth
+from app.routers import customers
+from app.routers import suppliers
+from app.routers import purchases
+from app.routers import category
 
-app = FastAPI(title="POS System API")
+app = FastAPI()
 
-# Create tables
-Base.metadata.create_all(bind=engine)
-
-# Routers
 app.include_router(auth.router)
-app.include_router(products.router, prefix="/products", tags=["Products"])
-app.include_router(category.router, prefix="/categories", tags=["Categories"])
+app.include_router(products.router)
+app.include_router(category.router)
+app.include_router(customers.router)
 app.include_router(sales.router)
 app.include_router(inventory.router)
 app.include_router(reports.router)
 app.include_router(suppliers.router)
 app.include_router(purchases.router)
-app.include_router(customers.router)
-
-# Root
-@app.get("/")
-def root():
-    return {"message": "POS backend running"}
