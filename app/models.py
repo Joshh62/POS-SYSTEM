@@ -59,6 +59,9 @@ class Sale(Base):
     total_amount = Column(Numeric(12,2))
     status = Column(String)
 
+    payment_method = Column(String, default="cash")
+    payment_reference = Column(String, nullable=True)
+
     items = relationship("SaleItem", back_populates="sale")
 
 
@@ -143,5 +146,14 @@ class PurchaseOrderItem(Base):
     unit_cost = Column(Numeric(12,2))
 
     purchase_order = relationship("PurchaseOrder", back_populates="items")
+
+
+class Refund(Base):
+    __tablename__ = "refunds"
+
+    refund_id = Column(Integer, primary_key=True)
+    sale_id = Column(Integer, ForeignKey("sales.sale_id"))
+    refund_date = Column(DateTime, default=datetime.utcnow)
+    reason = Column(String)
 
 

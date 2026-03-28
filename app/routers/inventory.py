@@ -47,3 +47,49 @@ def restock_product(
         "product_id": product.product_id,
         "new_stock": product.stock_quantity
     }
+
+
+@router.get("/low-stock")
+def get_low_stock_products(
+    threshold: int = 5,
+    db: Session = Depends(get_db)
+):
+
+    products = db.query(models.Product).filter(
+        models.Product.stock_quantity <= threshold
+    ).all()
+
+    return {
+        "threshold": threshold,
+        "low_stock_products": products
+    }
+
+
+@router.post("/adjust")
+def adjust_stock(
+    product_id: int,
+    quantity: int,
+    reason: str,
+    db: Session = Depends(get_db)
+):
+
+    product = db.query(models.Product).filter(
+        models.Product.product_id == product_id
+    ).first()
+
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+
+    product.stock_quantity += quantity
+
+    adjustment = models.StockAdjustment(
+        product_id=product_id,
+        quantity=quantity,
+        reason=reason
+    )
+
+    db.add(adjustment)
+
+    db.commit()
+
+    return {"message": "Stock adjusted"}

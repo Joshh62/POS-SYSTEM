@@ -6,6 +6,11 @@ from app import models, schemas
 from app.database import get_db
 from app.dependencies import require_role
 
+from fastapi.responses import StreamingResponse
+from reportlab.lib.pagesizes import letter
+from reportlab.pdfgen import canvas
+import io
+
 router = APIRouter(
     prefix="/sales",
     tags=["Sales"]
@@ -22,16 +27,14 @@ def create_sale(
     sale_items = []
 
     # Create empty sale first
-
-
     new_sale = models.Sale(
         sale_date=datetime.utcnow(),
         user_id=user.user_id,
         customer_id=data.customer_id,
+        payment_method=data.payment_method,
         total_amount=0,
         status="completed"
     )
-    
     
 
     db.add(new_sale)
@@ -193,3 +196,115 @@ def scan_product(
         "selling_price": product.selling_price,
         "stock_quantity": product.stock_quantity
     }
+
+
+@router.get("/{sale_id}/invoice")
+def generate_invoice(
+    sale_id: int,
+    db: Session = Depends(get_db),
+    user = Depends(require_role(["admin","manager","cashier"]))
+):
+
+    sale = db.query(models.Sale).filter(
+        models.Sale.sale_id == sale_id
+    ).first()
+
+    if not sale:
+        raise HTTPException(status_code=404, detail="Sale not found")
+
+    items = db.query(models.SaleItem).filter(
+        models.SaleItem.sale_id == sale_id
+    ).all()
+
+    buffer = io.BytesIO()
+    p = canvas.Canvas(buffer, pagesize=letter)
+
+    y = 750
+
+    p.setFont("Helvetica-Bold", 16)
+    p.drawString(200, y, "POS RECEIPT")
+
+    y -= 40
+    p.setFont("Helvetica", 10)
+    p.drawString(50, y, f"Sale ID: {sale.sale_id}")
+    y -= 20
+    p.drawString(50, y, f"Date: {sale.sale_date}")
+
+    y -= 40
+    p.drawString(50, y, "Product")
+    p.drawString(250, y, "Qty")
+    p.drawString(300, y, "Price")
+    p.drawString(380, y, "Subtotal")
+
+    y -= 20
+
+    for item in items:
+
+        product = db.query(models.Product).filter(
+            models.Product.product_id == item.product_id
+        ).first()
+
+        p.drawString(50, y, product.product_name)
+        p.drawString(250, y, str(item.quantity))
+        p.drawString(300, y, str(item.unit_price))
+        p.drawString(380, y, str(item.subtotal))
+
+        y -= 20
+
+    y -= 30
+
+    p.setFont("Helvetica-Bold", 12)
+    p.drawString(300, y, f"Total: {sale.total_amount}")
+
+    p.showPage()
+    p.save()
+
+    buffer.seek(0)
+
+    return StreamingResponse(
+        buffer,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f"inline; filename=invoice_{sale_id}.pdf"
+        }
+    )
+
+
+@router.post("/{sale_id}/refund")
+def refund_sale(
+    sale_id: int,
+    reason: str,
+    db: Session = Depends(get_db)
+):
+
+    sale = db.query(models.Sale).filter(
+        models.Sale.sale_id == sale_id
+    ).first()
+
+    if not sale:
+        raise HTTPException(status_code=404, detail="Sale not found")
+
+    items = db.query(models.SaleItem).filter(
+        models.SaleItem.sale_id == sale_id
+    ).all()
+
+    for item in items:
+
+        product = db.query(models.Product).filter(
+            models.Product.product_id == item.product_id
+        ).first()
+
+        product.stock_quantity += item.quantity
+
+    refund = models.Refund(
+        sale_id=sale_id,
+        reason=reason
+    )
+
+    db.add(refund)
+
+    sale.status = "refunded"
+
+    db.commit()
+
+    return {"message": "Sale refunded"}
