@@ -9,6 +9,7 @@ from sqlalchemy import pool
 from alembic import context
 
 from app.models import Base
+from app import models
 
 config = context.config
 

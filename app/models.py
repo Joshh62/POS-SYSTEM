@@ -4,16 +4,17 @@ from sqlalchemy.orm import relationship
 from app.database import Base
 
 
+# -------------------- CATEGORY --------------------
 class Category(Base):
     __tablename__ = "categories"
 
     category_id = Column(Integer, primary_key=True, index=True)
     category_name = Column(String, unique=True, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
-
     products = relationship("Product", back_populates="category")
 
 
+# -------------------- PRODUCT --------------------
 class Product(Base):
     __tablename__ = "products"
 
@@ -37,6 +38,7 @@ class Product(Base):
     inventory = relationship("BranchInventory", back_populates="product")
 
 
+# -------------------- BRANCH --------------------
 class Branch(Base):
     __tablename__ = "branches"
 
@@ -52,6 +54,7 @@ class Branch(Base):
     sales = relationship("Sale", back_populates="branch")
 
 
+# -------------------- BRANCH INVENTORY --------------------
 class BranchInventory(Base):
     __tablename__ = "branch_inventory"
 
@@ -61,7 +64,6 @@ class BranchInventory(Base):
     product_id = Column(Integer, ForeignKey("products.product_id"))
 
     stock_quantity = Column(Integer, default=0)
-
     reorder_level = Column(Integer, default=5)
 
     branch = relationship("Branch", back_populates="inventory")
@@ -73,17 +75,15 @@ class BranchInventory(Base):
     )
 
 
+# -------------------- CUSTOMER --------------------
 class Customer(Base):
     __tablename__ = "customers"
 
     customer_id = Column(Integer, primary_key=True, index=True)
 
     full_name = Column(String, nullable=False)
-
     phone = Column(String, unique=True)
-
     email = Column(String)
-
     address = Column(String)
 
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -91,21 +91,19 @@ class Customer(Base):
     sales = relationship("Sale", back_populates="customer")
 
 
+# -------------------- USER --------------------
 class User(Base):
     __tablename__ = "users"
 
     user_id = Column(Integer, primary_key=True, index=True)
 
     full_name = Column(String, nullable=False)
-
     username = Column(String, unique=True, index=True)
-
     password_hash = Column(String)
 
     role = Column(String)
 
     created_at = Column(DateTime, default=datetime.utcnow)
-
     is_active = Column(Boolean, default=True)
 
     branch_id = Column(Integer, ForeignKey("branches.branch_id"))
@@ -115,6 +113,7 @@ class User(Base):
     sales = relationship("Sale", back_populates="user")
 
 
+# -------------------- SALE --------------------
 class Sale(Base):
     __tablename__ = "sales"
 
@@ -123,13 +122,11 @@ class Sale(Base):
     sale_date = Column(DateTime, default=datetime.utcnow, index=True)
 
     user_id = Column(Integer, ForeignKey("users.user_id"))
-
     customer_id = Column(Integer, ForeignKey("customers.customer_id"), nullable=True)
-
     branch_id = Column(Integer, ForeignKey("branches.branch_id"))
+    payment_method = Column(String, nullable=False)
 
     total_amount = Column(Numeric(12, 2))
-
     status = Column(String, default="completed")
 
     items = relationship(
@@ -139,36 +136,31 @@ class Sale(Base):
     )
 
     branch = relationship("Branch", back_populates="sales")
-
     customer = relationship("Customer", back_populates="sales")
-
     user = relationship("User", back_populates="sales")
 
     payments = relationship("Payment", back_populates="sale")
-
     refunds = relationship("Refund", back_populates="sale")
 
 
+# -------------------- SALE ITEM --------------------
 class SaleItem(Base):
     __tablename__ = "sale_items"
 
     sale_item_id = Column(Integer, primary_key=True, index=True)
 
     sale_id = Column(Integer, ForeignKey("sales.sale_id"))
-
     product_id = Column(Integer, ForeignKey("products.product_id"))
 
     quantity = Column(Integer)
-
     unit_price = Column(Numeric(12, 2))
-
     subtotal = Column(Numeric(12, 2))
 
     sale = relationship("Sale", back_populates="items")
-
     product = relationship("Product", back_populates="sale_items")
 
 
+# -------------------- PAYMENT --------------------
 class Payment(Base):
     __tablename__ = "payments"
 
@@ -177,12 +169,12 @@ class Payment(Base):
     sale_id = Column(Integer, ForeignKey("sales.sale_id"))
 
     payment_method = Column(String)
-
     amount = Column(Numeric(12, 2))
 
     sale = relationship("Sale", back_populates="payments")
 
 
+# -------------------- REFUND --------------------
 class Refund(Base):
     __tablename__ = "refunds"
 
@@ -191,7 +183,6 @@ class Refund(Base):
     sale_id = Column(Integer, ForeignKey("sales.sale_id"))
 
     refund_date = Column(DateTime, default=datetime.utcnow)
-
     reason = Column(String)
 
     amount = Column(Numeric(12, 2))
@@ -199,6 +190,7 @@ class Refund(Base):
     sale = relationship("Sale", back_populates="refunds")
 
 
+# -------------------- SUPPLIER --------------------
 class Supplier(Base):
     __tablename__ = "suppliers"
 
@@ -207,11 +199,8 @@ class Supplier(Base):
     supplier_name = Column(String, nullable=False)
 
     contact_person = Column(String)
-
     phone = Column(String)
-
     email = Column(String)
-
     address = Column(String)
 
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -219,17 +208,16 @@ class Supplier(Base):
     purchase_orders = relationship("PurchaseOrder", back_populates="supplier")
 
 
+# -------------------- PURCHASE ORDER --------------------
 class PurchaseOrder(Base):
     __tablename__ = "purchase_orders"
 
     po_id = Column(Integer, primary_key=True, index=True)
 
     supplier_id = Column(Integer, ForeignKey("suppliers.supplier_id"))
-
     branch_id = Column(Integer, ForeignKey("branches.branch_id"))
 
     order_date = Column(DateTime, default=datetime.utcnow, index=True)
-
     status = Column(String, default="pending")
 
     supplier = relationship("Supplier", back_populates="purchase_orders")
@@ -241,35 +229,32 @@ class PurchaseOrder(Base):
     )
 
 
+# -------------------- PURCHASE ORDER ITEM --------------------
 class PurchaseOrderItem(Base):
     __tablename__ = "purchase_order_items"
 
     po_item_id = Column(Integer, primary_key=True, index=True)
 
     po_id = Column(Integer, ForeignKey("purchase_orders.po_id"))
-
     product_id = Column(Integer, ForeignKey("products.product_id"))
 
     quantity = Column(Integer)
-
     unit_cost = Column(Numeric(12, 2))
 
     purchase_order = relationship("PurchaseOrder", back_populates="items")
-
     product = relationship("Product")
 
 
+# -------------------- INVENTORY MOVEMENT --------------------
 class InventoryMovement(Base):
     __tablename__ = "inventory_movements"
 
     movement_id = Column(Integer, primary_key=True, index=True)
 
     product_id = Column(Integer, ForeignKey("products.product_id"))
-
     branch_id = Column(Integer, ForeignKey("branches.branch_id"))
 
     movement_type = Column(String)
-
     reference_id = Column(Integer)
 
     quantity = Column(Integer)
@@ -277,10 +262,10 @@ class InventoryMovement(Base):
     movement_date = Column(DateTime, default=datetime.utcnow, index=True)
 
     product = relationship("Product", back_populates="movements")
-
     branch = relationship("Branch")
 
 
+# -------------------- STOCK ADJUSTMENT --------------------
 class StockAdjustment(Base):
     __tablename__ = "stock_adjustments"
 
@@ -289,7 +274,6 @@ class StockAdjustment(Base):
     product_id = Column(Integer, ForeignKey("products.product_id"))
 
     quantity = Column(Integer)
-
     reason = Column(String)
 
     adjustment_date = Column(DateTime, default=datetime.utcnow)
@@ -297,28 +281,22 @@ class StockAdjustment(Base):
     product = relationship("Product")
 
 
+# -------------------- STOCK TRANSFER --------------------
 class StockTransfer(Base):
     __tablename__ = "stock_transfers"
 
     transfer_id = Column(Integer, primary_key=True)
 
     from_branch = Column(Integer, ForeignKey("branches.branch_id"))
-
     to_branch = Column(Integer, ForeignKey("branches.branch_id"))
 
     transfer_date = Column(DateTime, default=datetime.utcnow)
 
-    from_branch_rel = relationship(
-        "Branch",
-        foreign_keys=[from_branch]
-    )
-
-    to_branch_rel = relationship(
-        "Branch",
-        foreign_keys=[to_branch]
-    )
+    from_branch_rel = relationship("Branch", foreign_keys=[from_branch])
+    to_branch_rel = relationship("Branch", foreign_keys=[to_branch])
 
 
+# -------------------- AUDIT LOG --------------------
 class AuditLog(Base):
     __tablename__ = "audit_logs"
 
@@ -327,11 +305,8 @@ class AuditLog(Base):
     user_id = Column(Integer, ForeignKey("users.user_id"))
 
     action = Column(String)
-
     table_name = Column(String)
-
     record_id = Column(Integer)
-
     description = Column(String)
 
     created_at = Column(DateTime, default=datetime.utcnow)

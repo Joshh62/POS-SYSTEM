@@ -1,6 +1,6 @@
 from pydantic import BaseModel, ConfigDict
 from datetime import datetime
-from typing import List
+from typing import List, Optional
 
 
 # ---------------------------
@@ -55,7 +55,7 @@ class SaleItemResponse(BaseModel):
     sale_item_id: int
     product_id: int
     quantity: int
-    unit_price: float
+    price: float
     subtotal: float
 
     model_config = ConfigDict(from_attributes=True)
@@ -65,10 +65,12 @@ class SaleItemResponse(BaseModel):
 # SALE SCHEMAS
 # ---------------------------
 
+
 class SaleCreate(BaseModel):
-    customer_id: int | None = None
+    customer_id: Optional[int] = None
+    branch_id: Optional[int] = None
     payment_method: str
-    items: list[SaleItemCreate]
+    items: List[SaleItemCreate]
 
 
 class SaleResponse(BaseModel):
