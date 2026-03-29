@@ -7,7 +7,8 @@ import openpyxl
 
 router = APIRouter(tags=["Products"])
 
-@router.post("/")
+
+@router.post("/products")
 def create_product(product: schemas.ProductCreate, db: Session = Depends(get_db)):
 
     new_product = models.Product(
@@ -15,8 +16,7 @@ def create_product(product: schemas.ProductCreate, db: Session = Depends(get_db)
         barcode=product.barcode,
         category_id=product.category_id,
         cost_price=product.cost_price,
-        selling_price=product.selling_price,
-        stock_quantity=0
+        selling_price=product.selling_price
     )
 
     db.add(new_product)
@@ -42,7 +42,9 @@ def get_products(
         )
 
     total = query.count()
-
+    
+    page = max(1, page) 
+    
     products = query.offset((page - 1) * limit).limit(limit).all()
 
     return {

@@ -9,14 +9,13 @@ router = APIRouter(
 )
 
 
-@router.get("/")
+@router.get("/categories")
 def get_categories(db: Session = Depends(get_db)):
-    categories = db.query(models.Category).all()
-    return categories
+    return db.query(models.Category).all()
 
-
-@router.post("/")
+@router.post("/categories")
 def create_category(category: schemas.CategoryCreate, db: Session = Depends(get_db)):
+
     new_category = models.Category(
         category_name=category.category_name
     )
