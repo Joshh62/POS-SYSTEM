@@ -193,3 +193,13 @@ class CustomerResponse(BaseModel):
     address: Optional[str]
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class UserResponse(BaseModel):
+    user_id: int
+    full_name: str
+    username: str
+    role: str
+    is_active: bool        # ← add this line
+
+    model_config = ConfigDict(from_attributes=True)

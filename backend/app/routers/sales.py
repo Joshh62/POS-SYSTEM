@@ -1,7 +1,7 @@
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
-from datetime import datetime
 from fastapi.responses import StreamingResponse
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy.orm import Session
+from datetime import datetime, date
 
 import io
 
@@ -319,3 +319,48 @@ def refund_sale(
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
+    
+
+
+@router.get("/")
+def list_sales(
+    page: int = 1,
+    limit: int = 20,
+    cashier_id: int = None,
+    date_from: date = None,
+    date_to: date = None,
+    db: Session = Depends(get_db),
+    user = Depends(require_role(["admin", "manager", "cashier"]))
+):
+    query = db.query(models.Sale).order_by(models.Sale.sale_date.desc())
+
+    if cashier_id:
+        query = query.filter(models.Sale.user_id == cashier_id)
+    if date_from:
+        query = query.filter(models.Sale.sale_date >= datetime.combine(date_from, datetime.min.time()))
+    if date_to:
+        query = query.filter(models.Sale.sale_date <= datetime.combine(date_to, datetime.max.time()))
+
+    total = query.count()
+    sales = query.offset((page - 1) * limit).limit(limit).all()
+
+    result = []
+    for sale in sales:
+        cashier = db.query(models.User).filter(models.User.user_id == sale.user_id).first()
+        items = db.query(models.SaleItem).filter(models.SaleItem.sale_id == sale.sale_id).all()
+        result.append({
+            "sale_id": sale.sale_id,
+            "sale_date": sale.sale_date,
+            "total_amount": float(sale.total_amount),
+            "payment_method": sale.payment_method,
+            "status": sale.status,
+            "cashier": cashier.full_name if cashier else "Unknown",
+            "item_count": len(items)
+        })
+
+    return {
+        "total": total,
+        "page": page,
+        "limit": limit,
+        "data": result
+    }

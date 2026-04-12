@@ -2,23 +2,44 @@ import { useState, useEffect, useCallback } from "react";
 import { getProducts } from "../../api/api";
 import ProductCard from "./ProductCard";
 
-export default function ProductGrid() {
+// externalSearch = true means POS owns the search bar,
+// false (default) means ProductGrid renders its own search bar
+export default function ProductGrid({ externalSearch = false }) {
   const [products, setProducts] = useState([]);
-  const [total, setTotal] = useState(0);
-  const [page, setPage] = useState(1);
-  const [search, setSearch] = useState("");
+  const [total, setTotal]       = useState(0);
+  const [page, setPage]         = useState(1);
+  const [search, setSearch]     = useState("");
   const [searchInput, setSearchInput] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
+  const [loading, setLoading]   = useState(false);
+  const [error, setError]       = useState(null);
 
   const LIMIT = 20;
+
+  // Listen for search events dispatched by POS.jsx
+  useEffect(() => {
+    if (!externalSearch) return;
+    const handler = (e) => {
+      setSearchInput(e.detail);
+      setPage(1);
+    };
+    window.addEventListener("pos-search", handler);
+    return () => window.removeEventListener("pos-search", handler);
+  }, [externalSearch]);
+
+  // Debounce search input
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setSearch(searchInput);
+      setPage(1);
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [searchInput]);
 
   const fetchProducts = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
       const result = await getProducts(page, LIMIT, search);
-      // Backend returns { total_products, page, limit, data: [...] }
       setProducts(result.data);
       setTotal(result.total_products);
     } catch (err) {
@@ -28,40 +49,32 @@ export default function ProductGrid() {
     }
   }, [page, search]);
 
-  useEffect(() => {
-    fetchProducts();
-  }, [fetchProducts]);
-
-  // Debounce search — only fires 400ms after user stops typing
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setSearch(searchInput);
-      setPage(1);
-    }, 400);
-    return () => clearTimeout(timer);
-  }, [searchInput]);
+  useEffect(() => { fetchProducts(); }, [fetchProducts]);
 
   const totalPages = Math.ceil(total / LIMIT);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", gap: 10 }}>
-      {/* Search bar */}
-      <input
-        type="text"
-        placeholder="Search products..."
-        value={searchInput}
-        onChange={(e) => setSearchInput(e.target.value)}
-        style={{
-          padding: "8px 12px",
-          borderRadius: 8,
-          border: "1px solid var(--color-border-secondary)",
-          background: "var(--color-background-primary)",
-          color: "var(--color-text-primary)",
-          fontSize: 14,
-          outline: "none",
-          width: "100%",
-        }}
-      />
+
+      {/* Own search bar — only shown when not controlled externally */}
+      {!externalSearch && (
+        <input
+          type="text"
+          placeholder="Search products..."
+          value={searchInput}
+          onChange={(e) => setSearchInput(e.target.value)}
+          style={{
+            padding: "8px 12px",
+            borderRadius: 8,
+            border: "1px solid var(--color-border-secondary)",
+            background: "var(--color-background-primary)",
+            color: "var(--color-text-primary)",
+            fontSize: 14,
+            outline: "none",
+            width: "100%",
+          }}
+        />
+      )}
 
       {/* State messages */}
       {loading && (
@@ -69,13 +82,11 @@ export default function ProductGrid() {
           Loading products...
         </div>
       )}
-
       {error && (
         <div style={{ color: "#A32D2D", fontSize: 13, padding: "10px 12px", background: "#FCEBEB", borderRadius: 8 }}>
           {error}
         </div>
       )}
-
       {!loading && !error && products.length === 0 && (
         <div style={{ color: "var(--color-text-secondary)", fontSize: 13, textAlign: "center", padding: 20 }}>
           No products found.
@@ -83,16 +94,15 @@ export default function ProductGrid() {
       )}
 
       {/* Product grid */}
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))",
-          gap: 10,
-          overflowY: "auto",
-          flex: 1,
-          paddingRight: 2,
-        }}
-      >
+      <div style={{
+        display: "grid",
+        gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))",
+        gap: 10,
+        overflowY: "auto",
+        flex: 1,
+        paddingRight: 2,
+        alignContent: "start",
+      }}>
         {products.map((product) => (
           <ProductCard key={product.product_id} product={product} />
         ))}
@@ -108,11 +118,9 @@ export default function ProductGrid() {
           >
             ← Prev
           </button>
-
           <span style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>
             {page} / {totalPages}
           </span>
-
           <button
             onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
             disabled={page === totalPages}

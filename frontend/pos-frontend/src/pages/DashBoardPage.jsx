@@ -38,16 +38,6 @@ export default function DashboardPage() {
 
   return (
     <PageShell>
-      {/* Page title */}
-      <div style={{ marginBottom: 24 }}>
-        <h1 style={h1}>Dashboard</h1>
-        <p style={sub}>
-          {new Date().toLocaleDateString("en-NG", {
-            weekday: "long", year: "numeric", month: "long", day: "numeric",
-          })}
-        </p>
-      </div>
-
       {/* KPI cards */}
       <div style={gridStyle(4)}>
         <KPICard
@@ -157,7 +147,7 @@ export default function DashboardPage() {
 
 function PageShell({ children }) {
   return (
-    <div style={{ padding: 24, overflowY: "auto", height: "100%", boxSizing: "border-box" }}>
+    <div style={{ padding: "16px 24px 24px", overflowY: "auto", height: "100%", boxSizing: "border-box" }}>
       {children}
     </div>
   );

@@ -71,13 +71,9 @@ export default function UsersPage() {
   };
 
   return (
-    <div style={{ padding: 24, overflowY: "auto", height: "100%", boxSizing: "border-box" }}>
+    <div style={{ padding: "16px 24px 24px", overflowY: "auto", height: "100%", boxSizing: "border-box" }}>
       {/* Header */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
-        <div>
-          <h1 style={h1}>Users</h1>
-          <p style={sub}>Manage staff accounts</p>
-        </div>
+      <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 16 }}>
         <button onClick={() => setShowForm(true)} style={primaryBtn}>
           + New user
         </button>
