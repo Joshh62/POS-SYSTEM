@@ -28,7 +28,7 @@ class ProductCreate(BaseModel):
     category_id: int
     cost_price: float
     selling_price: float
-    stock_quantity: int
+    stock_quantity: int = 0
 
 
 class ProductResponse(BaseModel):
@@ -55,7 +55,7 @@ class SaleItemResponse(BaseModel):
     sale_item_id: int
     product_id: int
     quantity: int
-    price: float
+    unit_price: float   # FIXED: was 'price' — must match model column name
     subtotal: float
 
     model_config = ConfigDict(from_attributes=True)
@@ -64,7 +64,6 @@ class SaleItemResponse(BaseModel):
 # ---------------------------
 # SALE SCHEMAS
 # ---------------------------
-
 
 class SaleCreate(BaseModel):
     customer_id: Optional[int] = None
@@ -83,19 +82,28 @@ class SaleResponse(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
-from pydantic import BaseModel
 
+# ---------------------------
+# INVENTORY SCHEMAS
+# ---------------------------
 
 class RestockRequest(BaseModel):
     product_id: int
+    branch_id: int
     quantity: int
 
 
 class RestockResponse(BaseModel):
     product_id: int
+    branch_id: int
     new_stock: int
 
     model_config = ConfigDict(from_attributes=True)
+
+
+# ---------------------------
+# USER SCHEMAS
+# ---------------------------
 
 class UserCreate(BaseModel):
     full_name: str
@@ -118,24 +126,32 @@ class UserResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+# ---------------------------
+# SUPPLIER SCHEMAS
+# ---------------------------
+
 class SupplierCreate(BaseModel):
     supplier_name: str
-    contact_person: str | None = None
-    phone: str | None = None
-    email: str | None = None
-    address: str | None = None
+    contact_person: Optional[str] = None
+    phone: Optional[str] = None
+    email: Optional[str] = None
+    address: Optional[str] = None
 
 
 class SupplierResponse(BaseModel):
     supplier_id: int
     supplier_name: str
-    contact_person: str | None
-    phone: str | None
-    email: str | None
-    address: str | None
+    contact_person: Optional[str]
+    phone: Optional[str]
+    email: Optional[str]
+    address: Optional[str]
 
     model_config = ConfigDict(from_attributes=True)
 
+
+# ---------------------------
+# PURCHASE ORDER SCHEMAS
+# ---------------------------
 
 class PurchaseOrderItemCreate(BaseModel):
     product_id: int
@@ -145,6 +161,7 @@ class PurchaseOrderItemCreate(BaseModel):
 
 class PurchaseOrderCreate(BaseModel):
     supplier_id: int
+    branch_id: int
     items: List[PurchaseOrderItemCreate]
 
 
@@ -157,20 +174,22 @@ class PurchaseOrderResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+# ---------------------------
+# CUSTOMER SCHEMAS
+# ---------------------------
+
 class CustomerCreate(BaseModel):
     full_name: str
-    phone: str | None = None
-    email: str | None = None
-    address: str | None = None
+    phone: Optional[str] = None
+    email: Optional[str] = None
+    address: Optional[str] = None
 
 
 class CustomerResponse(BaseModel):
     customer_id: int
     full_name: str
-    phone: str | None
-    email: str | None
-    address: str | None
+    phone: Optional[str]
+    email: Optional[str]
+    address: Optional[str]
 
     model_config = ConfigDict(from_attributes=True)
-
-

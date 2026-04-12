@@ -5,11 +5,20 @@ from app import models, schemas
 from app.database import get_db
 from app.models import User
 from app.auth import hash_password, verify_password, create_access_token
+from app.dependencies import require_role
 
 router = APIRouter(
     prefix="/auth",
     tags=["Authentication"]
 )
+
+
+@router.get("/users", response_model=list[schemas.UserResponse])
+def list_users(
+    db: Session = Depends(get_db),
+    user = Depends(require_role(["admin"]))
+):
+    return db.query(User).order_by(User.created_at.desc()).all()
 
 
 @router.post("/register", response_model=schemas.UserResponse)

@@ -5,10 +5,13 @@ from app.database import get_db
 from app import models, schemas
 import openpyxl
 
-router = APIRouter(tags=["Products"])
+router = APIRouter(
+    prefix="/products",
+    tags=["Products"]
+)
 
 
-@router.post("/products")
+@router.post("/", response_model=schemas.ProductResponse)
 def create_product(product: schemas.ProductCreate, db: Session = Depends(get_db)):
 
     new_product = models.Product(
@@ -16,7 +19,8 @@ def create_product(product: schemas.ProductCreate, db: Session = Depends(get_db)
         barcode=product.barcode,
         category_id=product.category_id,
         cost_price=product.cost_price,
-        selling_price=product.selling_price
+        selling_price=product.selling_price,
+        stock_quantity=product.stock_quantity
     )
 
     db.add(new_product)
@@ -42,9 +46,9 @@ def get_products(
         )
 
     total = query.count()
-    
-    page = max(1, page) 
-    
+
+    page = max(1, page)
+
     products = query.offset((page - 1) * limit).limit(limit).all()
 
     return {
@@ -66,6 +70,46 @@ def get_product_by_barcode(barcode: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Product not found")
 
     return product
+
+
+@router.get("/{product_id}", response_model=schemas.ProductResponse)
+def get_product(product_id: int, db: Session = Depends(get_db)):
+
+    product = db.query(models.Product).filter(
+        models.Product.product_id == product_id
+    ).first()
+
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+
+    return product
+
+
+@router.put("/{product_id}", response_model=schemas.ProductResponse)
+def update_product(
+    product_id: int,
+    product: schemas.ProductCreate,
+    db: Session = Depends(get_db)
+):
+
+    existing = db.query(models.Product).filter(
+        models.Product.product_id == product_id
+    ).first()
+
+    if not existing:
+        raise HTTPException(status_code=404, detail="Product not found")
+
+    existing.product_name = product.product_name
+    existing.barcode = product.barcode
+    existing.category_id = product.category_id
+    existing.cost_price = product.cost_price
+    existing.selling_price = product.selling_price
+    existing.stock_quantity = product.stock_quantity
+
+    db.commit()
+    db.refresh(existing)
+
+    return existing
 
 
 @router.post("/import")
