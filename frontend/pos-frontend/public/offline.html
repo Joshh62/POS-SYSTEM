@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>POS — Offline</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background: #0f0f0f;
+      color: #e0e0e0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      text-align: center;
+      padding: 24px;
+    }
+    .card {
+      background: #1a1a1a;
+      border: 1px solid #2a2a2a;
+      border-radius: 16px;
+      padding: 40px 32px;
+      max-width: 400px;
+      width: 100%;
+    }
+    .icon { font-size: 48px; margin-bottom: 16px; }
+    h1 { font-size: 20px; font-weight: 500; margin-bottom: 8px; color: #fff; }
+    p { font-size: 14px; color: #888; line-height: 1.6; margin-bottom: 24px; }
+    .tip {
+      background: #1e2d1e;
+      border: 1px solid #2a3d2a;
+      border-radius: 8px;
+      padding: 12px 16px;
+      font-size: 13px;
+      color: #6abf69;
+      margin-bottom: 20px;
+      text-align: left;
+    }
+    button {
+      padding: 11px 24px;
+      border-radius: 10px;
+      border: none;
+      background: #185FA5;
+      color: #E6F1FB;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      width: 100%;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="icon">📡</div>
+    <h1>You're offline</h1>
+    <p>No internet connection detected. Check your network and try again.</p>
+    <div class="tip">
+      💡 Tip: Any sales you processed while online are safely saved. Your data will sync automatically when you reconnect.
+    </div>
+    <button onclick="window.location.reload()">Try again</button>
+  </div>
+</body>
+</html>

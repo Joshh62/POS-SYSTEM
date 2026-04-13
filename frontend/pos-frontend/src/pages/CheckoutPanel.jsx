@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useCart } from "../../context/CartContext";
 import { createSale } from "../../api/api";
+import { queueSale, registerSyncListener } from "../../utils/offlineQueue";
 
 const PAYMENT_METHODS = ["cash", "card", "transfer"];
 
@@ -29,12 +30,43 @@ export default function CheckoutPanel({ onClose, onSuccess }) {
         items: getCartPayload(),
       };
 
-      const result = await createSale(salePayload);
+      if (!navigator.onLine) {
+        // Offline — queue the sale locally
+        const queued = queueSale(salePayload);
+        clearCart();
+        setReceipt({
+          sale_id: `QUEUED-${queued.id}`,
+          sale_date: new Date().toISOString(),
+          total_amount: totalAmount,
+          payment_method: paymentMethod,
+          offline: true,
+        });
+        return;
+      }
 
+      const result = await createSale(salePayload);
       setReceipt(result);
       clearCart();
 
     } catch (err) {
+      // Network error — queue offline
+      if (!err.response) {
+        const salePayload = {
+          branch_id: branchId,
+          payment_method: paymentMethod,
+          items: getCartPayload(),
+        };
+        const queued = queueSale(salePayload);
+        clearCart();
+        setReceipt({
+          sale_id: `QUEUED-${queued.id}`,
+          sale_date: new Date().toISOString(),
+          total_amount: totalAmount,
+          payment_method: paymentMethod,
+          offline: true,
+        });
+        return;
+      }
       const detail = err.response?.data?.detail;
       setError(typeof detail === "string" ? detail : "Sale failed. Please try again.");
     } finally {
@@ -50,7 +82,13 @@ export default function CheckoutPanel({ onClose, onSuccess }) {
           <h2 style={headingStyle}>Sale complete</h2>
 
           <div style={{ fontSize: 13, color: "var(--color-text-secondary)", marginBottom: 12 }}>
-            Sale #{receipt.sale_id} · {new Date(receipt.sale_date).toLocaleString()}
+            {receipt.offline ? (
+            <span style={{ background: "#FAEEDA", color: "#854F0B", fontSize: 11, padding: "2px 8px", borderRadius: 8, fontWeight: 500 }}>
+              ⏳ Saved offline — will sync when connected
+            </span>
+          ) : (
+            <span>Sale #{receipt.sale_id} · {new Date(receipt.sale_date).toLocaleString()}</span>
+          )}
           </div>
 
           <div

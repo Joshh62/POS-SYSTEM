@@ -324,32 +324,41 @@ def daily_dashboard(
     }
 
 
-
 @router.get("/stock-valuation")
 def stock_valuation(
     db: Session = Depends(get_db),
     user = Depends(require_role(["admin","manager"]))
 ):
-
-    products = db.query(models.Product).all()
+    # Join BranchInventory with Product to get real stock levels
+    results = (
+        db.query(
+            models.Product.product_id,
+            models.Product.product_name,
+            models.Product.cost_price,
+            models.BranchInventory.stock_quantity,
+        )
+        .join(
+            models.BranchInventory,
+            models.Product.product_id == models.BranchInventory.product_id
+        )
+        .all()
+    )
 
     inventory = []
     total_value = 0
 
-    for product in products:
-
-        stock_value = product.stock_quantity * product.cost_price
+    for r in results:
+        stock_value = float(r.stock_quantity or 0) * float(r.cost_price or 0)
         total_value += stock_value
-
         inventory.append({
-            "product_id": product.product_id,
-            "product_name": product.product_name,
-            "stock_quantity": product.stock_quantity,
-            "cost_price": product.cost_price,
-            "stock_value": stock_value
+            "product_id":    r.product_id,
+            "product_name":  r.product_name,
+            "stock_quantity": r.stock_quantity,
+            "cost_price":    float(r.cost_price or 0),
+            "stock_value":   stock_value,
         })
 
     return {
         "total_inventory_value": total_value,
-        "products": inventory
+        "products": inventory,
     }

@@ -222,7 +222,7 @@ const td          = { padding: "11px 14px", fontSize: 13, color: "var(--color-te
 const emptyTd     = { textAlign: "center", padding: 32, color: "var(--color-text-tertiary)", fontSize: 13 };
 const pageBtn     = (d) => ({ padding: "5px 12px", borderRadius: 6, border: "1px solid var(--color-border-secondary)", background: d ? "var(--color-background-secondary)" : "var(--color-background-primary)", color: d ? "var(--color-text-tertiary)" : "var(--color-text-primary)", fontSize: 12, cursor: d ? "not-allowed" : "pointer" });
 const actionBtn   = (color, bg) => ({ padding: "4px 10px", borderRadius: 6, border: "none", background: bg, color, fontSize: 11, fontWeight: 500, cursor: "pointer" });
-const overlayStyle = { position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 };
-const modalStyle  = { background: "var(--color-background-primary)", borderRadius: 14, padding: 24, width: "100%", maxWidth: 400, maxHeight: "85vh", overflowY: "auto" };
+const overlayStyle = { position: "fixed", inset: 0, background: "rgba(0,0,0,0.65)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 };
+const modalStyle  = { background: "var(--color-background-primary)", borderRadius: 14, padding: 24, width: "100%", maxWidth: 400, maxHeight: "85vh", overflowY: "auto", boxShadow: "0 20px 60px rgba(0,0,0,0.5)", border: "1px solid var(--color-border-secondary)" };
 const cancelBtn   = { padding: "9px 0", borderRadius: 8, border: "1px solid var(--color-border-secondary)", background: "none", color: "var(--color-text-secondary)", fontSize: 13, cursor: "pointer" };
 const closeBtn    = { background: "none", border: "none", fontSize: 22, color: "var(--color-text-secondary)", cursor: "pointer", padding: 0, lineHeight: 1 };

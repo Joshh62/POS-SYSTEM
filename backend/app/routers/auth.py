@@ -88,3 +88,25 @@ def deactivate_user(user_id: int, db: Session = Depends(get_db)):
     db.commit()
 
     return {"message": "User deactivated"}
+
+
+@router.get("/users", response_model=list[schemas.UserResponse])
+def list_users(
+    db: Session = Depends(get_db),
+    user = Depends(require_role(["admin"]))
+):
+    return db.query(User).order_by(User.created_at.desc()).all()
+
+
+@router.patch("/users/{user_id}/activate")
+def activate_user(
+    user_id: int,
+    db: Session = Depends(get_db),
+    current_user = Depends(require_role(["admin"]))
+):
+    user = db.query(User).filter(User.user_id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    user.is_active = True
+    db.commit()
+    return {"message": "User activated"}

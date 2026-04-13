@@ -13,6 +13,7 @@ import ReportsPage from "./pages/ReportsPage";
 export default function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(() => !!localStorage.getItem("token"));
   const [activePage, setActivePage] = useState("pos");
+  const [lastScan, setLastScan]     = useState(null);
 
   const handleLogin  = () => { setIsLoggedIn(true); setActivePage("pos"); };
   const handleLogout = () => {
@@ -25,20 +26,25 @@ export default function App() {
 
   const renderPage = () => {
     switch (activePage) {
-      case "pos":       return <POS />;
+      case "pos":       return <POS onScanResult={setLastScan} />;
       case "dashboard": return <DashboardPage />;
       case "products":  return <ProductsPage />;
       case "sales":     return <SalesPage />;
       case "inventory": return <InventoryPage />;
       case "reports":   return <ReportsPage />;
       case "users":     return <UsersPage />;
-      default:          return <POS />;
+      default:          return <POS onScanResult={setLastScan} />;
     }
   };
 
   return (
     <CartProvider>
-      <POSLayout activePage={activePage} onNavigate={setActivePage} onLogout={handleLogout}>
+      <POSLayout
+        activePage={activePage}
+        onNavigate={setActivePage}
+        onLogout={handleLogout}
+        lastScan={lastScan}
+      >
         {renderPage()}
       </POSLayout>
     </CartProvider>

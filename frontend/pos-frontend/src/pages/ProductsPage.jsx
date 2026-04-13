@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
-import { getProducts, createProduct, updateProduct, getCategories } from "../api/api";
+import { getProducts, createProduct, updateProduct, getCategories, getProductByBarcode } from "../api/api";
+import { useBarcodeScanner } from "../hooks/useBarcodeScanner";
 
 const EMPTY_FORM = {
   product_name: "", barcode: "", category_id: "",
@@ -23,6 +24,20 @@ export default function ProductsPage() {
   const [formError, setFormError]   = useState(null);
 
   const LIMIT = 20;
+
+  // Barcode scanner — scans open the edit form for that product
+  const [scanMsg, setScanMsg] = useState(null);
+
+  useBarcodeScanner(async (barcode) => {
+    try {
+      const product = await getProductByBarcode(barcode);
+      openEdit(product);
+      setScanMsg({ type: "success", message: `Found: ${product.product_name}` });
+    } catch {
+      setScanMsg({ type: "error", message: `No product found for barcode: ${barcode}` });
+    }
+    setTimeout(() => setScanMsg(null), 2500);
+  });
 
   const fetchData = async () => {
     setLoading(true);
@@ -115,6 +130,17 @@ export default function ProductsPage() {
         />
         <button onClick={openCreate} style={primaryBtn}>+ Add product</button>
       </div>
+
+      {/* Scan feedback */}
+      {scanMsg && (
+        <div style={{
+          padding: "8px 14px", borderRadius: 8, marginBottom: 12, fontSize: 13, fontWeight: 500,
+          background: scanMsg.type === "success" ? "#EAF3DE" : "#FCEBEB",
+          color: scanMsg.type === "success" ? "#3B6D11" : "#A32D2D",
+        }}>
+          {scanMsg.type === "success" ? "✓ " : "✕ "}{scanMsg.message}
+        </div>
+      )}
 
       {error && <div style={errorBox}>{error}</div>}
 
@@ -229,7 +255,7 @@ function Field({ label, children }) {
   );
 }
 
-const inputStyle  = { width: "100%", padding: "8px 11px", borderRadius: 8, border: "1px solid var(--color-border-secondary)", background: "var(--color-background-primary)", color: "var(--color-text-primary)", fontSize: 13, outline: "none", boxSizing: "border-box" };
+const inputStyle  = { width: "100%", padding: "8px 11px", borderRadius: 8, border: "1px solid var(--color-border-secondary)", background: "var(--color-background-secondary)", color: "var(--color-text-primary)", fontSize: 13, outline: "none", boxSizing: "border-box" };
 const primaryBtn  = { padding: "8px 16px", borderRadius: 8, border: "none", background: "#185FA5", color: "#E6F1FB", fontSize: 13, fontWeight: 500, cursor: "pointer", whiteSpace: "nowrap" };
 const cancelBtn   = { padding: "9px 0", borderRadius: 8, border: "1px solid var(--color-border-secondary)", background: "none", color: "var(--color-text-secondary)", fontSize: 13, cursor: "pointer" };
 const editBtn     = { padding: "4px 12px", borderRadius: 6, border: "1px solid var(--color-border-secondary)", background: "none", color: "var(--color-text-secondary)", fontSize: 12, cursor: "pointer" };
@@ -239,7 +265,7 @@ const td          = { padding: "11px 14px", fontSize: 13, color: "var(--color-te
 const emptyTd     = { textAlign: "center", padding: 32, color: "var(--color-text-tertiary)", fontSize: 13 };
 const errorBox    = { background: "#FCEBEB", color: "#A32D2D", borderRadius: 8, padding: "9px 13px", fontSize: 13, marginBottom: 14 };
 const tableWrap   = { background: "var(--color-background-primary)", border: "1px solid var(--color-border-tertiary)", borderRadius: 12, overflow: "hidden" };
-const overlayStyle = { position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 };
-const modalStyle  = { background: "var(--color-background-primary)", borderRadius: 14, padding: 24, width: "100%", maxWidth: 440, maxHeight: "90vh", overflowY: "auto" };
+const overlayStyle = { position: "fixed", inset: 0, background: "rgba(0,0,0,0.65)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 };
+const modalStyle  = { background: "var(--color-background-primary)", borderRadius: 14, padding: 24, width: "100%", maxWidth: 440, maxHeight: "90vh", overflowY: "auto", boxShadow: "0 20px 60px rgba(0,0,0,0.5)", border: "1px solid var(--color-border-secondary)" };
 const modalTitle  = { fontSize: 16, fontWeight: 500, color: "var(--color-text-primary)", margin: 0 };
 const closeBtn    = { background: "none", border: "none", fontSize: 22, color: "var(--color-text-secondary)", cursor: "pointer", padding: 0, lineHeight: 1 };

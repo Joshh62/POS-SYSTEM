@@ -1,0 +1,29 @@
+# render.yaml
+# Deploy your FastAPI backend to Render.com
+# Place this file in the ROOT of your project (not inside /backend)
+
+services:
+  - type: web
+    name: pos-backend
+    runtime: python
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: DATABASE_URL
+        sync: false          # Set this manually in Render dashboard
+      - key: SECRET_KEY
+        generateValue: true  # Render auto-generates a secure key
+      - key: ALGORITHM
+        value: HS256
+      - key: ACCESS_TOKEN_EXPIRE_MINUTES
+        value: 480
+      - key: SHOP_NAME
+        sync: false
+      - key: SHOP_OWNER_WHATSAPP
+        sync: false
+      - key: TWILIO_ACCOUNT_SID
+        sync: false
+      - key: TWILIO_AUTH_TOKEN
+        sync: false
+    healthCheckPath: /health

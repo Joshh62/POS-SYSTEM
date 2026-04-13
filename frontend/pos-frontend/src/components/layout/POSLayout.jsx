@@ -1,4 +1,5 @@
 import { useState } from "react";
+import BarcodeScannerIndicator from "../scanner/BarcodeScannerIndicator";
 
 const NAV_ITEMS = [
   { key: "pos",       label: "POS",           icon: "🛒", roles: ["admin", "manager", "cashier"] },
@@ -20,7 +21,7 @@ const PAGE_TITLES = {
   users:     "Users",
 };
 
-export default function POSLayout({ children, activePage, onNavigate, onLogout }) {
+export default function POSLayout({ children, activePage, onNavigate, onLogout, lastScan }) {
   const [collapsed, setCollapsed] = useState(false);
 
   const user    = JSON.parse(localStorage.getItem("user") || "{}");
@@ -33,8 +34,7 @@ export default function POSLayout({ children, activePage, onNavigate, onLogout }
 
       {/* ── Sidebar ── */}
       <div style={{
-        width: sideW, minWidth: sideW, maxWidth: sideW,
-        height: "100%",
+        width: sideW, minWidth: sideW, maxWidth: sideW, height: "100%",
         background: "var(--color-background-primary)",
         borderRight: "1px solid var(--color-border-tertiary)",
         display: "flex", flexDirection: "column",
@@ -115,14 +115,19 @@ export default function POSLayout({ children, activePage, onNavigate, onLogout }
         <div style={{
           height: 52, flexShrink: 0,
           display: "flex", alignItems: "center", justifyContent: "space-between",
-          padding: "0 24px",
+          padding: "0 20px",
           background: "var(--color-background-primary)",
           borderBottom: "1px solid var(--color-border-tertiary)",
+          gap: 12,
         }}>
-          <span style={{ fontSize: 15, fontWeight: 500, color: "var(--color-text-primary)" }}>
+          <span style={{ fontSize: 15, fontWeight: 500, color: "var(--color-text-primary)", whiteSpace: "nowrap" }}>
             {PAGE_TITLES[activePage] || ""}
           </span>
-          <span style={{ fontSize: 12, color: "var(--color-text-tertiary)" }}>
+
+          {/* Scanner indicator — always visible in topbar */}
+          <BarcodeScannerIndicator lastScan={lastScan} />
+
+          <span style={{ fontSize: 12, color: "var(--color-text-tertiary)", whiteSpace: "nowrap" }}>
             {user.username} · {role}
           </span>
         </div>
