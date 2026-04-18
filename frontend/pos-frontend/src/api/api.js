@@ -1,16 +1,20 @@
 import axios from "axios";
 
 // ------------------------------------
-// BASE INSTANCE
+// BASE URL
+// Reads from .env.production in production
+// Falls back to localhost in development
 // ------------------------------------
+const BASE_URL = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
+
 const api = axios.create({
-  baseURL: "http://127.0.0.1:8000",
+  baseURL: BASE_URL,
   headers: {
     "Content-Type": "application/json",
   },
 });
 
-// Attach JWT token to every request automatically
+// Attach JWT token to every request
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem("token");
   if (token) {
@@ -24,7 +28,6 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      // Token expired or invalid — clear and redirect to login
       localStorage.removeItem("token");
       localStorage.removeItem("user");
       window.location.href = "/login";
@@ -33,21 +36,17 @@ api.interceptors.response.use(
   }
 );
 
-
 // ------------------------------------
 // AUTH
 // ------------------------------------
 export const login = async (username, password) => {
-  // Backend expects form data (OAuth2PasswordRequestForm)
   const formData = new URLSearchParams();
   formData.append("username", username);
   formData.append("password", password);
-
   const response = await api.post("/auth/login", formData, {
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
   });
-
-  return response.data; // { access_token, token_type }
+  return response.data;
 };
 
 export const register = async (userData) => {
@@ -55,17 +54,14 @@ export const register = async (userData) => {
   return response.data;
 };
 
-
 // ------------------------------------
 // PRODUCTS
-// NOTE: backend returns { total_products, page, limit, data: [...] }
-// Always use response.data.data to get the array
 // ------------------------------------
 export const getProducts = async (page = 1, limit = 20, search = "") => {
   const params = { page, limit };
   if (search) params.search = search;
   const response = await api.get("/products/", { params });
-  return response.data; // { total_products, page, limit, data: [...] }
+  return response.data;
 };
 
 export const getProductByBarcode = async (barcode) => {
@@ -83,7 +79,6 @@ export const updateProduct = async (productId, productData) => {
   return response.data;
 };
 
-
 // ------------------------------------
 // CATEGORIES
 // ------------------------------------
@@ -96,7 +91,6 @@ export const createCategory = async (categoryData) => {
   const response = await api.post("/categories/", categoryData);
   return response.data;
 };
-
 
 // ------------------------------------
 // SALES
@@ -120,9 +114,8 @@ export const refundSale = async (saleId, reason) => {
 
 export const getInvoiceUrl = (saleId) => {
   const token = localStorage.getItem("token");
-  return `http://127.0.0.1:8000/sales/${saleId}/invoice?token=${token}`;
+  return `${BASE_URL}/sales/${saleId}/invoice?token=${token}`;
 };
-
 
 // ------------------------------------
 // CUSTOMERS
@@ -142,7 +135,6 @@ export const getCustomerSales = async (customerId) => {
   return response.data;
 };
 
-
 // ------------------------------------
 // INVENTORY
 // ------------------------------------
@@ -153,7 +145,6 @@ export const getInventory = async (branchId = null) => {
 };
 
 export const restockProduct = async (restockData) => {
-  // restockData: { product_id, branch_id, quantity }
   const response = await api.post("/inventory/restock", restockData);
   return response.data;
 };
@@ -164,7 +155,6 @@ export const getLowStock = async (threshold = 5, branchId = null) => {
   const response = await api.get("/inventory/low-stock", { params });
   return response.data;
 };
-
 
 // ------------------------------------
 // SUPPLIERS
@@ -178,7 +168,6 @@ export const createSupplier = async (supplierData) => {
   const response = await api.post("/suppliers/", supplierData);
   return response.data;
 };
-
 
 // ------------------------------------
 // PURCHASE ORDERS
@@ -197,7 +186,6 @@ export const getPurchaseOrders = async () => {
   const response = await api.get("/purchases/");
   return response.data;
 };
-
 
 // ------------------------------------
 // REPORTS
@@ -241,6 +229,5 @@ export const getAuditLogs = async () => {
   const response = await api.get("/reports/audit-logs");
   return response.data;
 };
-
 
 export default api;
