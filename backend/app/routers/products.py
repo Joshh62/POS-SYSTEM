@@ -14,16 +14,38 @@ router = APIRouter(
 @router.post("/", response_model=schemas.ProductResponse)
 def create_product(product: schemas.ProductCreate, db: Session = Depends(get_db)):
 
+    # Check for duplicate barcode
+    existing = db.query(models.Product).filter(
+        models.Product.barcode == product.barcode
+    ).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="Barcode already exists")
+
+    # Create product WITHOUT stock_quantity (that lives in branch_inventory)
     new_product = models.Product(
         product_name=product.product_name,
         barcode=product.barcode,
         category_id=product.category_id,
         cost_price=product.cost_price,
         selling_price=product.selling_price,
-        stock_quantity=product.stock_quantity
     )
 
     db.add(new_product)
+    db.flush()  # get product_id before commit
+
+    # If stock_quantity provided, create branch_inventory record
+    if product.stock_quantity and product.stock_quantity > 0:
+        # Find first available branch
+        branch = db.query(models.Branch).first()
+        if branch:
+            inventory = models.BranchInventory(
+                product_id=new_product.product_id,
+                branch_id=branch.branch_id,
+                stock_quantity=product.stock_quantity,
+                reorder_level=5,
+            )
+            db.add(inventory)
+
     db.commit()
     db.refresh(new_product)
 
@@ -46,9 +68,7 @@ def get_products(
         )
 
     total = query.count()
-
     page = max(1, page)
-
     products = query.offset((page - 1) * limit).limit(limit).all()
 
     return {
@@ -99,12 +119,11 @@ def update_product(
     if not existing:
         raise HTTPException(status_code=404, detail="Product not found")
 
-    existing.product_name = product.product_name
-    existing.barcode = product.barcode
-    existing.category_id = product.category_id
-    existing.cost_price = product.cost_price
+    existing.product_name  = product.product_name
+    existing.barcode       = product.barcode
+    existing.category_id   = product.category_id
+    existing.cost_price    = product.cost_price
     existing.selling_price = product.selling_price
-    existing.stock_quantity = product.stock_quantity
 
     db.commit()
     db.refresh(existing)
@@ -119,12 +138,11 @@ def import_products(
 ):
 
     workbook = openpyxl.load_workbook(file.file)
-    sheet = workbook.active
-
+    sheet    = workbook.active
     imported = 0
+    branch   = db.query(models.Branch).first()
 
     for row in sheet.iter_rows(min_row=2, values_only=True):
-
         product_name, barcode, category_id, cost_price, selling_price, stock = row
 
         product = models.Product(
@@ -133,14 +151,21 @@ def import_products(
             category_id=category_id,
             cost_price=cost_price,
             selling_price=selling_price,
-            stock_quantity=stock
         )
-
         db.add(product)
+        db.flush()
+
+        if branch and stock:
+            inventory = models.BranchInventory(
+                product_id=product.product_id,
+                branch_id=branch.branch_id,
+                stock_quantity=int(stock),
+                reorder_level=5,
+            )
+            db.add(inventory)
+
         imported += 1
 
     db.commit()
 
-    return {
-        "message": f"{imported} products imported successfully"
-    }
+    return {"message": f"{imported} products imported successfully"}
