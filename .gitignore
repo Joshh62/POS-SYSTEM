@@ -1,0 +1,12 @@
+venv/
+node_modules/
+__pycache__/
+*.pyc
+.env
+.env.local
+.env.production
+dist/
+*.db
+*.sqlite
+*.log
+pyvenv.cfg
