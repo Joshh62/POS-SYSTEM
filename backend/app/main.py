@@ -26,18 +26,18 @@ app = FastAPI(
 )
 
 # ------------------------------------
-# CORS — allow all origins for now
-# Update with specific URLs after Vercel deploys
+# CORS — explicitly list all allowed origins
 # ------------------------------------
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-    "https://pos-system-pink-five.vercel.app",
-    "http://localhost:5173",
-    "http://127.0.0.1:5173",
+        "https://pos-system-pink-five.vercel.app",
+        "https://pos-system-git-master-josh-tech1.vercel.app",
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
     ],
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
 
