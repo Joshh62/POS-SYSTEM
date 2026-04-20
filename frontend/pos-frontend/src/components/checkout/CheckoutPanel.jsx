@@ -13,9 +13,6 @@ export default function CheckoutPanel({ onClose, onSuccess }) {
   const [error, setError] = useState(null);
   const [receipt, setReceipt] = useState(null);
 
-  // Read branch_id from the logged-in user stored at login
-  const user = JSON.parse(localStorage.getItem("user") || "{}");
-  const branchId = user.branch_id || 1; // fallback to branch 1
 
   const handleSubmit = async () => {
     if (cartItems.length === 0) return;
@@ -25,7 +22,6 @@ export default function CheckoutPanel({ onClose, onSuccess }) {
 
     try {
       const salePayload = {
-        branch_id: branchId,
         payment_method: paymentMethod,
         items: getCartPayload(),
       };
@@ -52,7 +48,6 @@ export default function CheckoutPanel({ onClose, onSuccess }) {
       // Network error — queue offline
       if (!err.response) {
         const salePayload = {
-          branch_id: branchId,
           payment_method: paymentMethod,
           items: getCartPayload(),
         };

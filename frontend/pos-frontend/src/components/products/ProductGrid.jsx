@@ -49,7 +49,9 @@ export default function ProductGrid({ externalSearch = false }) {
     }
   }, [page, search]);
 
-  useEffect(() => { fetchProducts(); }, [fetchProducts]);
+  useEffect(() => {
+    fetchProducts("");
+  }, []);
 
   const totalPages = Math.ceil(total / LIMIT);
 

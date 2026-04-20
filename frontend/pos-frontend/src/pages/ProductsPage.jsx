@@ -47,8 +47,11 @@ export default function ProductsPage() {
         getProducts(page, LIMIT, search),
         getCategories(),
       ]);
+
+      console.log("CATEGORIES RESPONSE:", cats);
+
       setProducts(prod.data);
-      setTotal(prod.total_products);
+      setTotal(prod.total);
       setCategories(cats);
     } catch {
       setError("Failed to load products.");

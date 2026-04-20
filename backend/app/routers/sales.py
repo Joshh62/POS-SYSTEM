@@ -35,15 +35,22 @@ def create_sale(
 
     try:
 
+        # Ensure user has a valid branch
+        if not current_user.branch_id:
+            raise HTTPException(status_code=400, detail="User has no branch assigned")
+
+        branch_id = current_user.branch_id
+
         new_sale = models.Sale(
             sale_date=datetime.utcnow(),
             user_id=current_user.user_id,
             customer_id=customer_id,
-            branch_id=sale.branch_id,
+            branch_id=branch_id,
             payment_method=sale.payment_method,
             total_amount=0,
             status="completed"
         )
+        
 
         db.add(new_sale)
         db.flush()  # get sale_id before commit
@@ -62,7 +69,7 @@ def create_sale(
 
             inventory = db.query(models.BranchInventory).filter(
                 models.BranchInventory.product_id == item.product_id,
-                models.BranchInventory.branch_id == sale.branch_id
+                models.BranchInventory.branch_id == branch_id
             ).first()
 
             if not inventory:
@@ -96,7 +103,7 @@ def create_sale(
 
             movement = models.InventoryMovement(
                 product_id=item.product_id,
-                branch_id=sale.branch_id,
+                branch_id=branch_id,
                 movement_type="SALE",
                 reference_id=new_sale.sale_id,
                 quantity=item.quantity,
@@ -285,7 +292,7 @@ def refund_sale(
 
             inventory = db.query(models.BranchInventory).filter(
                 models.BranchInventory.product_id == item.product_id,
-                models.BranchInventory.branch_id == sale.branch_id
+                models.BranchInventory.branch_id == branch_id
             ).first()
 
             if inventory:
@@ -293,7 +300,7 @@ def refund_sale(
 
             movement = models.InventoryMovement(
                 product_id=item.product_id,
-                branch_id=sale.branch_id,
+                branch_id=branch_id,
                 movement_type="REFUND",
                 reference_id=sale_id,
                 quantity=item.quantity,
