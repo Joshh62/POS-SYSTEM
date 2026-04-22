@@ -110,6 +110,7 @@ class UserCreate(BaseModel):
     username: str
     password: str
     role: str
+    branch_id: int
 
 
 class UserLogin(BaseModel):

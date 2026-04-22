@@ -15,10 +15,11 @@ def get_current_user(
     token: str = Depends(oauth2_scheme),
     db: Session = Depends(get_db)
 ):
-
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+
         username: str = payload.get("sub")
+        branch_id: int = payload.get("branch_id")
 
         if username is None:
             raise HTTPException(status_code=401, detail="Invalid token")
@@ -35,6 +36,14 @@ def get_current_user(
 
     if not user.is_active:
         raise HTTPException(status_code=403, detail="Account disabled")
+
+    # 🚨 THIS IS THE FIX
+    if not branch_id:
+        raise HTTPException(status_code=400, detail="Branch not assigned. Please log in again.")
+
+    # Optional but STRONG safety check
+    if user.branch_id != branch_id:
+        raise HTTPException(status_code=401, detail="Branch mismatch. Please log in again.")
 
     return user
 

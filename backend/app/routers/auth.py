@@ -37,6 +37,7 @@ def register(user: schemas.UserCreate, db: Session = Depends(get_db)):
         username=user.username,
         password_hash=hashed,
         role=user.role
+        branch_id=user.branch_id
     )
 
     db.add(new_user)
@@ -53,7 +54,6 @@ def login(
 ):
     user = db.query(User).filter(User.username == form_data.username).first()
 
-
     if not user:
         raise HTTPException(status_code=401, detail="Invalid username")
 
@@ -63,18 +63,22 @@ def login(
     if not verify_password(form_data.password, user.password_hash):
         raise HTTPException(status_code=401, detail="Invalid password")
 
+    # 🚨 Optional but STRONGLY recommended
+    if not user.branch_id:
+        raise HTTPException(status_code=400, detail="User has no branch assigned")
+
     access_token = create_access_token(
-    data={
-        "sub": user.username,
-        "user_id": user.user_id,
-        "role": user.role
-        "branch_id": user.branch_id
-    }
-)
+        data={
+            "sub": user.username,
+            "user_id": user.user_id,
+            "role": user.role,
+            "branch_id": user.branch_id
+        }
+    )
 
     return {
         "access_token": access_token,
-        "token_type": "bearer"
+        "token_type": "bearer",
         "user": {
             "user_id": user.user_id,
             "username": user.username,
@@ -95,14 +99,6 @@ def deactivate_user(user_id: int, db: Session = Depends(get_db)):
     db.commit()
 
     return {"message": "User deactivated"}
-
-
-@router.get("/users", response_model=list[schemas.UserResponse])
-def list_users(
-    db: Session = Depends(get_db),
-    user = Depends(require_role(["admin"]))
-):
-    return db.query(User).order_by(User.created_at.desc()).all()
 
 
 @router.patch("/users/{user_id}/activate")
