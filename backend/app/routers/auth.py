@@ -68,12 +68,19 @@ def login(
         "sub": user.username,
         "user_id": user.user_id,
         "role": user.role
+        "branch_id": user.branch_id
     }
 )
 
     return {
         "access_token": access_token,
         "token_type": "bearer"
+        "user": {
+            "user_id": user.user_id,
+            "username": user.username,
+            "role": user.role,
+            "branch_id": user.branch_id
+        }
     }
 
 @router.patch("/users/{user_id}/deactivate")
