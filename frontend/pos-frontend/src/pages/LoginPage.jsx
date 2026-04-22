@@ -19,21 +19,24 @@ export default function LoginPage({ onLogin }) {
     try {
       const data = await login(username, password);
 
-      // Store token for api.js interceptor to pick up
+      // Save token
       localStorage.setItem("token", data.access_token);
 
-      // Decode payload to store user info (role, branch_id etc.)
+      // Decode JWT
       const payload = JSON.parse(atob(data.access_token.split(".")[1]));
+
+      // ✅ FIX: include branch_id
       localStorage.setItem(
         "user",
         JSON.stringify({
           username: payload.sub,
           user_id: payload.user_id,
           role: payload.role,
+          branch_id: payload.branch_id, // IMPORTANT
         })
       );
 
-      onLogin(); // notify App.jsx that login succeeded
+      onLogin();
 
     } catch (err) {
       const detail = err.response?.data?.detail;
@@ -48,51 +51,18 @@ export default function LoginPage({ onLogin }) {
   };
 
   return (
-    <div
-      style={{
-        minHeight: "100vh",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        background: "var(--color-background-tertiary)",
-      }}
-    >
-      <div
-        style={{
-          background: "var(--color-background-primary)",
-          borderRadius: 16,
-          padding: "36px 32px",
-          width: "100%",
-          maxWidth: 380,
-          border: "1px solid var(--color-border-tertiary)",
-        }}
-      >
+    <div style={pageStyle}>
+      <div style={cardStyle}>
+
         {/* Header */}
         <div style={{ textAlign: "center", marginBottom: 28 }}>
-          <div style={{ fontSize: 28, marginBottom: 6 }}>🏪</div>
-          <h1 style={{ fontSize: 20, fontWeight: 500, color: "var(--color-text-primary)", margin: 0 }}>
-            POS System
-          </h1>
-          <p style={{ fontSize: 13, color: "var(--color-text-secondary)", marginTop: 4 }}>
-            Sign in to continue
-          </p>
+          <div style={{ fontSize: 30, marginBottom: 6 }}>📊</div>
+          <h1 style={titleStyle}>ProfitTrack POS</h1>
+          <p style={subtitleStyle}>Sign in to continue</p>
         </div>
 
         {/* Error */}
-        {error && (
-          <div
-            style={{
-              background: "#FCEBEB",
-              color: "#A32D2D",
-              borderRadius: 8,
-              padding: "8px 12px",
-              fontSize: 13,
-              marginBottom: 16,
-            }}
-          >
-            {error}
-          </div>
-        )}
+        {error && <div style={errorBox}>{error}</div>}
 
         {/* Username */}
         <div style={{ marginBottom: 14 }}>
@@ -126,40 +96,94 @@ export default function LoginPage({ onLogin }) {
           onClick={handleSubmit}
           disabled={loading}
           style={{
-            width: "100%",
-            padding: "12px 0",
-            borderRadius: 10,
-            border: "none",
-            background: loading ? "var(--color-background-secondary)" : "#185FA5",
-            color: loading ? "var(--color-text-tertiary)" : "#E6F1FB",
-            fontSize: 15,
-            fontWeight: 500,
+            ...buttonStyle,
+            background: loading
+              ? "var(--color-surface)"
+              : "var(--color-primary)",
+            color: loading
+              ? "var(--color-text-secondary)"
+              : "#fff",
             cursor: loading ? "not-allowed" : "pointer",
           }}
         >
           {loading ? "Signing in..." : "Sign in"}
         </button>
+
       </div>
     </div>
   );
 }
 
+/* =========================
+   STYLES (BRANDED)
+========================= */
+
+const pageStyle = {
+  minHeight: "100vh",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  background: "var(--bg)",
+};
+
+const cardStyle = {
+  background: "var(--surface)",
+  borderRadius: 16,
+  padding: "36px 32px",
+  width: "100%",
+  maxWidth: 380,
+  border: "1px solid var(--border)",
+  boxShadow: "var(--shadow)",
+};
+
+const titleStyle = {
+  fontSize: 20,
+  fontWeight: 600,
+  color: "var(--text-h)",
+  margin: 0,
+};
+
+const subtitleStyle = {
+  fontSize: 13,
+  color: "var(--text)",
+  marginTop: 4,
+};
+
+const errorBox = {
+  background: "var(--error-bg)",
+  color: "var(--error-text)",
+  borderRadius: 8,
+  padding: "8px 12px",
+  fontSize: 13,
+  marginBottom: 16,
+};
+
 const labelStyle = {
   display: "block",
   fontSize: 12,
   fontWeight: 500,
-  color: "var(--color-text-secondary)",
+  color: "var(--text)",
   marginBottom: 6,
 };
 
 const inputStyle = {
   width: "100%",
-  padding: "9px 12px",
+  padding: "10px 12px",
   borderRadius: 8,
-  border: "1px solid var(--color-border-secondary)",
-  background: "var(--color-background-primary)",
-  color: "var(--color-text-primary)",
+  border: "1px solid var(--border)",
+  background: "var(--surface)",
+  color: "var(--text-h)",
   fontSize: 14,
   outline: "none",
   boxSizing: "border-box",
+};
+
+const buttonStyle = {
+  width: "100%",
+  padding: "12px 0",
+  borderRadius: 10,
+  border: "none",
+  fontSize: 15,
+  fontWeight: 500,
+  transition: "all 0.2s ease",
 };

@@ -9,11 +9,10 @@ import { getProductByBarcode } from "../api/api";
 
 export default function POS({ onScanResult }) {
   const [showCheckout, setShowCheckout] = useState(false);
-  const [scanFeedback, setScanFeedback] = useState(null); // { type: "success"|"error", message }
+  const [scanFeedback, setScanFeedback] = useState(null);
   const { addToCart } = useCart();
 
   const handleScan = useCallback(async (barcode) => {
-    // Notify parent (App) so topbar indicator flashes
     onScanResult?.(barcode);
 
     try {
@@ -24,7 +23,6 @@ export default function POS({ onScanResult }) {
       setScanFeedback({ type: "error", message: `No product found for: ${barcode}` });
     }
 
-    // Clear feedback after 2.5s
     setTimeout(() => setScanFeedback(null), 2500);
   }, [addToCart, onScanResult]);
 
@@ -35,25 +33,33 @@ export default function POS({ onScanResult }) {
 
       {/* Left — products */}
       <div style={{
-        flex: 1, display: "flex", flexDirection: "column",
-        overflow: "hidden", background: "var(--color-background-tertiary)",
+        flex: 1,
+        display: "flex",
+        flexDirection: "column",
+        overflow: "hidden",
+        background: "var(--bg)",   // ✅ FIXED
       }}>
+
         {/* Search bar */}
         <div style={{
           padding: "10px 16px",
-          borderBottom: "1px solid var(--color-border-tertiary)",
-          background: "var(--color-background-primary)",
+          borderBottom: "1px solid var(--border)",  // ✅ FIXED
+          background: "var(--surface)",             // ✅ FIXED
           flexShrink: 0,
         }}>
           <input
             type="text"
             placeholder="Search products... (or scan a barcode)"
             style={{
-              width: "100%", padding: "7px 12px", borderRadius: 8,
-              border: "1px solid var(--color-border-secondary)",
-              background: "var(--color-background-secondary)",
-              color: "var(--color-text-primary)", fontSize: 13,
-              outline: "none", boxSizing: "border-box",
+              width: "100%",
+              padding: "8px 12px",
+              borderRadius: 8,
+              border: "1px solid var(--border)",    // ✅ FIXED
+              background: "var(--surface)",         // ✅ FIXED
+              color: "var(--text)",                // ✅ FIXED
+              fontSize: 13,
+              outline: "none",
+              boxSizing: "border-box",
             }}
             onChange={(e) => {
               window.dispatchEvent(new CustomEvent("pos-search", { detail: e.target.value }));
@@ -67,9 +73,13 @@ export default function POS({ onScanResult }) {
             padding: "8px 16px",
             fontSize: 13,
             fontWeight: 500,
-            background: scanFeedback.type === "success" ? "#EAF3DE" : "#FCEBEB",
-            color: scanFeedback.type === "success" ? "#3B6D11" : "#A32D2D",
-            borderBottom: "1px solid var(--color-border-tertiary)",
+            background: scanFeedback.type === "success"
+              ? "var(--success-bg)"
+              : "var(--error-bg)",
+            color: scanFeedback.type === "success"
+              ? "var(--success-text)"
+              : "var(--error-text)",
+            borderBottom: "1px solid var(--border)",  // ✅ FIXED
             flexShrink: 0,
             display: "flex",
             alignItems: "center",
@@ -87,22 +97,36 @@ export default function POS({ onScanResult }) {
       </div>
 
       {/* Divider */}
-      <div style={{ width: 1, background: "var(--color-border-tertiary)", flexShrink: 0 }} />
+      <div style={{ width: 1, background: "var(--border)", flexShrink: 0 }} />
 
       {/* Right — cart */}
       <div style={{
-        width: 300, flexShrink: 0, display: "flex", flexDirection: "column",
-        background: "var(--color-background-primary)", overflow: "hidden",
+        width: 300,
+        flexShrink: 0,
+        display: "flex",
+        flexDirection: "column",
+        background: "var(--surface)",  // ✅ FIXED
+        overflow: "hidden",
       }}>
+
         <div style={{
           padding: "12px 16px",
-          borderBottom: "1px solid var(--color-border-tertiary)",
-          fontSize: 13, fontWeight: 500, color: "var(--color-text-primary)", flexShrink: 0,
+          borderBottom: "1px solid var(--border)", // ✅ FIXED
+          fontSize: 13,
+          fontWeight: 600,
+          color: "var(--text-h)",                 // ✅ FIXED
+          flexShrink: 0,
         }}>
           Cart
         </div>
 
-        <div style={{ flex: 1, overflow: "hidden", display: "flex", flexDirection: "column", padding: "8px 16px" }}>
+        <div style={{
+          flex: 1,
+          overflow: "hidden",
+          display: "flex",
+          flexDirection: "column",
+          padding: "8px 16px"
+        }}>
           <Cart />
         </div>
 

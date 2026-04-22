@@ -9,21 +9,28 @@ export default function ProductCard({ product }) {
   return (
     <div
       style={{
-        background: "var(--color-background-secondary)",
-        border: "1px solid var(--color-border-tertiary)",
-        borderRadius: 10,
+        background: "var(--surface)",             // ✅ FIXED
+        border: "1px solid var(--border)",        // ✅ FIXED
+        borderRadius: 12,
         padding: "12px",
         display: "flex",
         flexDirection: "column",
         gap: 6,
         cursor: "pointer",
-        transition: "border-color 0.15s",
+        transition: "all 0.15s ease",
         position: "relative",
       }}
       onClick={() => addToCart(product)}
-      onMouseEnter={(e) => (e.currentTarget.style.borderColor = "var(--color-border-primary)")}
-      onMouseLeave={(e) => (e.currentTarget.style.borderColor = "var(--color-border-tertiary)")}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.borderColor = "var(--color-primary)";
+        e.currentTarget.style.transform = "translateY(-2px)";
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.borderColor = "var(--border)";
+        e.currentTarget.style.transform = "translateY(0)";
+      }}
     >
+
       {/* In-cart badge */}
       {inCart > 0 && (
         <div
@@ -31,40 +38,43 @@ export default function ProductCard({ product }) {
             position: "absolute",
             top: 8,
             right: 8,
-            background: "#185FA5",
-            color: "#E6F1FB",
+            background: "var(--color-primary)",   // 🔥 BRAND COLOR
+            color: "#fff",
             borderRadius: 12,
             fontSize: 11,
-            fontWeight: 500,
-            padding: "2px 7px",
+            fontWeight: 600,
+            padding: "2px 8px",
           }}
         >
-          {inCart} in cart
+          {inCart}
         </div>
       )}
 
+      {/* Product name */}
       <div
         style={{
           fontSize: 13,
-          fontWeight: 500,
-          color: "var(--color-text-primary)",
+          fontWeight: 600,
+          color: "var(--text-h)",                // ✅ FIXED
           lineHeight: 1.3,
-          paddingRight: inCart > 0 ? 60 : 0,
+          paddingRight: inCart > 0 ? 40 : 0,
         }}
       >
         {product.product_name}
       </div>
 
-      <div style={{ fontSize: 11, color: "var(--color-text-tertiary)" }}>
+      {/* Barcode */}
+      <div style={{ fontSize: 11, color: "var(--text)" }}>
         {product.barcode}
       </div>
 
+      {/* Price */}
       <div
         style={{
-          marginTop: 4,
-          fontSize: 15,
-          fontWeight: 500,
-          color: "#185FA5",
+          marginTop: 6,
+          fontSize: 16,
+          fontWeight: 700,
+          color: "var(--color-primary)",         // 🔥 IMPORTANT
         }}
       >
         ₦{parseFloat(product.selling_price).toLocaleString("en-NG", {
@@ -72,11 +82,13 @@ export default function ProductCard({ product }) {
         })}
       </div>
 
+      {/* Hint */}
       <div
         style={{
           marginTop: 2,
           fontSize: 11,
-          color: "var(--color-text-secondary)",
+          color: "var(--text)",
+          opacity: 0.7,
         }}
       >
         Tap to add

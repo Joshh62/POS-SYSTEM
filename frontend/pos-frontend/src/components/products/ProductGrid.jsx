@@ -2,8 +2,6 @@ import { useState, useEffect, useCallback } from "react";
 import { getProducts } from "../../api/api";
 import ProductCard from "./ProductCard";
 
-// externalSearch = true means POS owns the search bar,
-// false (default) means ProductGrid renders its own search bar
 export default function ProductGrid({ externalSearch = false }) {
   const [products, setProducts] = useState([]);
   const [total, setTotal]       = useState(0);
@@ -15,7 +13,7 @@ export default function ProductGrid({ externalSearch = false }) {
 
   const LIMIT = 20;
 
-  // Listen for search events dispatched by POS.jsx
+  // Listen for POS search
   useEffect(() => {
     if (!externalSearch) return;
     const handler = (e) => {
@@ -26,7 +24,7 @@ export default function ProductGrid({ externalSearch = false }) {
     return () => window.removeEventListener("pos-search", handler);
   }, [externalSearch]);
 
-  // Debounce search input
+  // Debounce
   useEffect(() => {
     const timer = setTimeout(() => {
       setSearch(searchInput);
@@ -41,24 +39,24 @@ export default function ProductGrid({ externalSearch = false }) {
     try {
       const result = await getProducts(page, LIMIT, search);
       setProducts(result.data);
-      setTotal(result.total_products);
-    } catch (err) {
-      setError("Failed to load products. Is the backend running?");
+      setTotal(result.total);
+    } catch {
+      setError("Failed to load products.");
     } finally {
       setLoading(false);
     }
   }, [page, search]);
 
   useEffect(() => {
-    fetchProducts("");
-  }, []);
+    fetchProducts();
+  }, [fetchProducts]);
 
   const totalPages = Math.ceil(total / LIMIT);
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100%", gap: 10 }}>
+    <div style={{ display: "flex", flexDirection: "column", height: "100%", gap: 12 }}>
 
-      {/* Own search bar — only shown when not controlled externally */}
+      {/* Search (if standalone) */}
       {!externalSearch && (
         <input
           type="text"
@@ -66,11 +64,11 @@ export default function ProductGrid({ externalSearch = false }) {
           value={searchInput}
           onChange={(e) => setSearchInput(e.target.value)}
           style={{
-            padding: "8px 12px",
-            borderRadius: 8,
-            border: "1px solid var(--color-border-secondary)",
-            background: "var(--color-background-primary)",
-            color: "var(--color-text-primary)",
+            padding: "9px 12px",
+            borderRadius: 10,
+            border: "1px solid var(--border)",
+            background: "var(--surface)",
+            color: "var(--text)",
             fontSize: 14,
             outline: "none",
             width: "100%",
@@ -78,31 +76,51 @@ export default function ProductGrid({ externalSearch = false }) {
         />
       )}
 
-      {/* State messages */}
+      {/* Loading */}
       {loading && (
-        <div style={{ color: "var(--color-text-secondary)", fontSize: 13, textAlign: "center", padding: 20 }}>
+        <div style={{
+          color: "var(--text)",
+          fontSize: 13,
+          textAlign: "center",
+          padding: 20,
+        }}>
           Loading products...
         </div>
       )}
+
+      {/* Error */}
       {error && (
-        <div style={{ color: "#A32D2D", fontSize: 13, padding: "10px 12px", background: "#FCEBEB", borderRadius: 8 }}>
+        <div style={{
+          background: "var(--error-bg)",
+          color: "var(--error-text)",
+          padding: "10px 12px",
+          borderRadius: 8,
+          fontSize: 13,
+        }}>
           {error}
         </div>
       )}
+
+      {/* Empty */}
       {!loading && !error && products.length === 0 && (
-        <div style={{ color: "var(--color-text-secondary)", fontSize: 13, textAlign: "center", padding: 20 }}>
+        <div style={{
+          color: "var(--text)",
+          fontSize: 13,
+          textAlign: "center",
+          padding: 20,
+        }}>
           No products found.
         </div>
       )}
 
-      {/* Product grid */}
+      {/* GRID */}
       <div style={{
         display: "grid",
-        gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))",
-        gap: 10,
+        gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", // 🔥 better spacing
+        gap: 12,
         overflowY: "auto",
         flex: 1,
-        paddingRight: 2,
+        paddingRight: 4,
         alignContent: "start",
       }}>
         {products.map((product) => (
@@ -112,7 +130,13 @@ export default function ProductGrid({ externalSearch = false }) {
 
       {/* Pagination */}
       {totalPages > 1 && (
-        <div style={{ display: "flex", gap: 8, alignItems: "center", justifyContent: "center", paddingTop: 4 }}>
+        <div style={{
+          display: "flex",
+          gap: 10,
+          alignItems: "center",
+          justifyContent: "center",
+          paddingTop: 6
+        }}>
           <button
             onClick={() => setPage((p) => Math.max(1, p - 1))}
             disabled={page === 1}
@@ -120,9 +144,11 @@ export default function ProductGrid({ externalSearch = false }) {
           >
             ← Prev
           </button>
-          <span style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>
+
+          <span style={{ fontSize: 12, color: "var(--text)" }}>
             {page} / {totalPages}
           </span>
+
           <button
             onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
             disabled={page === totalPages}
@@ -138,12 +164,13 @@ export default function ProductGrid({ externalSearch = false }) {
 
 function paginationBtn(disabled) {
   return {
-    padding: "5px 12px",
-    borderRadius: 6,
-    border: "1px solid var(--color-border-secondary)",
-    background: disabled ? "var(--color-background-secondary)" : "var(--color-background-primary)",
-    color: disabled ? "var(--color-text-tertiary)" : "var(--color-text-primary)",
+    padding: "6px 12px",
+    borderRadius: 8,
+    border: "1px solid var(--border)",
+    background: disabled ? "var(--bg)" : "var(--surface)",
+    color: "var(--text)",
     fontSize: 12,
     cursor: disabled ? "not-allowed" : "pointer",
+    opacity: disabled ? 0.6 : 1,
   };
 }

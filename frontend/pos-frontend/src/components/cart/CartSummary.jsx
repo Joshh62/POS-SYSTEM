@@ -8,7 +8,7 @@ export default function CartSummary({ onCheckout }) {
   return (
     <div
       style={{
-        borderTop: "1px solid var(--color-border-tertiary)",
+        borderTop: "1px solid var(--border)", // ✅ fixed
         paddingTop: 12,
         display: "flex",
         flexDirection: "column",
@@ -17,8 +17,8 @@ export default function CartSummary({ onCheckout }) {
     >
       {/* Total row */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <span style={{ fontSize: 14, color: "var(--color-text-secondary)" }}>Total</span>
-        <span style={{ fontSize: 20, fontWeight: 500, color: "var(--color-text-primary)" }}>
+        <span style={{ fontSize: 14, color: "var(--text)" }}>Total</span>
+        <span style={{ fontSize: 20, fontWeight: 600, color: "var(--text-h)" }}>
           ₦{totalAmount.toLocaleString("en-NG", { minimumFractionDigits: 2 })}
         </span>
       </div>
@@ -32,15 +32,18 @@ export default function CartSummary({ onCheckout }) {
           padding: "12px 0",
           borderRadius: 10,
           border: "none",
-          background: isEmpty ? "var(--color-background-secondary)" : "#185FA5",
-          color: isEmpty ? "var(--color-text-tertiary)" : "#E6F1FB",
+          background: isEmpty ? "var(--border)" : "var(--color-accent)", // 🔥 ORANGE CTA
+          color: isEmpty ? "var(--text)" : "#fff",
           fontSize: 15,
-          fontWeight: 500,
+          fontWeight: 600,
           cursor: isEmpty ? "not-allowed" : "pointer",
-          transition: "background 0.15s",
+          transition: "opacity 0.15s",
+          opacity: isEmpty ? 0.7 : 1,
         }}
       >
-        {isEmpty ? "Add items to checkout" : `Checkout — ₦${totalAmount.toLocaleString("en-NG", { minimumFractionDigits: 2 })}`}
+        {isEmpty
+          ? "Add items to checkout"
+          : `Checkout — ₦${totalAmount.toLocaleString("en-NG", { minimumFractionDigits: 2 })}`}
       </button>
     </div>
   );
