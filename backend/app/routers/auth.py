@@ -36,8 +36,8 @@ def register(user: schemas.UserCreate, db: Session = Depends(get_db)):
         full_name=user.full_name,
         username=user.username,
         password_hash=hashed,
-        role=user.role
-        branch_id=user.branch_id
+        role=user.role,
+        branch_id=user.branch_id   # ✅ important
     )
 
     db.add(new_user)
@@ -63,7 +63,6 @@ def login(
     if not verify_password(form_data.password, user.password_hash):
         raise HTTPException(status_code=401, detail="Invalid password")
 
-    # 🚨 Optional but STRONGLY recommended
     if not user.branch_id:
         raise HTTPException(status_code=400, detail="User has no branch assigned")
 
