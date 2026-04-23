@@ -25,6 +25,8 @@ def create_sale(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user)
 ):
+    print("CURRENT USER:", current_user.username)
+    print("BRANCH ID:", current_user.branch_id)
 
     if not sale.items:
         raise HTTPException(status_code=400, detail="Sale must contain items")
