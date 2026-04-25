@@ -17,26 +17,16 @@ export default function LoginPage({ onLogin }) {
     setError(null);
 
     try {
+
       const data = await login(username, password);
 
-      // Save token
       localStorage.setItem("token", data.access_token);
+      localStorage.setItem("user", JSON.stringify(data.user));
 
-      // Decode JWT
-      const payload = JSON.parse(atob(data.access_token.split(".")[1]));
-
-      // ✅ FIX: include branch_id
-      localStorage.setItem(
-        "user",
-        JSON.stringify({
-          username: payload.sub,
-          user_id: payload.user_id,
-          role: payload.role,
-          branch_id: payload.branch_id, // IMPORTANT
-        })
-      );
+      console.log("LOGIN DATA:", data);
 
       onLogin();
+
 
     } catch (err) {
       const detail = err.response?.data?.detail;
