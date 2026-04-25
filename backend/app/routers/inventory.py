@@ -22,7 +22,8 @@ def restock_product(
     if data.quantity <= 0:
         raise HTTPException(status_code=400, detail="Quantity must be greater than zero")
 
-    # Validate product exists
+    branch_id = user.branch_id   # ✅ enforce branch
+
     product = db.query(models.Product).filter(
         models.Product.product_id == data.product_id
     ).first()
@@ -30,18 +31,9 @@ def restock_product(
     if not product:
         raise HTTPException(status_code=404, detail="Product not found")
 
-    # Validate branch exists
-    branch = db.query(models.Branch).filter(
-        models.Branch.branch_id == data.branch_id
-    ).first()
-
-    if not branch:
-        raise HTTPException(status_code=404, detail="Branch not found")
-
-    # Update or create BranchInventory record  (FIXED: was missing entirely)
     inventory = db.query(models.BranchInventory).filter(
         models.BranchInventory.product_id == data.product_id,
-        models.BranchInventory.branch_id == data.branch_id
+        models.BranchInventory.branch_id == branch_id
     ).first()
 
     if inventory:
@@ -49,15 +41,14 @@ def restock_product(
     else:
         inventory = models.BranchInventory(
             product_id=data.product_id,
-            branch_id=data.branch_id,
+            branch_id=branch_id,
             stock_quantity=data.quantity
         )
         db.add(inventory)
 
-    # Log the inventory movement  (FIXED: was using item.product_id and new_sale.sale_id)
     movement = models.InventoryMovement(
         product_id=data.product_id,
-        branch_id=data.branch_id,
+        branch_id=branch_id,
         movement_type="RESTOCK",
         quantity=data.quantity,
         reference_id=None,
@@ -70,55 +61,49 @@ def restock_product(
 
     return {
         "product_id": data.product_id,
-        "branch_id": data.branch_id,
+        "branch_id": branch_id,
         "new_stock": inventory.stock_quantity
     }
 
 
 @router.get("/")
 def get_inventory(
-    branch_id: int = None,
     db: Session = Depends(get_db),
     user=Depends(require_role(["admin", "manager"]))
 ):
-    query = db.query(models.BranchInventory)
-
-    if branch_id:
-        query = query.filter(models.BranchInventory.branch_id == branch_id)
-
-    return query.all()
+    return db.query(models.BranchInventory).filter(
+        models.BranchInventory.branch_id == user.branch_id
+    ).all()
 
 
 @router.get("/low-stock")
 def get_low_stock_products(
     threshold: int = 5,
-    branch_id: int = None,
     db: Session = Depends(get_db),
     user=Depends(require_role(["admin", "manager"]))
 ):
 
-    query = db.query(models.BranchInventory).filter(
+    results = db.query(models.BranchInventory).filter(
+        models.BranchInventory.branch_id == user.branch_id,
         models.BranchInventory.stock_quantity <= threshold
-    )
-
-    if branch_id:
-        query = query.filter(models.BranchInventory.branch_id == branch_id)
+    ).all()
 
     return {
         "threshold": threshold,
-        "low_stock_items": query.all()
+        "low_stock_items": results
     }
 
 
 @router.post("/adjust")
 def adjust_stock(
     product_id: int,
-    branch_id: int,
     quantity: int,
     reason: str,
     db: Session = Depends(get_db),
     user=Depends(require_role(["admin", "manager"]))
 ):
+
+    branch_id = user.branch_id
 
     inventory = db.query(models.BranchInventory).filter(
         models.BranchInventory.product_id == product_id,
@@ -126,7 +111,7 @@ def adjust_stock(
     ).first()
 
     if not inventory:
-        raise HTTPException(status_code=404, detail="Inventory record not found for this product/branch")
+        raise HTTPException(status_code=404, detail="Inventory record not found")
 
     inventory.stock_quantity += quantity
 

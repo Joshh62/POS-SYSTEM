@@ -1,5 +1,5 @@
 from app import models
-from datetime import date
+from datetime import date, datetime, timedelta
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from sqlalchemy import func
@@ -15,16 +15,15 @@ router = APIRouter(
 
 
 @router.get("/daily-sales")
-def daily_sales(
-    db: Session = Depends(get_db),
-    user = Depends(require_role(["admin","manager"]))
-):
+def daily_sales(db: Session = Depends(get_db), user = Depends(require_role(["admin","manager"]))):
 
     today = date.today()
+    branch_id = user.branch_id
 
     result = db.query(
         func.sum(Sale.total_amount)
     ).filter(
+        Sale.branch_id == branch_id,
         func.date(Sale.sale_date) == today
     ).scalar()
 
@@ -35,10 +34,10 @@ def daily_sales(
 
 
 @router.get("/top-products")
-def top_products(
-    db: Session = Depends(get_db),
-    user = Depends(require_role(["admin", "manager"]))
-):
+def top_products(db: Session = Depends(get_db), user = Depends(require_role(["admin", "manager"]))):
+
+    today = date.today()
+    branch_id = user.branch_id
 
     results = (
         db.query(
@@ -46,19 +45,18 @@ def top_products(
             func.sum(SaleItem.quantity).label("total_sold")
         )
         .join(SaleItem, Product.product_id == SaleItem.product_id)
+        .join(Sale, Sale.sale_id == SaleItem.sale_id)
+        .filter(
+            Sale.branch_id == branch_id,
+            func.date(Sale.sale_date) == today
+        )
         .group_by(Product.product_name)
         .order_by(func.sum(SaleItem.quantity).desc())
         .limit(10)
         .all()
     )
 
-    return [
-        {
-            "product_name": r.product_name,
-            "total_sold": r.total_sold
-        }
-        for r in results
-    ]
+    return [{"product_name": r.product_name, "total_sold": r.total_sold} for r in results]
 
 
 @router.get("/inventory-value")
@@ -74,14 +72,25 @@ def inventory_value(db: Session = Depends(get_db)):
 
 
 @router.get("/low-stock")
-def get_low_stock(
-    db: Session = Depends(get_db),
-    user = Depends(require_role(["admin", "manager"]))
-):
-    return db.query(Product).filter(
-        Product.reorder_level.isnot(None), # Avoid NULL errors
-        Product.stock_quantity <= Product.reorder_level
-    ).order_by(Product.stock_quantity.asc()).all()
+def get_low_stock(db: Session = Depends(get_db), user = Depends(require_role(["admin", "manager"]))):
+
+    branch_id = user.branch_id
+
+    results = (
+        db.query(Product.product_name, models.BranchInventory.stock_quantity)
+        .join(models.BranchInventory, Product.product_id == models.BranchInventory.product_id)
+        .filter(
+            models.BranchInventory.branch_id == branch_id,
+            models.BranchInventory.stock_quantity <= Product.reorder_level
+        )
+        .order_by(models.BranchInventory.stock_quantity.asc())
+        .all()
+    )
+
+    return [
+        {"product_name": r.product_name, "stock": r.stock_quantity}
+        for r in results
+    ]
 
 
 @router.get("/sales-volume")
@@ -100,13 +109,17 @@ def sales_volume(
 
 
 @router.get("/sales-summary")
-def sales_summary(
-    db: Session = Depends(get_db),
-    user = Depends(require_role(["admin","manager"]))
-):
+def sales_summary(db: Session = Depends(get_db), user = Depends(require_role(["admin","manager"]))):
 
-    total_sales = db.query(func.sum(Sale.total_amount)).scalar() or 0
-    total_transactions = db.query(func.count(Sale.sale_id)).scalar() or 0
+    branch_id = user.branch_id
+
+    total_sales = db.query(func.sum(Sale.total_amount)).filter(
+        Sale.branch_id == branch_id
+    ).scalar() or 0
+
+    total_transactions = db.query(func.count(Sale.sale_id)).filter(
+        Sale.branch_id == branch_id
+    ).scalar() or 0
 
     return {
         "total_sales": total_sales,
@@ -115,10 +128,10 @@ def sales_summary(
 
 
 @router.get("/sales-by-cashier")
-def sales_by_cashier(
-    db: Session = Depends(get_db),
-    user = Depends(require_role(["admin","manager"]))
-):
+def sales_by_cashier(db: Session = Depends(get_db), user = Depends(require_role(["admin","manager"]))):
+
+    today = date.today()
+    branch_id = user.branch_id
 
     results = (
         db.query(
@@ -127,6 +140,10 @@ def sales_by_cashier(
             func.sum(Sale.total_amount).label("total_sales")
         )
         .join(Sale, Sale.user_id == User.user_id)
+        .filter(
+            Sale.branch_id == branch_id,
+            func.date(Sale.sale_date) == today
+        )
         .group_by(User.full_name)
         .order_by(func.sum(Sale.total_amount).desc())
         .all()
@@ -136,7 +153,7 @@ def sales_by_cashier(
         {
             "cashier": r.full_name,
             "transactions": r.transactions,
-            "total_sales": r.total_sales
+            "total_sales": r.total_sales or 0
         }
         for r in results
     ]
@@ -218,37 +235,26 @@ def inventory_history(
 
 
 @router.get("/dashboard")
-def dashboard(
-    db: Session = Depends(get_db),
-    user = Depends(require_role(["admin","manager"]))
-):
+def dashboard(db: Session = Depends(get_db), user = Depends(require_role(["admin","manager"]))):
 
     today = date.today()
+    branch_id = user.branch_id
 
-    # total sales today
-    today_sales = db.query(
-        func.sum(Sale.total_amount)
-    ).filter(
+    today_sales = db.query(func.sum(Sale.total_amount)).filter(
+        Sale.branch_id == branch_id,
         func.date(Sale.sale_date) == today
     ).scalar() or 0
 
-    # total transactions today
-    transactions = db.query(
-        func.count(Sale.sale_id)
-    ).filter(
+    transactions = db.query(func.count(Sale.sale_id)).filter(
+        Sale.branch_id == branch_id,
         func.date(Sale.sale_date) == today
     ).scalar() or 0
 
-    # total products
-    total_products = db.query(
-        func.count(Product.product_id)
-    ).scalar()
+    total_products = db.query(func.count(Product.product_id)).scalar()
 
-    # low stock count
-    low_stock = db.query(
-        func.count(Product.product_id)
-    ).filter(
-        Product.stock_quantity <= Product.reorder_level
+    low_stock = db.query(func.count(models.BranchInventory.product_id)).filter(
+        models.BranchInventory.branch_id == branch_id,
+        models.BranchInventory.stock_quantity <= Product.reorder_level
     ).scalar()
 
     return {
@@ -264,24 +270,33 @@ def daily_dashboard(
     db: Session = Depends(get_db),
     user = Depends(require_role(["admin","manager"]))
 ):
-
     today = date.today()
 
-    # total sales today
-    total_sales = db.query(
-        func.sum(models.Sale.total_amount)
-    ).filter(
-        func.date(models.Sale.sale_date) == today
-    ).scalar()
+    # Last 7 days sales trend
+    days = []
+    sales_data = []
 
-    # total transactions
+    for i in range(6, -1, -1):
+        day = today - timedelta(days=i)
+
+        total = db.query(
+            func.sum(models.Sale.total_amount)
+        ).filter(
+            func.date(models.Sale.sale_date) == day
+        ).scalar() or 0
+
+        days.append(day.strftime("%Y-%m-%d"))
+        sales_data.append(float(total))
+
+    # Today's summary
+    total_sales = sales_data[-1]
+
     total_transactions = db.query(
         func.count(models.Sale.sale_id)
     ).filter(
         func.date(models.Sale.sale_date) == today
-    ).scalar()
+    ).scalar() or 0
 
-    # profit today
     profit = db.query(
         func.sum(
             (models.SaleItem.unit_price - models.Product.cost_price)
@@ -295,32 +310,24 @@ def daily_dashboard(
         models.Sale.sale_id == models.SaleItem.sale_id
     ).filter(
         func.date(models.Sale.sale_date) == today
-    ).scalar()
-
-    # best selling product
-    top_product = db.query(
-        models.Product.product_name,
-        func.sum(models.SaleItem.quantity).label("qty")
-    ).join(
-        models.SaleItem,
-        models.Product.product_id == models.SaleItem.product_id
-    ).join(
-        models.Sale,
-        models.Sale.sale_id == models.SaleItem.sale_id
-    ).filter(
-        func.date(models.Sale.sale_date) == today
-    ).group_by(
-        models.Product.product_name
-    ).order_by(
-        func.sum(models.SaleItem.quantity).desc()
-    ).first()
+    ).scalar() or 0
 
     return {
-        "date": today,
-        "total_sales": total_sales or 0,
-        "total_transactions": total_transactions or 0,
-        "total_profit": profit or 0,
-        "top_product": top_product[0] if top_product else None
+        "summary": {
+            "date": str(today),
+            "total_sales": float(total_sales),
+            "total_transactions": total_transactions,
+            "total_profit": float(profit)
+        },
+        "chart": {
+            "labels": days,
+            "datasets": [
+                {
+                    "label": "Sales (₦)",
+                    "data": sales_data
+                }
+            ]
+        }
     }
 
 
@@ -329,10 +336,8 @@ def stock_valuation(
     db: Session = Depends(get_db),
     user = Depends(require_role(["admin","manager"]))
 ):
-    # Join BranchInventory with Product to get real stock levels
     results = (
         db.query(
-            models.Product.product_id,
             models.Product.product_name,
             models.Product.cost_price,
             models.BranchInventory.stock_quantity,
@@ -344,21 +349,28 @@ def stock_valuation(
         .all()
     )
 
-    inventory = []
+    labels = []
+    values = []
     total_value = 0
 
     for r in results:
         stock_value = float(r.stock_quantity or 0) * float(r.cost_price or 0)
         total_value += stock_value
-        inventory.append({
-            "product_id":    r.product_id,
-            "product_name":  r.product_name,
-            "stock_quantity": r.stock_quantity,
-            "cost_price":    float(r.cost_price or 0),
-            "stock_value":   stock_value,
-        })
+
+        labels.append(r.product_name)
+        values.append(stock_value)
 
     return {
-        "total_inventory_value": total_value,
-        "products": inventory,
+        "summary": {
+            "total_inventory_value": total_value
+        },
+        "chart": {
+            "labels": labels,
+            "datasets": [
+                {
+                    "label": "Stock Value (₦)",
+                    "data": values
+                }
+            ]
+        }
     }
