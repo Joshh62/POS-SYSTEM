@@ -14,23 +14,23 @@ import SalesPage from "./pages/SalesPage";
 import ReportsPage from "./pages/ReportsPage";
 
 export default function App() {
-
   const [isLoggedIn, setIsLoggedIn] = useState(() => !!localStorage.getItem("token"));
 
-  // NEW: controls flow
-  const [view, setView] = useState("landing"); // "landing" | "login" | "app"
+  // ✅ Fix: if already logged in on mount, skip landing and go straight to app
+  const [view, setView] = useState(() => {
+    if (localStorage.getItem("token")) return "app";
+    return "landing";
+  });
 
   const [activePage, setActivePage] = useState("pos");
   const [lastScan, setLastScan] = useState(null);
 
-  // LOGIN
   const handleLogin = () => {
     setIsLoggedIn(true);
     setView("app");
     setActivePage("pos");
   };
 
-  // LOGOUT
   const handleLogout = () => {
     localStorage.removeItem("token");
     localStorage.removeItem("user");
@@ -38,9 +38,7 @@ export default function App() {
     setView("login");
   };
 
-  // ----------- FLOW CONTROL -----------
-
-  // Landing page first
+  // Landing page — only shown to users who have never logged in this session
   if (view === "landing") {
     return <LandingPage onStart={() => setView("login")} />;
   }
@@ -50,8 +48,7 @@ export default function App() {
     return <LoginPage onLogin={handleLogin} />;
   }
 
-  // ----------- MAIN APP -----------
-
+  // Main app
   const renderPage = () => {
     switch (activePage) {
       case "pos":       return <POS onScanResult={setLastScan} />;
