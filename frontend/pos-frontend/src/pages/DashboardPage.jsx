@@ -42,19 +42,19 @@ export default function DashboardPage() {
       <div style={gridStyle(4)}>
         <KPICard
           label="Today's sales"
-          value={`₦${Number(daily?.total_sales || 0).toLocaleString("en-NG", { minimumFractionDigits: 2 })}`}
+          value={`₦${Number(daily?.summary?.total_sales || 0).toLocaleString("en-NG", { minimumFractionDigits: 2 })}`}
           icon="💰"
           tone="primary"
         />
         <KPICard
           label="Transactions today"
-          value={daily?.total_transactions || 0}
+          value={daily?.summary?.total_transactions || 0}
           icon="🧾"
           tone="success"
         />
         <KPICard
           label="Today's profit"
-          value={`₦${Number(daily?.total_profit || 0).toLocaleString("en-NG", { minimumFractionDigits: 2 })}`}
+          value={`₦${Number(daily?.summary?.total_profit || 0).toLocaleString("en-NG", { minimumFractionDigits: 2 })}`}
           icon="📈"
           tone="success"
         />
@@ -114,7 +114,7 @@ export default function DashboardPage() {
           ) : (
             lowStock.slice(0, 6).map((item, i) => (
               <div key={i} style={rowStyle}>
-                <span style={rowLabel}>Product #{item.product_id}</span>
+                <span style={rowLabel}>{item.product_name}</span>
                 <span
                   style={{
                     fontSize: 12,
@@ -125,7 +125,7 @@ export default function DashboardPage() {
                     borderRadius: 10,
                   }}
                 >
-                  {item.stock_quantity} left
+                  {item.stock} left
                 </span>
               </div>
             ))

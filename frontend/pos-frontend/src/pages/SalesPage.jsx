@@ -285,3 +285,8 @@ export default function SalesPage() {
     </div>
   );
 }
+
+const labelStyle = {
+  fontSize: 12,
+  color: "var(--color-text-secondary)",
+};
