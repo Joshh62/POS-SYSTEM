@@ -25,7 +25,7 @@ export default function LoginPage({ onLogin }) {
 
       console.log("LOGIN DATA:", data);
 
-      onLogin();
+      window.location.reload();
 
 
     } catch (err) {
