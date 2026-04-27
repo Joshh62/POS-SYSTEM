@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from datetime import datetime, date
 import pytz
 import io
+import os
 
 from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
@@ -206,13 +207,12 @@ def get_receipt(
 
 
 # ------------------------------------
-# GENERATE PDF INVOICE
+# GENERATE PDF INVOICE  (no auth — receipt is not sensitive)
 # ------------------------------------
 @router.get("/{sale_id}/invoice")
 def generate_invoice(
     sale_id: int,
     db: Session = Depends(get_db),
-    user=Depends(require_role(["admin", "manager", "cashier"]))
 ):
     sale = db.query(models.Sale).filter(models.Sale.sale_id == sale_id).first()
     if not sale:
@@ -220,34 +220,131 @@ def generate_invoice(
 
     items = db.query(models.SaleItem).filter(models.SaleItem.sale_id == sale_id).all()
 
+    # ── shop info ────────────────────────────────────────────────────────────
+    SHOP_NAME    = os.getenv("SHOP_NAME", "WEAR HAUS")
+    SHOP_ADDRESS = os.getenv("SHOP_ADDRESS", "9 Kashim Ibrahim Road, Narayi Highcost, Kaduna")
+    SHOP_PHONE   = os.getenv("SHOP_PHONE",   "08154586355")
+
+    # ── cashier & customer ───────────────────────────────────────────────────
+    cashier  = db.query(models.User).filter(models.User.user_id == sale.user_id).first()
+    customer = db.query(models.Customer).filter(models.Customer.customer_id == sale.customer_id).first() if sale.customer_id else None
+
+    # ── page setup ───────────────────────────────────────────────────────────
+    PAGE_W, PAGE_H = letter          # 612 x 792 pt
+    MARGIN         = 50
+    COL            = {               # column x positions
+        "item":  MARGIN,
+        "qty":   340,
+        "price": 410,
+        "total": 500,
+    }
+
     buffer = io.BytesIO()
     pdf    = canvas.Canvas(buffer, pagesize=letter)
-    y      = 750
+    pdf.setTitle(f"Invoice #{sale_id} — {SHOP_NAME}")
 
-    pdf.setFont("Helvetica-Bold", 16)
-    pdf.drawString(200, y, "POS RECEIPT")
+    # ── header background bar ────────────────────────────────────────────────
+    pdf.setFillColorRGB(0.094, 0.373, 0.647)   # #185FA5
+    pdf.rect(0, PAGE_H - 110, PAGE_W, 110, fill=1, stroke=0)
 
+    # shop name
+    pdf.setFillColorRGB(1, 1, 1)
+    pdf.setFont("Helvetica-Bold", 22)
+    pdf.drawString(MARGIN, PAGE_H - 48, SHOP_NAME.upper())
+
+    # address & phone
+    pdf.setFont("Helvetica", 9)
+    pdf.drawString(MARGIN, PAGE_H - 64, SHOP_ADDRESS)
+    pdf.drawString(MARGIN, PAGE_H - 78, f"Tel: {SHOP_PHONE}")
+
+    # RECEIPT label (right side)
+    pdf.setFont("Helvetica-Bold", 14)
+    pdf.drawRightString(PAGE_W - MARGIN, PAGE_H - 50, "RECEIPT")
+    pdf.setFont("Helvetica", 9)
+    pdf.drawRightString(PAGE_W - MARGIN, PAGE_H - 66, f"#{sale_id:05d}")
+
+    # ── meta row ─────────────────────────────────────────────────────────────
+    y = PAGE_H - 130
+    pdf.setFillColorRGB(0.15, 0.15, 0.15)
+    pdf.setFont("Helvetica", 9)
+
+    date_str     = sale.sale_date.strftime("%d %b %Y  %H:%M") if sale.sale_date else "—"
+    cashier_name = cashier.full_name if cashier else "—"
+    payment      = (sale.payment_method or "cash").capitalize()
+
+    pdf.drawString(MARGIN,           y, f"Date:      {date_str}")
+    pdf.drawString(MARGIN,      y - 14, f"Cashier:   {cashier_name}")
+    pdf.drawString(MARGIN + 220, y,     f"Payment:   {payment}")
+    if customer:
+        pdf.drawString(MARGIN + 220, y - 14, f"Customer:  {customer.full_name}")
+
+    # ── table header ─────────────────────────────────────────────────────────
     y -= 40
-    pdf.setFont("Helvetica", 10)
-    pdf.drawString(50, y, f"Sale ID: {sale.sale_id}")
-    y -= 20
-    pdf.drawString(50, y, f"Date: {sale.sale_date.strftime('%d %b %Y %H:%M')}")
-    y -= 40
+    pdf.setFillColorRGB(0.94, 0.96, 0.98)
+    pdf.rect(MARGIN, y - 4, PAGE_W - 2 * MARGIN, 18, fill=1, stroke=0)
 
-    for item in items:
-        product = db.query(models.Product).filter(models.Product.product_id == item.product_id).first()
-        pdf.drawString(50,  y, product.product_name)
-        pdf.drawString(250, y, f"x{item.quantity}")
-        pdf.drawString(300, y, f"₦{item.unit_price:,.2f}")
-        pdf.drawString(400, y, f"₦{item.subtotal:,.2f}")
-        y -= 20
+    pdf.setFillColorRGB(0.094, 0.373, 0.647)
+    pdf.setFont("Helvetica-Bold", 9)
+    pdf.drawString(COL["item"],  y + 2, "ITEM")
+    pdf.drawString(COL["qty"],   y + 2, "QTY")
+    pdf.drawString(COL["price"], y + 2, "UNIT PRICE")
+    pdf.drawString(COL["total"], y + 2, "SUBTOTAL")
 
+    # ── table rows ───────────────────────────────────────────────────────────
     y -= 20
-    pdf.setFont("Helvetica-Bold", 12)
-    pdf.drawString(300, y, f"Total: ₦{sale.total_amount:,.2f}")
+    pdf.setFont("Helvetica", 9)
+    row_colors = [(1, 1, 1), (0.97, 0.97, 0.97)]
+
+    for idx, item in enumerate(items):
+        product = db.query(models.Product).filter(
+            models.Product.product_id == item.product_id
+        ).first()
+
+        # alternating row bg
+        r, g, b = row_colors[idx % 2]
+        pdf.setFillColorRGB(r, g, b)
+        pdf.rect(MARGIN, y - 4, PAGE_W - 2 * MARGIN, 16, fill=1, stroke=0)
+
+        pdf.setFillColorRGB(0.15, 0.15, 0.15)
+        name = product.product_name if product else f"Product #{item.product_id}"
+        pdf.drawString(COL["item"],  y + 2, name[:38])   # truncate long names
+        pdf.drawString(COL["qty"],   y + 2, str(item.quantity))
+        pdf.drawRightString(COL["price"] + 55, y + 2,
+                            f"N{float(item.unit_price):,.2f}")
+        pdf.drawRightString(COL["total"] + 55, y + 2,
+                            f"N{float(item.subtotal):,.2f}")
+        y -= 18
+
+    # ── divider ──────────────────────────────────────────────────────────────
+    y -= 6
+    pdf.setStrokeColorRGB(0.094, 0.373, 0.647)
+    pdf.setLineWidth(0.8)
+    pdf.line(MARGIN, y, PAGE_W - MARGIN, y)
+
+    # ── totals block ─────────────────────────────────────────────────────────
+    y -= 20
+    pdf.setFont("Helvetica-Bold", 11)
+    pdf.setFillColorRGB(0.094, 0.373, 0.647)
+    pdf.drawRightString(COL["price"] + 55, y, "TOTAL PAID")
+    pdf.drawRightString(COL["total"] + 55, y,
+                        f"N{float(sale.total_amount):,.2f}")
+
+    # ── footer ───────────────────────────────────────────────────────────────
+    y -= 50
+    pdf.setFont("Helvetica", 8)
+    pdf.setFillColorRGB(0.5, 0.5, 0.5)
+    pdf.drawCentredString(PAGE_W / 2, y,
+                          "Thank you for shopping at WEAR HAUS!")
+    pdf.drawCentredString(PAGE_W / 2, y - 12,
+                          f"{SHOP_ADDRESS}  |  {SHOP_PHONE}")
+
+    # ── thin footer bar ──────────────────────────────────────────────────────
+    pdf.setFillColorRGB(0.094, 0.373, 0.647)
+    pdf.rect(0, 0, PAGE_W, 8, fill=1, stroke=0)
+
     pdf.save()
-
     buffer.seek(0)
+
     return StreamingResponse(
         buffer,
         media_type="application/pdf",
