@@ -26,7 +26,15 @@ api.interceptors.response.use(
   }
 );
 
-// ── Retry helper ──────────────────────────────────────────────────────────────
+// ── Active branch helper ──────────────────────────────────────────────────────
+// All branch-sensitive API calls read the active branch from localStorage
+// which is kept in sync by BranchContext.
+export const getActiveBranchParam = () => {
+  try {
+    const id = localStorage.getItem("activeBranchId");
+    return id ? { branch_id: parseInt(id) } : {};
+  } catch { return {}; }
+};
 // Retries a failed request once after a short delay.
 // Handles Render cold-start: first request times out, server is now warm,
 // second request succeeds.
@@ -89,13 +97,13 @@ export const getCustomerSales = async (id) => (await api.get(`/customers/${id}/s
 
 // ── INVENTORY ─────────────────────────────────────────────────────────────────
 export const getInventory = async (branchId = null) => {
-  const params = branchId ? { branch_id: branchId } : {};
+  const params = { ...getActiveBranchParam() };
+  if (branchId) params.branch_id = branchId;
   return (await api.get("/inventory/", { params })).data;
 };
 export const restockProduct = async (data) => (await api.post("/inventory/restock", data)).data;
-export const getLowStock    = async (threshold = 5, branchId = null) => {
-  const params = { threshold };
-  if (branchId) params.branch_id = branchId;
+export const getLowStock    = async (threshold = 5) => {
+  const params = { threshold, ...getActiveBranchParam() };
   return (await api.get("/inventory/low-stock", { params })).data;
 };
 
@@ -109,13 +117,13 @@ export const createPurchaseOrder  = async (data) => (await api.post("/purchases/
 export const receivePurchaseOrder = async (id) => (await api.post(`/purchases/${id}/receive`)).data;
 
 // ── REPORTS ───────────────────────────────────────────────────────────────────
-export const getDashboard      = async () => (await api.get("/reports/dashboard")).data;
-export const getDailyDashboard = async () => (await api.get("/reports/daily-dashboard")).data;
-export const getTopProducts    = async () => (await api.get("/reports/top-products")).data;
-export const getSalesSummary   = async () => (await api.get("/reports/sales-summary")).data;
-export const getSalesByCashier = async () => (await api.get("/reports/sales-by-cashier")).data;
-export const getProfitReport   = async () => (await api.get("/reports/profit")).data;
-export const getStockValuation = async () => (await api.get("/reports/stock-valuation")).data;
+export const getDashboard      = async () => (await api.get("/reports/dashboard",       { params: getActiveBranchParam() })).data;
+export const getDailyDashboard = async () => (await api.get("/reports/daily-dashboard", { params: getActiveBranchParam() })).data;
+export const getTopProducts    = async () => (await api.get("/reports/top-products",    { params: getActiveBranchParam() })).data;
+export const getSalesSummary   = async () => (await api.get("/reports/sales-summary",   { params: getActiveBranchParam() })).data;
+export const getSalesByCashier = async () => (await api.get("/reports/sales-by-cashier",{ params: getActiveBranchParam() })).data;
+export const getProfitReport   = async () => (await api.get("/reports/profit",          { params: getActiveBranchParam() })).data;
+export const getStockValuation = async () => (await api.get("/reports/stock-valuation", { params: getActiveBranchParam() })).data;
 export const getAuditLogs      = async () => (await api.get("/reports/audit-logs")).data;
 
 export default api;

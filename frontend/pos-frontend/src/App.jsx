@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { CartProvider } from "./context/CartContext";
+import { BranchProvider } from "./context/BranchContext";
 import POSLayout from "./components/layout/POSLayout";
 
 import LandingPage from "./pages/LandingPage";
@@ -63,15 +64,17 @@ export default function App() {
   };
 
   return (
-    <CartProvider>
-      <POSLayout
-        activePage={activePage}
-        onNavigate={setActivePage}
-        onLogout={handleLogout}
-        lastScan={lastScan}
-      >
-        {renderPage()}
-      </POSLayout>
-    </CartProvider>
+    <BranchProvider>
+      <CartProvider>
+        <POSLayout
+          activePage={activePage}
+          onNavigate={setActivePage}
+          onLogout={handleLogout}
+          lastScan={lastScan}
+        >
+          {renderPage()}
+        </POSLayout>
+      </CartProvider>
+    </BranchProvider>
   );
 }
