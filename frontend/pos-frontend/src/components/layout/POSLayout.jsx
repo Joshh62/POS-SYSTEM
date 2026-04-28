@@ -2,6 +2,8 @@ import { useState } from "react";
 import BarcodeScannerIndicator from "../scanner/BarcodeScannerIndicator";
 import { useBranch } from "../../context/BranchContext";
 
+const SHOP_NAME = import.meta.env.VITE_SHOP_NAME || "POS System";
+
 const NAV_ITEMS = [
   { key: "pos",       label: "POS",           icon: "🛒", roles: ["admin", "manager", "cashier", "superadmin"] },
   { key: "dashboard", label: "Dashboard",     icon: "📊", roles: ["admin", "manager", "superadmin"] },
@@ -10,6 +12,7 @@ const NAV_ITEMS = [
   { key: "inventory", label: "Inventory",     icon: "🏭", roles: ["admin", "manager", "superadmin"] },
   { key: "reports",   label: "Reports",       icon: "📈", roles: ["admin", "manager", "superadmin"] },
   { key: "users",     label: "Users",         icon: "👥", roles: ["admin", "superadmin"] },
+  { key: "import",    label: "Import products",icon: "⬆️", roles: ["admin", "superadmin"] },
   { key: "businesses",label: "Businesses",    icon: "🏢", roles: ["superadmin"] },
 ];
 
@@ -21,6 +24,7 @@ const PAGE_TITLES = {
   inventory:  "Inventory",
   reports:    "Reports",
   users:      "Users",
+  import:     "Import products",
   businesses: "Businesses",
 };
 
@@ -58,7 +62,7 @@ export default function POSLayout({ children, activePage, onNavigate, onLogout, 
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <span style={{ fontSize: 18 }}>🏪</span>
               <span style={{ fontSize: 13, fontWeight: 600, color: "var(--color-text-primary)" }}>
-                POS System
+                {SHOP_NAME}
               </span>
             </div>
           )}
