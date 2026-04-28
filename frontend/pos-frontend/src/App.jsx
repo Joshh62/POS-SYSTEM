@@ -13,6 +13,7 @@ import UsersPage from "./pages/UsersPage";
 import ProductsPage from "./pages/ProductsPage";
 import SalesPage from "./pages/SalesPage";
 import ReportsPage from "./pages/ReportsPage";
+import BusinessesPage from "./pages/BusinessesPage";
 
 export default function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(() => !!localStorage.getItem("token"));
@@ -59,6 +60,7 @@ export default function App() {
       case "inventory": return <InventoryPage />;
       case "reports":   return <ReportsPage />;
       case "users":     return <UsersPage />;
+      case "businesses": return <BusinessesPage />;
       default:          return <POS onScanResult={setLastScan} />;
     }
   };
