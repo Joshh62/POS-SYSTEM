@@ -1,0 +1,170 @@
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.orm import Session
+from pydantic import BaseModel
+from typing import Optional
+from datetime import datetime
+
+from app.database import get_db
+from app import models
+from app.dependencies import require_role, SUPERADMIN_ROLE
+from app.auth import hash_password
+
+router = APIRouter(prefix="/businesses", tags=["Businesses"])
+
+
+# ── Schemas ───────────────────────────────────────────────────────────────────
+class BusinessCreate(BaseModel):
+    name:       str
+    address:    Optional[str] = None
+    phone:      Optional[str] = None
+    owner_name: Optional[str] = None
+
+class BusinessUpdate(BaseModel):
+    name:       Optional[str] = None
+    address:    Optional[str] = None
+    phone:      Optional[str] = None
+    owner_name: Optional[str] = None
+    is_active:  Optional[bool] = None
+
+class BranchCreate(BaseModel):
+    name:        str
+    location:    Optional[str] = None
+    business_id: int
+
+class AdminCreate(BaseModel):
+    full_name:   str
+    username:    str
+    password:    str
+    business_id: int
+    branch_id:   int
+
+
+# ── Endpoints ─────────────────────────────────────────────────────────────────
+
+@router.get("/")
+def list_businesses(
+    db: Session = Depends(get_db),
+    user=Depends(require_role([]))   # superadmin only (require_role passes superadmin always)
+):
+    if user.role != SUPERADMIN_ROLE:
+        raise HTTPException(status_code=403, detail="Superadmin only")
+
+    businesses = db.query(models.Business).order_by(models.Business.created_at.desc()).all()
+    result = []
+    for b in businesses:
+        branch_count = db.query(models.Branch).filter(models.Branch.business_id == b.business_id).count()
+        user_count   = db.query(models.User).filter(models.User.business_id == b.business_id).count()
+        result.append({
+            "business_id":  b.business_id,
+            "name":         b.name,
+            "address":      b.address,
+            "phone":        b.phone,
+            "owner_name":   b.owner_name,
+            "is_active":    b.is_active,
+            "created_at":   b.created_at,
+            "branch_count": branch_count,
+            "user_count":   user_count,
+        })
+    return result
+
+
+@router.post("/")
+def create_business(
+    data: BusinessCreate,
+    db: Session = Depends(get_db),
+    user=Depends(require_role([]))
+):
+    if user.role != SUPERADMIN_ROLE:
+        raise HTTPException(status_code=403, detail="Superadmin only")
+
+    business = models.Business(**data.dict())
+    db.add(business)
+    db.commit()
+    db.refresh(business)
+    return business
+
+
+@router.patch("/{business_id}")
+def update_business(
+    business_id: int,
+    data: BusinessUpdate,
+    db: Session = Depends(get_db),
+    user=Depends(require_role([]))
+):
+    if user.role != SUPERADMIN_ROLE:
+        raise HTTPException(status_code=403, detail="Superadmin only")
+
+    biz = db.query(models.Business).filter(models.Business.business_id == business_id).first()
+    if not biz:
+        raise HTTPException(status_code=404, detail="Business not found")
+
+    for k, v in data.dict(exclude_none=True).items():
+        setattr(biz, k, v)
+    db.commit()
+    db.refresh(biz)
+    return biz
+
+
+@router.get("/{business_id}/branches")
+def list_branches(
+    business_id: int,
+    db: Session = Depends(get_db),
+    user=Depends(require_role(["admin"]))
+):
+    # Admin can only see their own business branches
+    if user.role != SUPERADMIN_ROLE and user.business_id != business_id:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    branches = db.query(models.Branch).filter(
+        models.Branch.business_id == business_id
+    ).all()
+    return branches
+
+
+@router.post("/branches")
+def create_branch(
+    data: BranchCreate,
+    db: Session = Depends(get_db),
+    user=Depends(require_role(["admin"]))
+):
+    if user.role != SUPERADMIN_ROLE and user.business_id != data.business_id:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    branch = models.Branch(
+        name=data.name,
+        location=data.location,
+        business_id=data.business_id
+    )
+    db.add(branch)
+    db.commit()
+    db.refresh(branch)
+    return branch
+
+
+@router.post("/admin")
+def create_business_admin(
+    data: AdminCreate,
+    db: Session = Depends(get_db),
+    user=Depends(require_role([]))
+):
+    """Superadmin creates the first admin user for a new business."""
+    if user.role != SUPERADMIN_ROLE:
+        raise HTTPException(status_code=403, detail="Superadmin only")
+
+    existing = db.query(models.User).filter(models.User.username == data.username).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="Username already exists")
+
+    admin = models.User(
+        full_name=data.full_name,
+        username=data.username,
+        password_hash=hash_password(data.password),
+        role="admin",
+        business_id=data.business_id,
+        branch_id=data.branch_id,
+        is_active=True,
+    )
+    db.add(admin)
+    db.commit()
+    db.refresh(admin)
+    return {"message": "Admin created", "user_id": admin.user_id, "username": admin.username}

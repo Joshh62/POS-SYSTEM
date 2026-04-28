@@ -7,6 +7,9 @@ from app.routers import sales, products, inventory, reports
 from app.routers import auth, customers, suppliers, purchases, category
 from app.database import get_db
 
+from app.routers import businesses
+
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -50,6 +53,7 @@ app.include_router(inventory.router)
 app.include_router(reports.router)
 app.include_router(suppliers.router)
 app.include_router(purchases.router)
+app.include_router(businesses.router)
 
 
 @app.get("/health", tags=["System"])
