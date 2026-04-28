@@ -23,7 +23,7 @@ export default function BusinessesPage() {
   const [showAdminForm, setShowAdminForm] = useState(false);
   const [adminBizId, setAdminBizId]       = useState(null);
   const [adminBranchId, setAdminBranchId] = useState(null);
-  const [adminForm, setAdminForm]         = useState({ full_name: "", username: "", password: "" });
+  const [adminForm, setAdminForm]         = useState({ full_name: "", username: "", password: "", role: "admin" });
   const [adminLoading, setAdminLoading]   = useState(false);
   const [adminError, setAdminError]       = useState(null);
   const [adminSuccess, setAdminSuccess]   = useState(null);
@@ -91,18 +91,17 @@ export default function BusinessesPage() {
   };
 
   // ── Create admin user ─────────────────────────────────────────────────────
-  const openAdminForm = (bizId, branchId) => { setAdminBizId(bizId); setAdminBranchId(branchId); setAdminForm({ full_name: "", username: "", password: "" }); setAdminError(null); setAdminSuccess(null); setShowAdminForm(true); };
+  const openAdminForm = (bizId, branchId) => { setAdminBizId(bizId); setAdminBranchId(branchId); setAdminForm({ full_name: "", username: "", password: "", role: "admin" }); setAdminError(null); setAdminSuccess(null); setShowAdminForm(true); };
   const handleCreateAdmin = async () => {
     if (!adminForm.full_name || !adminForm.username || !adminForm.password) { setAdminError("All fields required."); return; }
     setAdminLoading(true); setAdminError(null);
     try {
       await api.post("/auth/register", {
         ...adminForm,
-        role: "admin",
         business_id: adminBizId,
         branch_id: adminBranchId,
       });
-      setAdminSuccess(`Admin "${adminForm.username}" created successfully.`);
+                    setAdminSuccess(`${adminForm.role} "${adminForm.username}" created successfully.`);
       setAdminForm({ full_name: "", username: "", password: "" });
     } catch (err) {
       setAdminError(err.response?.data?.detail || "Failed to create admin.");
@@ -194,7 +193,7 @@ export default function BusinessesPage() {
                     <span style={{ fontSize: 11, color: "var(--color-text-tertiary)", marginLeft: 8 }}>ID: {br.branch_id}</span>
                   </div>
                   <button onClick={() => openAdminForm(biz.business_id, br.branch_id)} style={outlineBtn}>
-                    + Admin user
+                    + Add user
                   </button>
                 </div>
               ))}
@@ -256,7 +255,7 @@ export default function BusinessesPage() {
         <div style={overlay}>
           <div style={modal}>
             <div style={modalHeader}>
-              <h2 style={modalTitle}>Create admin user</h2>
+              <h2 style={modalTitle}>Add user to branch</h2>
               <button onClick={() => setShowAdminForm(false)} style={closeBtn}>×</button>
             </div>
             <div style={{ fontSize: 11, color: "var(--color-text-tertiary)", marginBottom: 12 }}>
@@ -270,11 +269,30 @@ export default function BusinessesPage() {
                   <Field label="Full name *" value={adminForm.full_name} onChange={v => setAdminForm(f => ({ ...f, full_name: v }))} placeholder="e.g. Amina Bello" />
                   <Field label="Username *"  value={adminForm.username}  onChange={v => setAdminForm(f => ({ ...f, username: v }))}  placeholder="e.g. amina_admin" />
                   <Field label="Password *"  value={adminForm.password}  onChange={v => setAdminForm(f => ({ ...f, password: v }))}  placeholder="min 6 characters" type="password" />
+                  {/* ✅ Role selector */}
+                  <label style={{ fontSize: 12, fontWeight: 500, color: "var(--color-text-secondary)", display: "block" }}>
+                    Role *
+                    <select
+                      value={adminForm.role}
+                      onChange={e => setAdminForm(f => ({ ...f, role: e.target.value }))}
+                      style={{
+                        display: "block", width: "100%", marginTop: 4,
+                        padding: "7px 10px", borderRadius: 7, fontSize: 13,
+                        border: "1px solid var(--color-border-tertiary)",
+                        background: "var(--color-background-secondary)",
+                        color: "var(--color-text-primary)", boxSizing: "border-box",
+                      }}
+                    >
+                      <option value="admin">Admin — full access except superadmin</option>
+                      <option value="manager">Manager — no user management</option>
+                      <option value="cashier">Cashier — POS and sales only</option>
+                    </select>
+                  </label>
                 </div>
                 <div style={{ display: "flex", gap: 8, marginTop: 20 }}>
                   <button onClick={() => setShowAdminForm(false)} style={{ ...cancelBtn, flex: 1 }}>Cancel</button>
                   <button onClick={handleCreateAdmin} disabled={adminLoading} style={{ ...primaryBtn, flex: 2 }}>
-                    {adminLoading ? "Creating..." : "Create admin"}
+                    {adminLoading ? "Creating..." : `Create ${adminForm.role}`}
                   </button>
                 </div>
               </>
