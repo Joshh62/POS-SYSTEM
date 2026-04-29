@@ -1,16 +1,22 @@
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app import models, schemas
+from app.dependencies import get_current_user
 import openpyxl
+import csv
+import io
 
 router = APIRouter(prefix="/products", tags=["Products"])
 
 
+# ── CREATE ────────────────────────────────────────────────────────────────────
 @router.post("/", response_model=schemas.ProductResponse)
-def create_product(product: schemas.ProductCreate, db: Session = Depends(get_db)):
-
-    # Check duplicate barcode
+def create_product(
+    product: schemas.ProductCreate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
     if db.query(models.Product).filter(models.Product.barcode == product.barcode).first():
         raise HTTPException(status_code=400, detail="Barcode already exists")
 
@@ -22,34 +28,33 @@ def create_product(product: schemas.ProductCreate, db: Session = Depends(get_db)
         selling_price=product.selling_price,
     )
     db.add(new_product)
-    db.flush()  # get product_id
+    db.flush()
 
-    # Create branch_inventory for ALL existing branches
     branches = db.query(models.Branch).all()
     for branch in branches:
         existing = db.query(models.BranchInventory).filter(
             models.BranchInventory.product_id == new_product.product_id,
-            models.BranchInventory.branch_id == branch.branch_id
+            models.BranchInventory.branch_id  == branch.branch_id
         ).first()
         if not existing:
-            inv = models.BranchInventory(
+            db.add(models.BranchInventory(
                 product_id=new_product.product_id,
                 branch_id=branch.branch_id,
-                stock_quantity=product.stock_quantity if product.stock_quantity else 0,
+                stock_quantity=product.stock_quantity or 0,
                 reorder_level=5,
-            )
-            db.add(inv)
+            ))
 
     db.commit()
     db.refresh(new_product)
     return new_product
 
 
+# ── LIST ──────────────────────────────────────────────────────────────────────
 @router.get("/")
 def get_products(
     search: str = None,
-    page: int = 1,
-    limit: int = 20,
+    page:   int = 1,
+    limit:  int = 20,
     db: Session = Depends(get_db)
 ):
     query = db.query(models.Product)
@@ -57,12 +62,11 @@ def get_products(
         query = query.filter(models.Product.product_name.ilike(f"%{search}%"))
 
     total    = query.count()
-    page     = max(1, page)
-    products = query.offset((page - 1) * limit).limit(limit).all()
-
-    return {"total_products": total, "page": page, "limit": limit, "data": products}
+    products = query.offset((max(1, page) - 1) * limit).limit(limit).all()
+    return {"total": total, "page": page, "limit": limit, "data": products}
 
 
+# ── BARCODE LOOKUP ────────────────────────────────────────────────────────────
 @router.get("/barcode/{barcode}")
 def get_product_by_barcode(barcode: str, db: Session = Depends(get_db)):
     product = db.query(models.Product).filter(models.Product.barcode == barcode).first()
@@ -71,6 +75,7 @@ def get_product_by_barcode(barcode: str, db: Session = Depends(get_db)):
     return product
 
 
+# ── GET ONE ───────────────────────────────────────────────────────────────────
 @router.get("/{product_id}", response_model=schemas.ProductResponse)
 def get_product(product_id: int, db: Session = Depends(get_db)):
     product = db.query(models.Product).filter(models.Product.product_id == product_id).first()
@@ -79,6 +84,7 @@ def get_product(product_id: int, db: Session = Depends(get_db)):
     return product
 
 
+# ── UPDATE ────────────────────────────────────────────────────────────────────
 @router.put("/{product_id}", response_model=schemas.ProductResponse)
 def update_product(product_id: int, product: schemas.ProductCreate, db: Session = Depends(get_db)):
     existing = db.query(models.Product).filter(models.Product.product_id == product_id).first()
@@ -95,34 +101,121 @@ def update_product(product_id: int, product: schemas.ProductCreate, db: Session 
     return existing
 
 
+# ── IMPORT (xlsx or csv) ──────────────────────────────────────────────────────
 @router.post("/import")
-def import_products(file: UploadFile = File(...), db: Session = Depends(get_db)):
-    workbook  = openpyxl.load_workbook(file.file)
-    sheet     = workbook.active
-    imported  = 0
-    branches  = db.query(models.Branch).all()
+def import_products(
+    file: UploadFile = File(...),
+    db:   Session    = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    """
+    Import products from .xlsx or .csv file.
 
-    for row in sheet.iter_rows(min_row=2, values_only=True):
-        product_name, barcode, category_id, cost_price, selling_price, stock = row
+    Expected columns (header row required):
+      product_name | barcode | selling_price | category (name) | cost_price | stock_quantity
 
-        product = models.Product(
-            product_name=product_name,
-            barcode=str(barcode),
-            category_id=category_id,
-            cost_price=cost_price,
-            selling_price=selling_price,
-        )
-        db.add(product)
-        db.flush()
+    - category column: matched by name, created if not found
+    - Duplicate barcodes are skipped (not errored)
+    - Per-row errors are collected and returned — they don't stop the import
+    - Stock is added to ALL branches for this business
+    """
+    filename = file.filename.lower()
+    imported, skipped, errors = 0, 0, []
 
-        for branch in branches:
-            db.add(models.BranchInventory(
-                product_id=product.product_id,
-                branch_id=branch.branch_id,
-                stock_quantity=int(stock) if stock else 0,
-                reorder_level=5,
-            ))
-        imported += 1
+    # Build category name → id map (create missing ones)
+    def get_or_create_category(name: str) -> int | None:
+        if not name:
+            return None
+        name = str(name).strip()
+        cat = db.query(models.Category).filter(
+            models.Category.category_name.ilike(name)
+        ).first()
+        if not cat:
+            cat = models.Category(category_name=name)
+            db.add(cat)
+            db.flush()
+        return cat.category_id
+
+    # Fetch branches once
+    branches = db.query(models.Branch).all()
+
+    # ── Parse rows ────────────────────────────────────────────────────────────
+    try:
+        if filename.endswith(".csv"):
+            content = file.file.read().decode("utf-8-sig")  # handles BOM
+            reader  = csv.DictReader(io.StringIO(content))
+            rows    = list(reader)
+        else:
+            wb   = openpyxl.load_workbook(file.file, data_only=True)
+            ws   = wb.active
+            hdrs = [str(c.value).strip().lower() if c.value else "" for c in next(ws.iter_rows(min_row=1, max_row=1))]
+            rows = []
+            for r in ws.iter_rows(min_row=2, values_only=True):
+                rows.append(dict(zip(hdrs, r)))
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Could not read file: {e}")
+
+    # ── Process each row ──────────────────────────────────────────────────────
+    for i, row in enumerate(rows, start=2):
+        # Normalise key names (strip whitespace, lowercase)
+        row = {str(k).strip().lower(): v for k, v in row.items()}
+
+        product_name  = str(row.get("product_name") or "").strip()
+        barcode       = str(row.get("barcode")       or "").strip()
+        selling_price = row.get("selling_price")
+        cost_price    = row.get("cost_price")
+        stock_qty     = row.get("stock_quantity") or row.get("stock") or 0
+        category_name = str(row.get("category")   or "").strip()
+
+        # Validate required fields
+        if not product_name:
+            errors.append(f"Row {i}: missing product_name")
+            continue
+        if not barcode:
+            errors.append(f"Row {i}: missing barcode")
+            continue
+        if not selling_price:
+            errors.append(f"Row {i}: missing selling_price")
+            continue
+
+        # Skip duplicate barcodes silently
+        if db.query(models.Product).filter(models.Product.barcode == barcode).first():
+            skipped += 1
+            continue
+
+        try:
+            category_id = get_or_create_category(category_name)
+
+            product = models.Product(
+                product_name=product_name,
+                barcode=barcode,
+                category_id=category_id,
+                cost_price=float(cost_price) if cost_price else 0.0,
+                selling_price=float(selling_price),
+            )
+            db.add(product)
+            db.flush()
+
+            for branch in branches:
+                db.add(models.BranchInventory(
+                    product_id=product.product_id,
+                    branch_id=branch.branch_id,
+                    stock_quantity=int(float(stock_qty)) if stock_qty else 0,
+                    reorder_level=5,
+                ))
+
+            imported += 1
+
+        except Exception as e:
+            errors.append(f"Row {i} ({product_name}): {str(e)}")
+            db.rollback()
+            continue
 
     db.commit()
-    return {"message": f"{imported} products imported successfully"}
+
+    return {
+        "imported": imported,
+        "skipped":  skipped,
+        "errors":   errors,
+        "message":  f"{imported} products imported, {skipped} skipped, {len(errors)} errors"
+    }
