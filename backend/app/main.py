@@ -34,6 +34,8 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
+        "https://profittrack.ng",
+        "https://www.profittrack.ng",
         "https://pos-system-pink-five.vercel.app",
         "https://pos-system-git-master-josh-tech1.vercel.app",
         "http://localhost:5173",
