@@ -1,5 +1,6 @@
 from datetime import datetime
-from sqlalchemy import Column, DateTime, Integer, String, Numeric, ForeignKey, Boolean, UniqueConstraint
+import sqlalchemy as sa
+from sqlalchemy import Column, DateTime, Integer, String, Numeric, ForeignKey, Boolean, UniqueConstraint, Date
 from sqlalchemy.orm import relationship
 from app.database import Base
 
@@ -68,14 +69,19 @@ class Branch(Base):
 class BranchInventory(Base):
     __tablename__ = "branch_inventory"
 
-    inventory_id   = Column(Integer, primary_key=True)
-    branch_id      = Column(Integer, ForeignKey("branches.branch_id"))
-    product_id     = Column(Integer, ForeignKey("products.product_id"))
-    stock_quantity = Column(Integer, default=0)
-    reorder_level  = Column(Integer, default=5)
+    inventory_id      = Column(Integer, primary_key=True)
+    branch_id         = Column(Integer, ForeignKey("branches.branch_id"))
+    product_id        = Column(Integer, ForeignKey("products.product_id"))
+    stock_quantity    = Column(Integer, default=0)
+    reorder_level     = Column(Integer, default=5)
+    expiry_alert_days = Column(Integer, default=90)  # ✅ per-branch alert threshold
 
-    branch  = relationship("Branch", back_populates="inventory")
-    product = relationship("Product", back_populates="inventory")
+    branch   = relationship("Branch",   back_populates="inventory")
+    product  = relationship("Product",  back_populates="inventory")
+    batches  = relationship("InventoryBatch", back_populates="inventory",
+                            primaryjoin="and_(BranchInventory.product_id==foreign(InventoryBatch.product_id), "
+                                        "BranchInventory.branch_id==foreign(InventoryBatch.branch_id))",
+                            viewonly=True)
 
     __table_args__ = (
         UniqueConstraint("branch_id", "product_id", name="uix_branch_product"),
@@ -215,9 +221,35 @@ class PurchaseOrderItem(Base):
     product_id     = Column(Integer, ForeignKey("products.product_id"))
     quantity       = Column(Integer)
     unit_cost      = Column(Numeric(12, 2))
+    expiry_date    = Column(sa.Date(), nullable=True)   # ✅ batch expiry on PO items
 
     purchase_order = relationship("PurchaseOrder", back_populates="items")
     product        = relationship("Product")
+
+
+# -------------------- INVENTORY BATCH --------------------
+class InventoryBatch(Base):
+    __tablename__ = "inventory_batches"
+
+    batch_id      = Column(Integer, primary_key=True, index=True)
+    product_id    = Column(Integer, ForeignKey("products.product_id"), nullable=False)
+    branch_id     = Column(Integer, ForeignKey("branches.branch_id"),  nullable=False)
+    po_id         = Column(Integer, ForeignKey("purchase_orders.po_id"), nullable=True)
+    quantity      = Column(Integer, nullable=False)
+    expiry_date   = Column(sa.Date(), nullable=True)
+    received_date = Column(sa.Date(), server_default=sa.func.current_date())
+    notes         = Column(String, nullable=True)
+    created_at    = Column(DateTime, default=datetime.utcnow)
+
+    product   = relationship("Product")
+    branch    = relationship("Branch")
+    inventory = relationship(
+        "BranchInventory",
+        primaryjoin="and_(InventoryBatch.product_id==BranchInventory.product_id, "
+                    "InventoryBatch.branch_id==BranchInventory.branch_id)",
+        foreign_keys="[InventoryBatch.product_id, InventoryBatch.branch_id]",
+        viewonly=True,
+    )
 
 
 # -------------------- INVENTORY MOVEMENT --------------------

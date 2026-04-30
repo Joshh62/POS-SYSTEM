@@ -3,7 +3,7 @@ import api from "../api/api";
 
 // ── Excel template columns (shown to user) ────────────────────────────────────
 const REQUIRED_COLS = ["product_name", "barcode", "selling_price"];
-const OPTIONAL_COLS = ["category", "cost_price", "stock_quantity"];
+const OPTIONAL_COLS = ["category", "cost_price", "stock_quantity", "expiry_date"];
 
 export default function ProductImportPage() {
   const [file, setFile]           = useState(null);
@@ -57,8 +57,9 @@ export default function ProductImportPage() {
     // Build a minimal CSV template the user can open in Excel
     const rows = [
       [...REQUIRED_COLS, ...OPTIONAL_COLS].join(","),
-      "Indomie Noodles,0404,600,Food,450,100",
-      "Milk 500ml,0707,700,Beverages,500,50",
+      "Indomie Noodles,0404,600,Food,450,100,2026-12-31",
+      "Milk 500ml,0707,700,Beverages,500,50,2026-09-15",
+      "Moisturizer SPF30,1001,3500,Skincare,2500,30,2027-06-01",
     ].join("\n");
 
     const blob = new Blob([rows], { type: "text/csv" });

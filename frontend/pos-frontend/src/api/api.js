@@ -53,10 +53,14 @@ const withRetry = async (fn, retries = 1, delayMs = 2000) => {
 
 // ── AUTH ──────────────────────────────────────────────────────────────────────
 export const login = async (username, password) => {
-  const response = await api.post("/auth/login", { username, password });
-  return response.data;
+  const formData = new URLSearchParams();
+  formData.append("username", username);
+  formData.append("password", password);
+  const res = await api.post("/auth/login", formData, {
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+  });
+  return res.data;
 };
-
 
 export const register = async (userData) => (await api.post("/auth/register", userData)).data;
 
@@ -97,7 +101,10 @@ export const getInventory = async (branchId = null) => {
   if (branchId) params.branch_id = branchId;
   return (await api.get("/inventory/", { params })).data;
 };
-export const restockProduct = async (data) => (await api.post("/inventory/restock", data)).data;
+export const restockProduct    = async (data) => (await api.post("/inventory/restock", data)).data;
+export const updateReorderLevel = async (data) => (await api.patch("/inventory/reorder-level", data)).data;
+export const getExpiringBatches = async () => (await api.get("/inventory/expiring", { params: getActiveBranchParam() })).data;
+export const getProductBatches  = async (productId) => (await api.get(`/inventory/batches/${productId}`, { params: getActiveBranchParam() })).data;
 export const getLowStock    = async (threshold = 5) => {
   const params = { threshold, ...getActiveBranchParam() };
   return (await api.get("/inventory/low-stock", { params })).data;

@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app import models, schemas
 from app.dependencies import get_current_user
+from datetime import date
 import openpyxl
 import csv
 import io
@@ -157,7 +158,6 @@ def import_products(
 
     # ── Process each row ──────────────────────────────────────────────────────
     for i, row in enumerate(rows, start=2):
-        # Normalise key names (strip whitespace, lowercase)
         row = {str(k).strip().lower(): v for k, v in row.items()}
 
         product_name  = str(row.get("product_name") or "").strip()
@@ -166,22 +166,31 @@ def import_products(
         cost_price    = row.get("cost_price")
         stock_qty     = row.get("stock_quantity") or row.get("stock") or 0
         category_name = str(row.get("category")   or "").strip()
+        expiry_raw    = row.get("expiry_date")     # ✅ new column
 
-        # Validate required fields
         if not product_name:
-            errors.append(f"Row {i}: missing product_name")
-            continue
+            errors.append(f"Row {i}: missing product_name"); continue
         if not barcode:
-            errors.append(f"Row {i}: missing barcode")
-            continue
+            errors.append(f"Row {i}: missing barcode"); continue
         if not selling_price:
-            errors.append(f"Row {i}: missing selling_price")
-            continue
+            errors.append(f"Row {i}: missing selling_price"); continue
 
-        # Skip duplicate barcodes silently
         if db.query(models.Product).filter(models.Product.barcode == barcode).first():
-            skipped += 1
-            continue
+            skipped += 1; continue
+
+        # Parse expiry date
+        expiry_date = None
+        if expiry_raw:
+            try:
+                if isinstance(expiry_raw, str):
+                    expiry_date = date.fromisoformat(str(expiry_raw).strip())
+                elif hasattr(expiry_raw, "date"):
+                    expiry_date = expiry_raw.date()
+                else:
+                    expiry_date = date.fromisoformat(str(expiry_raw).strip())
+            except Exception:
+                errors.append(f"Row {i} ({product_name}): invalid expiry_date format — use YYYY-MM-DD")
+                continue
 
         try:
             category_id = get_or_create_category(category_name)
@@ -196,13 +205,27 @@ def import_products(
             db.add(product)
             db.flush()
 
+            qty = int(float(stock_qty)) if stock_qty else 0
+
             for branch in branches:
                 db.add(models.BranchInventory(
                     product_id=product.product_id,
                     branch_id=branch.branch_id,
-                    stock_quantity=int(float(stock_qty)) if stock_qty else 0,
+                    stock_quantity=qty,
                     reorder_level=5,
+                    expiry_alert_days=90,
                 ))
+
+                # ✅ Create opening batch if stock > 0 or expiry provided
+                if qty > 0 or expiry_date:
+                    db.add(models.InventoryBatch(
+                        product_id=product.product_id,
+                        branch_id=branch.branch_id,
+                        quantity=qty,
+                        expiry_date=expiry_date,
+                        received_date=date.today(),
+                        notes="Imported via bulk upload",
+                    ))
 
             imported += 1
 
