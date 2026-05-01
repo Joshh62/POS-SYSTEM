@@ -17,7 +17,7 @@ export default function DashboardPage() {
           getDailyDashboard(),
           getTopProducts(),
           getSalesByCashier(),
-          getLowStock(10),
+          getLowStock(5),  // ✅ threshold=5 matches default reorder level
         ]);
         setDaily(d);
         setTopProducts(Array.isArray(tp) ? tp : tp?.data ?? []);
@@ -113,32 +113,24 @@ export default function DashboardPage() {
           {lowStock.length === 0 ? (
             <Empty text="All products well stocked" icon="✅" />
           ) : (
-            lowStock.slice(0, 10).map((item, i) => {
+            lowStock.map((item, i) => {
               const critical = item.stock_quantity <= 3;
-              const low      = item.stock_quantity <= (item.reorder_level ?? 5);
               return (
                 <div key={i} style={row}>
                   <span style={{
                     ...rowLabel,
                     overflow: "hidden", textOverflow: "ellipsis",
-                    whiteSpace: "nowrap", marginRight: 8, maxWidth: "60%",
+                    whiteSpace: "nowrap", marginRight: 8, maxWidth: "70%",
                   }}>
                     {item.product_name}
                   </span>
-                  <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", flexShrink: 0 }}>
-                    <span style={{
-                      fontSize: 12, fontWeight: 600, padding: "2px 8px", borderRadius: 10,
-                      background: critical ? "#FCEBEB" : low ? "#FAEEDA" : "#EAF3DE",
-                      color:      critical ? "#A32D2D" : low ? "#854F0B" : "#3B6D11",
-                    }}>
-                      {item.stock_quantity} left
-                    </span>
-                    {item.reorder_level != null && (
-                      <span style={{ fontSize: 10, color: "var(--color-text-tertiary)", marginTop: 2 }}>
-                        reorder at {item.reorder_level}
-                      </span>
-                    )}
-                  </div>
+                  <span style={{
+                    fontSize: 12, fontWeight: 600, padding: "2px 8px", borderRadius: 10, flexShrink: 0,
+                    background: critical ? "#FCEBEB" : "#FAEEDA",
+                    color:      critical ? "#A32D2D" : "#854F0B",
+                  }}>
+                    {item.stock_quantity} left
+                  </span>
                 </div>
               );
             })
