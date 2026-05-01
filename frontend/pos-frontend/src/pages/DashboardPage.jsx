@@ -2,17 +2,16 @@ import { useState, useEffect } from "react";
 import { getDailyDashboard, getTopProducts, getSalesByCashier, getLowStock } from "../api/api";
 
 export default function DashboardPage() {
-  const [daily, setDaily]         = useState(null);
+  const [daily, setDaily]             = useState(null);
   const [topProducts, setTopProducts] = useState([]);
-  const [cashiers, setCashiers]   = useState([]);
-  const [lowStock, setLowStock]   = useState([]);
-  const [loading, setLoading]     = useState(true);
-  const [error, setError]         = useState(null);
+  const [cashiers, setCashiers]       = useState([]);
+  const [lowStock, setLowStock]       = useState([]);
+  const [loading, setLoading]         = useState(true);
+  const [error, setError]             = useState(null);
 
   useEffect(() => {
     async function fetchAll() {
-      setLoading(true);
-      setError(null);
+      setLoading(true); setError(null);
       try {
         const [d, tp, cs, ls] = await Promise.all([
           getDailyDashboard(),
@@ -36,15 +35,13 @@ export default function DashboardPage() {
   if (loading) return <PageShell><div style={centreMsg}>Loading dashboard...</div></PageShell>;
   if (error)   return <PageShell><div style={errorBox}>{error}</div></PageShell>;
 
-  // ── Chart data from daily dashboard ────────────────────────────────────────
-  const chartLabels = daily?.chart?.labels   ?? [];
+  const chartLabels = daily?.chart?.labels ?? [];
   const chartData   = daily?.chart?.datasets?.[0]?.data ?? [];
-  const chartMax    = Math.max(...chartData, 1);
 
   return (
     <PageShell>
       {/* ── KPI row ── */}
-      <div style={grid(4)}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 12 }}>
         <KPICard label="Today's sales"
           value={`₦${Number(daily?.summary?.total_sales || 0).toLocaleString("en-NG", { minimumFractionDigits: 2 })}`}
           icon="💰" tone="primary" />
@@ -61,103 +58,143 @@ export default function DashboardPage() {
 
       {/* ── Sales trend chart ── */}
       {chartLabels.length > 0 && (
-        <div style={{ ...card, marginTop: 16 }}>
-          <div style={cardTitle}>Sales trend (₦)</div>
-          <SalesChart labels={chartLabels} data={chartData} max={chartMax} />
+        <div style={{ ...card, marginTop: 14 }}>
+          <div style={cardTitle}>7-day sales trend (₦)</div>
+          <SalesChart labels={chartLabels} data={chartData} />
         </div>
       )}
 
-      {/* ── Bottom row ── */}
-      <div style={{ ...grid(3), marginTop: 16 }}>
+      {/* ── Bottom row — 2 columns: left wider, right narrower ── */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginTop: 14 }}>
 
-        {/* Top products */}
-        <Card title="Top products today">
-          {topProducts.length === 0 ? <Empty text="No sales yet today" /> : (
-            topProducts.slice(0, 6).map((p, i) => (
-              <div key={i} style={row}>
-                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <span style={rankBadge}>{i + 1}</span>
-                  <span style={rowLabel}>{p.product_name}</span>
-                </div>
-                <span style={rowValue}>{p.total_sold} sold</span>
-              </div>
-            ))
-          )}
-        </Card>
+        {/* Left column — top products + cashier stacked */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
 
-        {/* Sales by cashier */}
-        <Card title="Sales by cashier">
-          {cashiers.length === 0 ? <Empty text="No sales recorded yet" /> : (
-            cashiers.slice(0, 6).map((c, i) => (
-              <div key={i} style={row}>
-                <span style={rowLabel}>{c.cashier}</span>
-                <div style={{ textAlign: "right" }}>
-                  <div style={rowValue}>
-                    ₦{Number(c.total_sales).toLocaleString("en-NG", { minimumFractionDigits: 2 })}
+          <Card title="Top products today">
+            {topProducts.length === 0 ? <Empty text="No sales yet today" /> : (
+              topProducts.slice(0, 5).map((p, i) => (
+                <div key={i} style={row}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+                    <span style={rankBadge}>{i + 1}</span>
+                    <span style={{ ...rowLabel, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {p.product_name}
+                    </span>
                   </div>
-                  <div style={{ fontSize: 11, color: "var(--color-text-secondary)" }}>
-                    {c.transactions} txn{c.transactions !== 1 ? "s" : ""}
+                  <span style={{ ...rowValue, flexShrink: 0, marginLeft: 8 }}>{p.total_sold} sold</span>
+                </div>
+              ))
+            )}
+          </Card>
+
+          <Card title="Sales by cashier">
+            {cashiers.length === 0 ? <Empty text="No sales recorded yet" /> : (
+              cashiers.slice(0, 5).map((c, i) => (
+                <div key={i} style={row}>
+                  <span style={{ ...rowLabel, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginRight: 8 }}>
+                    {c.cashier}
+                  </span>
+                  <div style={{ textAlign: "right", flexShrink: 0 }}>
+                    <div style={rowValue}>
+                      ₦{Number(c.total_sales).toLocaleString("en-NG", { minimumFractionDigits: 2 })}
+                    </div>
+                    <div style={{ fontSize: 11, color: "var(--color-text-secondary)" }}>
+                      {c.transactions} txn{c.transactions !== 1 ? "s" : ""}
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))
+              ))
+            )}
+          </Card>
+
+        </div>
+
+        {/* Right column — low stock full height */}
+        <Card title={`Low stock alerts ${lowStock.length > 0 ? `(${lowStock.length})` : ""}`}>
+          {lowStock.length === 0 ? (
+            <Empty text="All products well stocked" icon="✅" />
+          ) : (
+            lowStock.slice(0, 10).map((item, i) => {
+              const critical = item.stock_quantity <= 3;
+              const low      = item.stock_quantity <= (item.reorder_level ?? 5);
+              return (
+                <div key={i} style={row}>
+                  <span style={{
+                    ...rowLabel,
+                    overflow: "hidden", textOverflow: "ellipsis",
+                    whiteSpace: "nowrap", marginRight: 8, maxWidth: "60%",
+                  }}>
+                    {item.product_name}
+                  </span>
+                  <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", flexShrink: 0 }}>
+                    <span style={{
+                      fontSize: 12, fontWeight: 600, padding: "2px 8px", borderRadius: 10,
+                      background: critical ? "#FCEBEB" : low ? "#FAEEDA" : "#EAF3DE",
+                      color:      critical ? "#A32D2D" : low ? "#854F0B" : "#3B6D11",
+                    }}>
+                      {item.stock_quantity} left
+                    </span>
+                    {item.reorder_level != null && (
+                      <span style={{ fontSize: 10, color: "var(--color-text-tertiary)", marginTop: 2 }}>
+                        reorder at {item.reorder_level}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              );
+            })
           )}
         </Card>
 
-        {/* Low stock */}
-        <Card title="Low stock alerts">
-          {lowStock.length === 0 ? <Empty text="All products well stocked" icon="✅" /> : (
-            lowStock.slice(0, 6).map((item, i) => (
-              <div key={i} style={row}>
-                <span style={rowLabel}>{item.product_name}</span>
-                {/* ✅ Fixed: was item.stock, correct key is item.stock_quantity */}
-                <span style={{
-                  fontSize: 12, fontWeight: 500,
-                  color:      item.stock_quantity <= 5 ? "#A32D2D" : "#854F0B",
-                  background: item.stock_quantity <= 5 ? "#FCEBEB" : "#FAEEDA",
-                  padding: "2px 8px", borderRadius: 10,
-                }}>
-                  {item.stock_quantity} left
-                </span>
-              </div>
-            ))
-          )}
-        </Card>
       </div>
     </PageShell>
   );
 }
 
-// ── Sales bar chart (pure CSS/div — no library needed) ────────────────────────
-function SalesChart({ labels, data, max }) {
-  // Shorten date labels: "2026-04-20" → "Apr 20"
+// ── Sales bar chart ───────────────────────────────────────────────────────────
+function SalesChart({ labels, data }) {
+  const max = Math.max(...data, 1);
+
   const shortLabel = (raw) => {
     try {
       return new Date(raw).toLocaleDateString("en-NG", { month: "short", day: "numeric" });
     } catch { return raw; }
   };
 
+  const fmt = (v) => {
+    if (v >= 1_000_000) return `₦${(v/1_000_000).toFixed(1)}M`;
+    if (v >= 1_000)     return `₦${(v/1_000).toFixed(0)}k`;
+    return v > 0 ? `₦${v}` : "";
+  };
+
   return (
-    <div style={{ display: "flex", alignItems: "flex-end", gap: 8, height: 140, paddingTop: 8 }}>
+    <div style={{ display: "flex", alignItems: "flex-end", gap: 6, height: 160, paddingTop: 24, position: "relative" }}>
       {labels.map((lbl, i) => {
         const val    = data[i] ?? 0;
         const pct    = max > 0 ? (val / max) * 100 : 0;
-        const isLast = i === labels.length - 1; // highlight today
+        const isLast = i === labels.length - 1;
+        const barH   = Math.max(pct * 1.2, val > 0 ? 8 : 3); // min 8px if has value
+
         return (
-          <div key={i} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
-            {/* Value tooltip on hover via title */}
-            <div title={`₦${Number(val).toLocaleString("en-NG")}`}
+          <div key={i} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 4, height: "100%", justifyContent: "flex-end" }}>
+            {/* Value label above bar */}
+            {val > 0 && (
+              <span style={{ fontSize: 9, color: isLast ? "#185FA5" : "var(--color-text-secondary)", fontWeight: isLast ? 600 : 400, whiteSpace: "nowrap" }}>
+                {fmt(val)}
+              </span>
+            )}
+            <div
+              title={val > 0 ? `₦${Number(val).toLocaleString("en-NG")}` : "No sales"}
               style={{
                 width: "100%",
-                height: `${Math.max(pct, 3)}%`,
-                background: isLast ? "#185FA5" : "rgba(24,95,165,0.35)",
+                height: `${barH}%`,
+                background: isLast ? "#185FA5" : val > 0 ? "rgba(24,95,165,0.45)" : "rgba(24,95,165,0.1)",
                 borderRadius: "4px 4px 0 0",
-                transition: "height 0.3s ease",
+                transition: "height 0.4s ease",
                 cursor: "default",
-                minHeight: 4,
+                minHeight: 3,
               }}
             />
-            <span style={{ fontSize: 10, color: "var(--color-text-secondary)", whiteSpace: "nowrap" }}>
+            <span style={{ fontSize: 10, color: isLast ? "#185FA5" : "var(--color-text-secondary)", fontWeight: isLast ? 600 : 400, whiteSpace: "nowrap" }}>
               {shortLabel(lbl)}
             </span>
           </div>
@@ -178,18 +215,18 @@ function PageShell({ children }) {
 
 function KPICard({ label, value, icon, tone = "primary" }) {
   const tones = {
-    primary: { color: "#185FA5",  bg: "rgba(24,95,165,0.10)" },
-    success: { color: "#3B6D11",  bg: "#EAF3DE" },
-    warning: { color: "#854F0B",  bg: "#FAEEDA" },
+    primary: { color: "#185FA5", bg: "rgba(24,95,165,0.10)" },
+    success: { color: "#3B6D11", bg: "#EAF3DE" },
+    warning: { color: "#854F0B", bg: "#FAEEDA" },
   };
   const t = tones[tone];
   return (
-    <div style={{ background: "var(--color-background-primary)", border: "1px solid var(--color-border-tertiary)", borderRadius: 12, padding: "18px 20px", display: "flex", flexDirection: "column", gap: 8 }}>
+    <div style={{ background: "var(--color-background-primary)", border: "1px solid var(--color-border-tertiary)", borderRadius: 12, padding: "16px 18px", display: "flex", flexDirection: "column", gap: 8 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <span style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>{label}</span>
-        <span style={{ fontSize: 18, background: t.bg, borderRadius: 8, padding: "4px 6px" }}>{icon}</span>
+        <span style={{ fontSize: 16, background: t.bg, borderRadius: 8, padding: "4px 6px" }}>{icon}</span>
       </div>
-      <div style={{ fontSize: 22, fontWeight: 600, color: t.color }}>{value}</div>
+      <div style={{ fontSize: 20, fontWeight: 600, color: t.color }}>{value}</div>
     </div>
   );
 }
@@ -205,7 +242,7 @@ function Card({ title, children }) {
 
 function Empty({ text, icon = "📭" }) {
   return (
-    <div style={{ textAlign: "center", padding: "16px 0", color: "var(--color-text-secondary)", fontSize: 12 }}>
+    <div style={{ textAlign: "center", padding: "20px 0", color: "var(--color-text-secondary)", fontSize: 12 }}>
       <div style={{ fontSize: 20, marginBottom: 4 }}>{icon}</div>
       {text}
     </div>
@@ -213,33 +250,16 @@ function Empty({ text, icon = "📭" }) {
 }
 
 // ── Styles ────────────────────────────────────────────────────────────────────
-const grid = (cols) => ({ display: "grid", gridTemplateColumns: `repeat(${cols}, 1fr)`, gap: 16 });
-
 const card = {
   background: "var(--color-background-primary)",
   border: "1px solid var(--color-border-tertiary)",
-  borderRadius: 12,
-  padding: "16px 18px",
-  display: "flex",
-  flexDirection: "column",
-  gap: 10,
+  borderRadius: 12, padding: "16px 18px",
+  display: "flex", flexDirection: "column", gap: 8,
 };
-
-const cardTitle = { fontSize: 13, fontWeight: 600, color: "var(--color-text-primary)", marginBottom: 4 };
-
-const row = {
-  display: "flex", justifyContent: "space-between", alignItems: "center",
-  padding: "6px 0", borderBottom: "1px solid var(--color-border-tertiary)",
-};
-
-const rowLabel = { fontSize: 13, color: "var(--color-text-primary)" };
-const rowValue = { fontSize: 13, fontWeight: 500, color: "var(--color-text-primary)" };
-
-const rankBadge = {
-  fontSize: 10, fontWeight: 600,
-  background: "rgba(24,95,165,0.1)", color: "#185FA5",
-  borderRadius: 10, padding: "1px 6px", minWidth: 18, textAlign: "center",
-};
-
+const cardTitle = { fontSize: 13, fontWeight: 600, color: "var(--color-text-primary)", marginBottom: 2 };
+const row       = { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "7px 0", borderBottom: "1px solid var(--color-border-tertiary)" };
+const rowLabel  = { fontSize: 13, color: "var(--color-text-primary)" };
+const rowValue  = { fontSize: 13, fontWeight: 500, color: "var(--color-text-primary)" };
+const rankBadge = { fontSize: 10, fontWeight: 600, background: "rgba(24,95,165,0.1)", color: "#185FA5", borderRadius: 10, padding: "2px 7px", minWidth: 20, textAlign: "center", flexShrink: 0 };
 const centreMsg = { textAlign: "center", padding: 60, color: "var(--color-text-secondary)", fontSize: 13 };
 const errorBox  = { background: "#FCEBEB", color: "#A32D2D", borderRadius: 10, padding: "12px 16px", fontSize: 13 };
