@@ -1,16 +1,25 @@
 import { useState, useEffect } from "react";
 import api from "../api/api";
 
+const PLANS = ["solo", "starter", "business", "enterprise"];
+
+const PLAN_LABELS = {
+  solo:       { label: "Solo",       color: "#5F5E5A", bg: "#F1EFE8" },
+  starter:    { label: "Starter",    color: "#185FA5", bg: "#E6F1FB" },
+  business:   { label: "Business",   color: "#0F6E56", bg: "#E1F5EE" },
+  enterprise: { label: "Enterprise", color: "#3C3489", bg: "#EEEDFE" },
+};
+
 export default function BusinessesPage() {
   const [businesses, setBusinesses] = useState([]);
   const [loading, setLoading]       = useState(true);
   const [error, setError]           = useState(null);
 
   // ── Create business form ──────────────────────────────────────────────────
-  const [showBizForm, setShowBizForm]   = useState(false);
-  const [bizForm, setBizForm]           = useState({ name: "", address: "", phone: "", owner_name: "" });
-  const [bizLoading, setBizLoading]     = useState(false);
-  const [bizError, setBizError]         = useState(null);
+  const [showBizForm, setShowBizForm] = useState(false);
+  const [bizForm, setBizForm]         = useState({ name: "", address: "", phone: "", owner_name: "" });
+  const [bizLoading, setBizLoading]   = useState(false);
+  const [bizError, setBizError]       = useState(null);
 
   // ── Create branch form ────────────────────────────────────────────────────
   const [showBranchForm, setShowBranchForm] = useState(false);
@@ -28,8 +37,16 @@ export default function BusinessesPage() {
   const [adminError, setAdminError]       = useState(null);
   const [adminSuccess, setAdminSuccess]   = useState(null);
 
+  // ── Plan change modal ─────────────────────────────────────────────────────
+  const [showPlanModal, setShowPlanModal]   = useState(false);
+  const [planBiz, setPlanBiz]               = useState(null);      // full business object
+  const [selectedPlan, setSelectedPlan]     = useState("");
+  const [planLoading, setPlanLoading]       = useState(false);
+  const [planError, setPlanError]           = useState(null);
+  const [planSuccess, setPlanSuccess]       = useState(null);
+
   // ── Expanded business (show branches) ────────────────────────────────────
-  const [expanded, setExpanded] = useState({});   // { business_id: [branches] }
+  const [expanded, setExpanded] = useState({});
 
   const fetchBusinesses = async () => {
     setLoading(true);
@@ -74,14 +91,19 @@ export default function BusinessesPage() {
   };
 
   // ── Create branch ─────────────────────────────────────────────────────────
-  const openBranchForm = (bizId) => { setBranchBizId(bizId); setBranchForm({ name: "", location: "" }); setBranchError(null); setShowBranchForm(true); };
+  const openBranchForm = (bizId) => {
+    setBranchBizId(bizId);
+    setBranchForm({ name: "", location: "" });
+    setBranchError(null);
+    setShowBranchForm(true);
+  };
+
   const handleCreateBranch = async () => {
     if (!branchForm.name) { setBranchError("Branch name is required."); return; }
     setBranchLoading(true); setBranchError(null);
     try {
       await api.post("/businesses/branches", { ...branchForm, business_id: branchBizId });
       setShowBranchForm(false);
-      // refresh expanded branches
       const res = await api.get(`/businesses/${branchBizId}/branches`);
       setExpanded(e => ({ ...e, [branchBizId]: res.data }));
       fetchBusinesses();
@@ -91,21 +113,65 @@ export default function BusinessesPage() {
   };
 
   // ── Create admin user ─────────────────────────────────────────────────────
-  const openAdminForm = (bizId, branchId) => { setAdminBizId(bizId); setAdminBranchId(branchId); setAdminForm({ full_name: "", username: "", password: "", role: "admin" }); setAdminError(null); setAdminSuccess(null); setShowAdminForm(true); };
+  const openAdminForm = (bizId, branchId) => {
+    setAdminBizId(bizId);
+    setAdminBranchId(branchId);
+    setAdminForm({ full_name: "", username: "", password: "", role: "admin" });
+    setAdminError(null);
+    setAdminSuccess(null);
+    setShowAdminForm(true);
+  };
+
   const handleCreateAdmin = async () => {
-    if (!adminForm.full_name || !adminForm.username || !adminForm.password) { setAdminError("All fields required."); return; }
+    if (!adminForm.full_name || !adminForm.username || !adminForm.password) {
+      setAdminError("All fields required."); return;
+    }
     setAdminLoading(true); setAdminError(null);
     try {
       await api.post("/auth/register", {
         ...adminForm,
         business_id: adminBizId,
-        branch_id: adminBranchId,
+        branch_id:   adminBranchId,
       });
-                    setAdminSuccess(`${adminForm.role} "${adminForm.username}" created successfully.`);
+      setAdminSuccess(`${adminForm.role} "${adminForm.username}" created successfully.`);
       setAdminForm({ full_name: "", username: "", password: "" });
     } catch (err) {
       setAdminError(err.response?.data?.detail || "Failed to create admin.");
     } finally { setAdminLoading(false); }
+  };
+
+  // ── Plan change ───────────────────────────────────────────────────────────
+  const openPlanModal = (biz) => {
+    setPlanBiz(biz);
+    setSelectedPlan(biz.plan || "starter");
+    setPlanError(null);
+    setPlanSuccess(null);
+    setShowPlanModal(true);
+  };
+
+  const handlePlanChange = async () => {
+    if (!selectedPlan || selectedPlan === planBiz.plan) {
+      setPlanError("Please select a different plan.");
+      return;
+    }
+    setPlanLoading(true);
+    setPlanError(null);
+    try {
+      const res = await api.patch(`/businesses/${planBiz.business_id}/plan`, { plan: selectedPlan });
+      setPlanSuccess(res.data.message);
+      fetchBusinesses();
+    } catch (err) {
+      setPlanError(err.response?.data?.detail || "Failed to update plan.");
+    } finally {
+      setPlanLoading(false);
+    }
+  };
+
+  const closePlanModal = () => {
+    setShowPlanModal(false);
+    setPlanBiz(null);
+    setPlanError(null);
+    setPlanSuccess(null);
   };
 
   // ── Toggle active ─────────────────────────────────────────────────────────
@@ -121,86 +187,204 @@ export default function BusinessesPage() {
 
       {/* Header */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
-        <div>
-          <div style={{ fontSize: 13, color: "var(--color-text-secondary)", marginTop: 2 }}>
-            {businesses.length} business{businesses.length !== 1 ? "es" : ""} registered
-          </div>
+        <div style={{ fontSize: 13, color: "var(--color-text-secondary)" }}>
+          {businesses.length} business{businesses.length !== 1 ? "es" : ""} registered
         </div>
         <button onClick={() => { setShowBizForm(true); setBizError(null); }} style={primaryBtn}>
           + New business
         </button>
       </div>
 
-      {error && <div style={errorBox}>{error}</div>}
+      {error   && <div style={errorBox}>{error}</div>}
       {loading && <div style={centreMsg}>Loading businesses...</div>}
 
       {/* Business list */}
-      {!loading && businesses.map(biz => (
-        <div key={biz.business_id} style={{ ...card, marginBottom: 12 }}>
-          {/* Business row */}
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-            <div style={{ flex: 1 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <span style={{ fontSize: 15, fontWeight: 600, color: "var(--color-text-primary)" }}>
-                  🏢 {biz.name}
-                </span>
-                <span style={{
-                  fontSize: 10, fontWeight: 600, padding: "2px 8px", borderRadius: 8,
-                  background: biz.is_active ? "#EAF3DE" : "#F1EFE8",
-                  color: biz.is_active ? "#3B6D11" : "#5F5E5A",
-                }}>
-                  {biz.is_active ? "ACTIVE" : "INACTIVE"}
-                </span>
+      {!loading && businesses.map(biz => {
+        const planStyle = PLAN_LABELS[biz.plan] || PLAN_LABELS["starter"];
+        return (
+          <div key={biz.business_id} style={{ ...card, marginBottom: 12 }}>
+
+            {/* Business row */}
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+              <div style={{ flex: 1 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                  <span style={{ fontSize: 15, fontWeight: 600, color: "var(--color-text-primary)" }}>
+                    🏢 {biz.name}
+                  </span>
+                  <span style={{
+                    fontSize: 10, fontWeight: 600, padding: "2px 8px", borderRadius: 8,
+                    background: biz.is_active ? "#EAF3DE" : "#F1EFE8",
+                    color: biz.is_active ? "#3B6D11" : "#5F5E5A",
+                  }}>
+                    {biz.is_active ? "ACTIVE" : "INACTIVE"}
+                  </span>
+                  {/* Plan badge */}
+                  <span style={{
+                    fontSize: 10, fontWeight: 600, padding: "2px 8px", borderRadius: 8,
+                    background: planStyle.bg, color: planStyle.color,
+                    cursor: "pointer", border: `1px solid ${planStyle.color}22`,
+                  }}
+                    onClick={() => openPlanModal(biz)}
+                    title="Click to change plan"
+                  >
+                    {planStyle.label} plan
+                  </span>
+                </div>
+                <div style={{ fontSize: 12, color: "var(--color-text-secondary)", marginTop: 4 }}>
+                  {biz.address    && <span>📍 {biz.address} &nbsp;</span>}
+                  {biz.phone      && <span>📞 {biz.phone} &nbsp;</span>}
+                  {biz.owner_name && <span>👤 {biz.owner_name}</span>}
+                </div>
+                <div style={{ fontSize: 11, color: "var(--color-text-tertiary)", marginTop: 3 }}>
+                  ID: {biz.business_id} · {biz.branch_count ?? 0} branch{biz.branch_count !== 1 ? "es" : ""} · {biz.user_count ?? 0} user{biz.user_count !== 1 ? "s" : ""}
+                  {biz.max_users !== undefined && (
+                    <span style={{ marginLeft: 8, color: "var(--color-text-tertiary)" }}>
+                      · Max staff: {biz.max_users === -1 ? "unlimited" : biz.max_users}
+                      · Max branches: {biz.max_branches === -1 ? "unlimited" : biz.max_branches}
+                    </span>
+                  )}
+                </div>
               </div>
-              <div style={{ fontSize: 12, color: "var(--color-text-secondary)", marginTop: 4 }}>
-                {biz.address && <span>📍 {biz.address} &nbsp;</span>}
-                {biz.phone    && <span>📞 {biz.phone} &nbsp;</span>}
-                {biz.owner_name && <span>👤 {biz.owner_name}</span>}
-              </div>
-              <div style={{ fontSize: 11, color: "var(--color-text-tertiary)", marginTop: 3 }}>
-                ID: {biz.business_id} · {biz.branch_count ?? 0} branch{biz.branch_count !== 1 ? "es" : ""} · {biz.user_count ?? 0} user{biz.user_count !== 1 ? "s" : ""}
+
+              <div style={{ display: "flex", gap: 6, flexShrink: 0, flexWrap: "wrap", justifyContent: "flex-end" }}>
+                <button onClick={() => openPlanModal(biz)} style={planBtn}>
+                  Change plan
+                </button>
+                <button onClick={() => toggleExpand(biz)} style={outlineBtn}>
+                  {expanded[biz.business_id] ? "▲ Hide" : "▼ Branches"}
+                </button>
+                <button onClick={() => openBranchForm(biz.business_id)} style={outlineBtn}>
+                  + Branch
+                </button>
+                <button
+                  onClick={() => toggleActive(biz)}
+                  style={{ ...outlineBtn, color: biz.is_active ? "#A32D2D" : "#3B6D11", borderColor: biz.is_active ? "#A32D2D" : "#3B6D11" }}
+                >
+                  {biz.is_active ? "Deactivate" : "Activate"}
+                </button>
               </div>
             </div>
 
-            <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
-              <button onClick={() => toggleExpand(biz)} style={outlineBtn}>
-                {expanded[biz.business_id] ? "▲ Hide" : "▼ Branches"}
-              </button>
-              <button onClick={() => openBranchForm(biz.business_id)} style={outlineBtn}>
-                + Branch
-              </button>
-              <button onClick={() => toggleActive(biz)}
-                style={{ ...outlineBtn, color: biz.is_active ? "#A32D2D" : "#3B6D11", borderColor: biz.is_active ? "#A32D2D" : "#3B6D11" }}>
-                {biz.is_active ? "Deactivate" : "Activate"}
-              </button>
-            </div>
-          </div>
-
-          {/* Branches */}
-          {expanded[biz.business_id] && (
-            <div style={{ marginTop: 14, borderTop: "1px solid var(--color-border-tertiary)", paddingTop: 12 }}>
-              {expanded[biz.business_id].length === 0 ? (
-                <div style={{ fontSize: 12, color: "var(--color-text-tertiary)" }}>No branches yet.</div>
-              ) : expanded[biz.business_id].map(br => (
-                <div key={br.branch_id} style={{
-                  display: "flex", justifyContent: "space-between", alignItems: "center",
-                  padding: "8px 12px", borderRadius: 8, marginBottom: 6,
-                  background: "var(--color-background-secondary)",
-                }}>
-                  <div>
-                    <span style={{ fontSize: 13, fontWeight: 500 }}>🏪 {br.name}</span>
-                    {br.location && <span style={{ fontSize: 11, color: "var(--color-text-secondary)", marginLeft: 8 }}>📍 {br.location}</span>}
-                    <span style={{ fontSize: 11, color: "var(--color-text-tertiary)", marginLeft: 8 }}>ID: {br.branch_id}</span>
+            {/* Branches */}
+            {expanded[biz.business_id] && (
+              <div style={{ marginTop: 14, borderTop: "1px solid var(--color-border-tertiary)", paddingTop: 12 }}>
+                {expanded[biz.business_id].length === 0 ? (
+                  <div style={{ fontSize: 12, color: "var(--color-text-tertiary)" }}>No branches yet.</div>
+                ) : expanded[biz.business_id].map(br => (
+                  <div key={br.branch_id} style={{
+                    display: "flex", justifyContent: "space-between", alignItems: "center",
+                    padding: "8px 12px", borderRadius: 8, marginBottom: 6,
+                    background: "var(--color-background-secondary)",
+                  }}>
+                    <div>
+                      <span style={{ fontSize: 13, fontWeight: 500 }}>🏪 {br.name}</span>
+                      {br.location && <span style={{ fontSize: 11, color: "var(--color-text-secondary)", marginLeft: 8 }}>📍 {br.location}</span>}
+                      <span style={{ fontSize: 11, color: "var(--color-text-tertiary)", marginLeft: 8 }}>ID: {br.branch_id}</span>
+                    </div>
+                    <button onClick={() => openAdminForm(biz.business_id, br.branch_id)} style={outlineBtn}>
+                      + Add user
+                    </button>
                   </div>
-                  <button onClick={() => openAdminForm(biz.business_id, br.branch_id)} style={outlineBtn}>
-                    + Add user
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      })}
+
+      {/* ── Plan change modal ── */}
+      {showPlanModal && planBiz && (
+        <div style={overlay}>
+          <div style={modal}>
+            <div style={modalHeader}>
+              <h2 style={modalTitle}>Change plan — {planBiz.name}</h2>
+              <button onClick={closePlanModal} style={closeBtn}>×</button>
+            </div>
+
+            {/* Current plan */}
+            <div style={{ display: "flex", justifyContent: "space-between", padding: "5px 0", marginBottom: 16 }}>
+              <span style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>Current plan</span>
+              <span style={{
+                fontSize: 12, fontWeight: 600, padding: "2px 10px", borderRadius: 8,
+                background: (PLAN_LABELS[planBiz.plan] || PLAN_LABELS.starter).bg,
+                color:      (PLAN_LABELS[planBiz.plan] || PLAN_LABELS.starter).color,
+              }}>
+                {(PLAN_LABELS[planBiz.plan] || PLAN_LABELS.starter).label}
+              </span>
+            </div>
+
+            {planSuccess ? (
+              <>
+                <div style={successBox}>{planSuccess}</div>
+                <button onClick={closePlanModal} style={{ ...primaryBtn, width: "100%", marginTop: 12 }}>
+                  Done
+                </button>
+              </>
+            ) : (
+              <>
+                {/* Plan selector */}
+                <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 20 }}>
+                  {PLANS.map(plan => {
+                    const ps       = PLAN_LABELS[plan];
+                    const selected = selectedPlan === plan;
+                    const limits   = {
+                      solo:       "1 user · 1 branch",
+                      starter:    "3 staff · 1 branch",
+                      business:   "Unlimited staff · 3 branches",
+                      enterprise: "Unlimited staff · Unlimited branches",
+                    }[plan];
+                    return (
+                      <div
+                        key={plan}
+                        onClick={() => setSelectedPlan(plan)}
+                        style={{
+                          padding: "12px 14px",
+                          borderRadius: 10,
+                          border: selected ? `2px solid ${ps.color}` : "1px solid var(--color-border-tertiary)",
+                          background: selected ? `${ps.bg}` : "transparent",
+                          cursor: "pointer",
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "center",
+                        }}
+                      >
+                        <div>
+                          <span style={{ fontSize: 13, fontWeight: 600, color: selected ? ps.color : "var(--color-text-primary)" }}>
+                            {ps.label}
+                          </span>
+                          <span style={{ fontSize: 11, color: "var(--color-text-secondary)", marginLeft: 8 }}>
+                            {limits}
+                          </span>
+                        </div>
+                        {selected && (
+                          <span style={{ fontSize: 14, color: ps.color, fontWeight: 700 }}>✓</span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {planError && <div style={errorBox}>{planError}</div>}
+
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button onClick={closePlanModal} style={{ ...cancelBtn, flex: 1 }}>Cancel</button>
+                  <button
+                    onClick={handlePlanChange}
+                    disabled={planLoading || selectedPlan === planBiz.plan}
+                    style={{
+                      ...primaryBtn,
+                      flex: 2,
+                      opacity: (planLoading || selectedPlan === planBiz.plan) ? 0.6 : 1,
+                    }}
+                  >
+                    {planLoading ? "Saving..." : `Switch to ${PLAN_LABELS[selectedPlan]?.label}`}
                   </button>
                 </div>
-              ))}
-            </div>
-          )}
+              </>
+            )}
+          </div>
         </div>
-      ))}
+      )}
 
       {/* ── Create business modal ── */}
       {showBizForm && (
@@ -212,10 +396,10 @@ export default function BusinessesPage() {
             </div>
             {bizError && <div style={errorBox}>{bizError}</div>}
             <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-              <Field label="Business name *" value={bizForm.name} onChange={v => setBizForm(f => ({ ...f, name: v }))} placeholder="e.g. WEAR HAUS" />
+              <Field label="Business name *" value={bizForm.name}       onChange={v => setBizForm(f => ({ ...f, name: v }))}       placeholder="e.g. WEAR HAUS" />
               <Field label="Owner name"      value={bizForm.owner_name} onChange={v => setBizForm(f => ({ ...f, owner_name: v }))} placeholder="e.g. Joshua Ali" />
-              <Field label="Phone"           value={bizForm.phone}  onChange={v => setBizForm(f => ({ ...f, phone: v }))}  placeholder="e.g. 08012345678" />
-              <Field label="Address"         value={bizForm.address} onChange={v => setBizForm(f => ({ ...f, address: v }))} placeholder="e.g. 9 Kashim Ibrahim Road, Kaduna" />
+              <Field label="Phone"           value={bizForm.phone}      onChange={v => setBizForm(f => ({ ...f, phone: v }))}      placeholder="e.g. 08012345678" />
+              <Field label="Address"         value={bizForm.address}    onChange={v => setBizForm(f => ({ ...f, address: v }))}    placeholder="e.g. 9 Kashim Ibrahim Road, Kaduna" />
             </div>
             <div style={{ display: "flex", gap: 8, marginTop: 20 }}>
               <button onClick={() => setShowBizForm(false)} style={{ ...cancelBtn, flex: 1 }}>Cancel</button>
@@ -269,7 +453,6 @@ export default function BusinessesPage() {
                   <Field label="Full name *" value={adminForm.full_name} onChange={v => setAdminForm(f => ({ ...f, full_name: v }))} placeholder="e.g. Amina Bello" />
                   <Field label="Username *"  value={adminForm.username}  onChange={v => setAdminForm(f => ({ ...f, username: v }))}  placeholder="e.g. amina_admin" />
                   <Field label="Password *"  value={adminForm.password}  onChange={v => setAdminForm(f => ({ ...f, password: v }))}  placeholder="min 6 characters" type="password" />
-                  {/* ✅ Role selector */}
                   <label style={{ fontSize: 12, fontWeight: 500, color: "var(--color-text-secondary)", display: "block" }}>
                     Role *
                     <select
@@ -303,17 +486,20 @@ export default function BusinessesPage() {
           </div>
         </div>
       )}
+
     </div>
   );
 }
 
-// ── Reusable field ────────────────────────────────────────────────────────────
+// ── Reusable field ─────────────────────────────────────────────────────────────
 function Field({ label, value, onChange, placeholder, type = "text" }) {
   return (
     <label style={{ fontSize: 12, fontWeight: 500, color: "var(--color-text-secondary)", display: "block" }}>
       {label}
       <input
-        type={type} value={value} placeholder={placeholder}
+        type={type}
+        value={value}
+        placeholder={placeholder}
         onChange={e => onChange(e.target.value)}
         style={{
           display: "block", width: "100%", marginTop: 4,
@@ -327,15 +513,16 @@ function Field({ label, value, onChange, placeholder, type = "text" }) {
   );
 }
 
-// ── Styles ────────────────────────────────────────────────────────────────────
+// ── Styles ─────────────────────────────────────────────────────────────────────
 const card       = { background: "var(--color-background-primary)", border: "1px solid var(--color-border-tertiary)", borderRadius: 12, padding: "16px 18px" };
 const primaryBtn = { padding: "8px 16px", borderRadius: 8, border: "none", background: "#185FA5", color: "#fff", fontSize: 13, fontWeight: 500, cursor: "pointer" };
 const outlineBtn = { padding: "5px 12px", borderRadius: 6, border: "1px solid var(--color-border-tertiary)", background: "none", fontSize: 12, cursor: "pointer", color: "var(--color-text-secondary)" };
+const planBtn    = { padding: "5px 12px", borderRadius: 6, border: "1px solid #185FA5", background: "none", fontSize: 12, cursor: "pointer", color: "#185FA5", fontWeight: 500 };
 const cancelBtn  = { padding: "8px 16px", borderRadius: 8, border: "1px solid var(--color-border-tertiary)", background: "none", color: "var(--color-text-primary)", fontSize: 13, cursor: "pointer" };
 const errorBox   = { background: "#FCEBEB", color: "#A32D2D", borderRadius: 8, padding: "9px 13px", fontSize: 13, marginBottom: 12 };
 const successBox = { background: "#EAF3DE", color: "#3B6D11", borderRadius: 8, padding: "9px 13px", fontSize: 13, marginBottom: 12 };
 const overlay    = { position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 999 };
-const modal      = { background: "var(--color-background-primary)", borderRadius: 14, padding: 24, width: 420, maxHeight: "85vh", overflowY: "auto", boxShadow: "0 8px 32px rgba(0,0,0,0.25)" };
+const modal      = { background: "var(--color-background-primary)", borderRadius: 14, padding: 24, width: 440, maxHeight: "85vh", overflowY: "auto", boxShadow: "0 8px 32px rgba(0,0,0,0.25)" };
 const modalHeader = { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18 };
 const modalTitle  = { fontSize: 15, fontWeight: 600, margin: 0, color: "var(--color-text-primary)" };
 const closeBtn    = { background: "none", border: "none", fontSize: 22, cursor: "pointer", color: "var(--color-text-secondary)", lineHeight: 1, padding: 0 };
