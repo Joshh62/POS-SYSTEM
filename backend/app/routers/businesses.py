@@ -8,6 +8,7 @@ from app.database import get_db
 from app import models
 from app.dependencies import require_role, SUPERADMIN_ROLE
 from app.auth import hash_password
+from app.utils.plans import PLAN_LIMITS
 
 router = APIRouter(prefix="/businesses", tags=["Businesses"])
 
@@ -38,13 +39,16 @@ class AdminCreate(BaseModel):
     business_id: int
     branch_id:   int
 
+class PlanUpdate(BaseModel):
+    plan: str   # solo | starter | business | enterprise
+
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
 @router.get("/")
 def list_businesses(
     db: Session = Depends(get_db),
-    user=Depends(require_role([]))   # superadmin only (require_role passes superadmin always)
+    user=Depends(require_role([]))
 ):
     if user.role != SUPERADMIN_ROLE:
         raise HTTPException(status_code=403, detail="Superadmin only")
@@ -54,6 +58,7 @@ def list_businesses(
     for b in businesses:
         branch_count = db.query(models.Branch).filter(models.Branch.business_id == b.business_id).count()
         user_count   = db.query(models.User).filter(models.User.business_id == b.business_id).count()
+        limits       = PLAN_LIMITS.get(b.plan, PLAN_LIMITS["starter"])
         result.append({
             "business_id":  b.business_id,
             "name":         b.name,
@@ -62,6 +67,9 @@ def list_businesses(
             "owner_name":   b.owner_name,
             "is_active":    b.is_active,
             "created_at":   b.created_at,
+            "plan":         b.plan,
+            "max_users":    limits["max_users"],
+            "max_branches": limits["max_branches"],
             "branch_count": branch_count,
             "user_count":   user_count,
         })
@@ -105,13 +113,52 @@ def update_business(
     return biz
 
 
+# ── Change plan ───────────────────────────────────────────────────────────────
+@router.patch("/{business_id}/plan")
+def update_plan(
+    business_id: int,
+    data: PlanUpdate,
+    db: Session = Depends(get_db),
+    user=Depends(require_role([]))
+):
+    """Superadmin only — change a business subscription plan."""
+    if user.role != SUPERADMIN_ROLE:
+        raise HTTPException(status_code=403, detail="Superadmin only")
+
+    # Validate plan name
+    valid_plans = list(PLAN_LIMITS.keys())
+    if data.plan not in valid_plans:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid plan '{data.plan}'. Must be one of: {', '.join(valid_plans)}"
+        )
+
+    biz = db.query(models.Business).filter(models.Business.business_id == business_id).first()
+    if not biz:
+        raise HTTPException(status_code=404, detail="Business not found")
+
+    old_plan = biz.plan
+    biz.plan = data.plan
+    db.commit()
+    db.refresh(biz)
+
+    limits = PLAN_LIMITS[data.plan]
+    return {
+        "message":      f"Plan updated from {old_plan} to {data.plan}",
+        "business_id":  biz.business_id,
+        "name":         biz.name,
+        "plan":         biz.plan,
+        "max_users":    limits["max_users"],
+        "max_branches": limits["max_branches"],
+    }
+
+
 @router.get("/{business_id}/branches")
 def list_branches(
     business_id: int,
     db: Session = Depends(get_db),
     user=Depends(require_role(["admin"]))
 ):
-    # Admin can only see their own business branches
     if user.role != SUPERADMIN_ROLE and user.business_id != business_id:
         raise HTTPException(status_code=403, detail="Not authorized")
 
