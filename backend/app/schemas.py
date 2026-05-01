@@ -19,11 +19,11 @@ class CategoryResponse(BaseModel):
 # PRODUCT
 # ---------------------------
 class ProductCreate(BaseModel):
-    product_name:  str
-    barcode:       str
-    category_id:   Optional[int] = None
-    cost_price:    float
-    selling_price: float
+    product_name:   str
+    barcode:        str
+    category_id:    Optional[int] = None
+    cost_price:     float
+    selling_price:  float
     stock_quantity: int = 0
 
 class ProductResponse(BaseModel):
@@ -94,10 +94,9 @@ class UserCreate(BaseModel):
     username:    str
     password:    str
     role:        str
-    branch_id:   Optional[int] = None    # ✅ optional — superadmin has no branch
-    business_id: Optional[int] = None    # ✅ new — links user to a business
+    branch_id:   Optional[int] = None
+    business_id: Optional[int] = None
 
-# ✅ Fixed: was defined twice — second definition was silently overwriting the first
 class UserResponse(BaseModel):
     user_id:     int
     full_name:   str
@@ -173,13 +172,14 @@ class CustomerResponse(BaseModel):
 
 
 # ---------------------------
-# BUSINESS  (new)
+# BUSINESS
 # ---------------------------
 class BusinessCreate(BaseModel):
     name:       str
     address:    Optional[str] = None
     phone:      Optional[str] = None
     owner_name: Optional[str] = None
+    plan:       Optional[str] = "starter"   # solo | starter | business | enterprise
 
 class BusinessResponse(BaseModel):
     business_id: int
@@ -188,4 +188,5 @@ class BusinessResponse(BaseModel):
     phone:       Optional[str]
     owner_name:  Optional[str]
     is_active:   bool
+    plan:        str
     model_config = ConfigDict(from_attributes=True)

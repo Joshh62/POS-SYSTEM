@@ -16,6 +16,7 @@ class Business(Base):
     owner_name  = Column(String, nullable=True)
     is_active   = Column(Boolean, default=True)
     created_at  = Column(DateTime, default=datetime.utcnow)
+    plan        = Column(String, default="starter", nullable=False)  # solo | starter | business | enterprise
 
     branches = relationship("Branch", back_populates="business")
     users    = relationship("User",   back_populates="business")
@@ -74,7 +75,7 @@ class BranchInventory(Base):
     product_id        = Column(Integer, ForeignKey("products.product_id"))
     stock_quantity    = Column(Integer, default=0)
     reorder_level     = Column(Integer, default=5)
-    expiry_alert_days = Column(Integer, default=90)  # ✅ per-branch alert threshold
+    expiry_alert_days = Column(Integer, default=90)
 
     branch   = relationship("Branch",   back_populates="inventory")
     product  = relationship("Product",  back_populates="inventory")
@@ -113,7 +114,7 @@ class User(Base):
     role          = Column(String)   # superadmin | admin | manager | cashier
     created_at    = Column(DateTime, default=datetime.utcnow)
     is_active     = Column(Boolean, default=True)
-    branch_id     = Column(Integer, ForeignKey("branches.branch_id"),   nullable=True)
+    branch_id     = Column(Integer, ForeignKey("branches.branch_id"),    nullable=True)
     business_id   = Column(Integer, ForeignKey("businesses.business_id"), nullable=True)
 
     branch   = relationship("Branch",   back_populates="users")
@@ -221,7 +222,7 @@ class PurchaseOrderItem(Base):
     product_id     = Column(Integer, ForeignKey("products.product_id"))
     quantity       = Column(Integer)
     unit_cost      = Column(Numeric(12, 2))
-    expiry_date    = Column(sa.Date(), nullable=True)   # ✅ batch expiry on PO items
+    expiry_date    = Column(sa.Date(), nullable=True)
 
     purchase_order = relationship("PurchaseOrder", back_populates="items")
     product        = relationship("Product")
