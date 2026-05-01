@@ -53,12 +53,7 @@ const withRetry = async (fn, retries = 1, delayMs = 2000) => {
 
 // ── AUTH ──────────────────────────────────────────────────────────────────────
 export const login = async (username, password) => {
-  const formData = new URLSearchParams();
-  formData.append("username", username);
-  formData.append("password", password);
-  const res = await api.post("/auth/login", formData, {
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-  });
+  const res = await api.post("/auth/login", { username, password });
   return res.data;
 };
 
