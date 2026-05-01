@@ -36,24 +36,9 @@ export default function ReportsPage() {
   useEffect(() => { fetchTab(activeTab); }, [activeTab]);
 
   // ── helpers to normalise API shapes ──────────────────────────────────────
-  // Stock valuation: backend returns { summary:{total_inventory_value}, chart:{labels, datasets} }
-  // Labels & data arrays may have duplicate product names — merge them by summing values.
-  const stockTotal = data?.summary?.total_inventory_value ?? 0;
-
-  const stockProducts = (() => {
-    const labels  = data?.chart?.labels   ?? [];
-    const values  = data?.chart?.datasets?.[0]?.data ?? [];
-    const merged  = {};
-    labels.forEach((name, i) => {
-      merged[name] = (merged[name] ?? 0) + (values[i] ?? 0);
-    });
-    return Object.entries(merged).map(([product_name, stock_value]) => ({
-      product_name,
-      stock_value,
-      stock_quantity: "—",   // not in this response shape
-      cost_price: null,
-    }));
-  })();
+  // Stock valuation: backend now returns summary + chart + products array
+  const stockTotal    = data?.summary?.total_inventory_value ?? 0;
+  const stockProducts = data?.products ?? [];
 
   // Audit logs: backend may return { logs:[...] } or plain array
   const auditRows = Array.isArray(data)
