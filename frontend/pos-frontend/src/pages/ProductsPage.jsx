@@ -14,7 +14,6 @@ const EMPTY_FORM = {
   category_id: "",
   cost_price: "",
   selling_price: "",
-  stock_quantity: 0,
 };
 
 export default function ProductsPage() {
@@ -91,12 +90,11 @@ export default function ProductsPage() {
     if (!product) return;
     setEditing(product);
     setForm({
-      product_name:   product.product_name  || "",
-      barcode:        product.barcode        || "",
-      category_id:    product.category_id    || "",
-      cost_price:     product.cost_price     || "",
-      selling_price:  product.selling_price  || "",
-      stock_quantity: product.stock_quantity ?? 0,
+      product_name:  product.product_name  || "",
+      barcode:       product.barcode        || "",
+      category_id:   product.category_id    || "",
+      cost_price:    product.cost_price     || "",
+      selling_price: product.selling_price  || "",
     });
     setFormError(null);
     setShowForm(true);
@@ -112,10 +110,10 @@ export default function ProductsPage() {
     try {
       const payload = {
         ...form,
-        category_id:    form.category_id  ? parseInt(form.category_id) : null,
-        cost_price:     parseFloat(form.cost_price   || 0),
-        selling_price:  parseFloat(form.selling_price),
-        stock_quantity: parseInt(form.stock_quantity || 0),
+        category_id:   form.category_id ? parseInt(form.category_id) : null,
+        cost_price:    parseFloat(form.cost_price    || 0),
+        selling_price: parseFloat(form.selling_price),
+        stock_quantity: 0,
       };
       if (editing) await updateProduct(editing.product_id, payload);
       else         await createProduct(payload);
@@ -236,6 +234,14 @@ export default function ProductsPage() {
               <button onClick={() => setShowForm(false)} style={closeBtn}>×</button>
             </div>
 
+            {/* Hint banner — only shown when creating */}
+            {!editing && (
+              <div style={hintBanner}>
+                After adding, go to <strong style={{ color: "#e8ecf2" }}>Inventory → Restock</strong> to add
+                stock and set expiry dates.
+              </div>
+            )}
+
             {formError && <div style={errorBox}>{formError}</div>}
 
             <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
@@ -280,13 +286,6 @@ export default function ProductsPage() {
                   <input type="number" min="0" placeholder="0" {...field("selling_price")} />
                 </div>
               </div>
-
-              {!editing && (
-                <div>
-                  <label style={labelStyle}>Initial stock quantity</label>
-                  <input type="number" min="0" placeholder="0" {...field("stock_quantity")} />
-                </div>
-              )}
 
             </div>
 
@@ -342,6 +341,17 @@ const labelStyle = {
 const starStyle = {
   color: "#E24B4A",
   marginLeft: 2,
+};
+
+const hintBanner = {
+  background: "#1a2438",
+  border: "1px solid #2a3247",
+  borderRadius: 8,
+  padding: "9px 12px",
+  fontSize: 12,
+  color: "#8a93a6",
+  marginBottom: 16,
+  lineHeight: 1.5,
 };
 
 const primaryBtn = {
