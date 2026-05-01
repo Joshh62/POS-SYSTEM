@@ -1,10 +1,12 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
 from sqlalchemy.orm import Session
 from sqlalchemy import func, and_
 from typing import Optional
 from datetime import datetime, date, timedelta
 from pydantic import BaseModel
 import pytz
+import csv
+import io
 
 from app import models, schemas
 from app.database import get_db
@@ -91,14 +93,9 @@ def get_expiring_batches(
     db: Session = Depends(get_db),
     user=Depends(require_role(["admin", "manager"]))
 ):
-    """
-    Returns batches expiring within the branch's expiry_alert_days threshold.
-    Groups results into: expired, expiring_soon, ok.
-    """
-    ids  = _resolve_branch_ids(user, branch_id, db)
+    ids   = _resolve_branch_ids(user, branch_id, db)
     today = today_lagos()
 
-    # Get all batches with a non-null expiry date
     q = db.query(
         models.InventoryBatch,
         models.Product.product_name,
@@ -145,7 +142,6 @@ def get_expiring_batches(
             row["status"] = "expiring_soon"
             expiring_soon.append(row)
 
-    # Sort expired by most overdue, expiring_soon by soonest first
     expired.sort(key=lambda x: x["days_left"])
     expiring_soon.sort(key=lambda x: x["days_left"])
 
@@ -164,7 +160,7 @@ def get_product_batches(
     db: Session = Depends(get_db),
     user=Depends(require_role(["admin", "manager"]))
 ):
-    ids = _resolve_branch_ids(user, branch_id, db)
+    ids   = _resolve_branch_ids(user, branch_id, db)
     today = today_lagos()
 
     q = db.query(models.InventoryBatch).filter(
@@ -197,7 +193,7 @@ def get_product_batches(
     return result
 
 
-# ── RESTOCK (with expiry) ─────────────────────────────────────────────────────
+# ── RESTOCK (single product with expiry) ──────────────────────────────────────
 @router.post("/restock")
 def restock_product(
     data: RestockWithExpiry,
@@ -219,7 +215,6 @@ def restock_product(
     if not product:
         raise HTTPException(status_code=404, detail="Product not found")
 
-    # Parse expiry date
     expiry = None
     if data.expiry_date:
         try:
@@ -227,7 +222,6 @@ def restock_product(
         except ValueError:
             raise HTTPException(status_code=400, detail="Invalid expiry_date format. Use YYYY-MM-DD")
 
-    # Update BranchInventory
     inventory = db.query(models.BranchInventory).filter(
         models.BranchInventory.product_id == data.product_id,
         models.BranchInventory.branch_id  == branch_id
@@ -246,7 +240,6 @@ def restock_product(
         db.add(inventory)
         db.flush()
 
-    # ✅ Create inventory batch record
     batch = models.InventoryBatch(
         product_id=data.product_id,
         branch_id=branch_id,
@@ -257,7 +250,6 @@ def restock_product(
     )
     db.add(batch)
 
-    # Movement log
     db.add(models.InventoryMovement(
         product_id=data.product_id,
         branch_id=branch_id,
@@ -271,11 +263,159 @@ def restock_product(
     db.refresh(inventory)
 
     return {
-        "product_id":   data.product_id,
-        "branch_id":    branch_id,
-        "new_stock":    inventory.stock_quantity,
-        "expiry_date":  str(expiry) if expiry else None,
-        "batch_id":     batch.batch_id,
+        "product_id":  data.product_id,
+        "branch_id":   branch_id,
+        "new_stock":   inventory.stock_quantity,
+        "expiry_date": str(expiry) if expiry else None,
+        "batch_id":    batch.batch_id,
+    }
+
+
+# ── BULK RESTOCK (CSV upload) ─────────────────────────────────────────────────
+@router.post("/bulk-restock")
+def bulk_restock(
+    file: UploadFile = File(...),
+    branch_id: Optional[int] = Query(None),
+    db: Session = Depends(get_db),
+    user=Depends(require_role(["admin", "manager"]))
+):
+    """
+    Bulk restock existing products from a CSV file.
+
+    Required columns:
+      barcode | quantity
+
+    Optional columns:
+      expiry_date (YYYY-MM-DD) | notes
+
+    - Only restocks products that already exist in the system
+    - Creates a batch record for each row
+    - Logs an inventory movement for each restock
+    - Rows with unknown barcodes are reported as errors
+    - Does NOT create new products — use Import products for that
+    """
+    filename = (file.filename or "").lower()
+    if not filename.endswith(".csv"):
+        raise HTTPException(status_code=400, detail="Only .csv files are supported for bulk restock.")
+
+    # Resolve which branches this user can restock
+    ids       = _resolve_branch_ids(user, branch_id, db)
+    branch_id = branch_id or (ids[0] if ids else user.branch_id)
+
+    if not branch_id:
+        raise HTTPException(status_code=400, detail="Could not determine branch for restock.")
+
+    # Verify branch access
+    if ids and branch_id not in ids:
+        raise HTTPException(status_code=403, detail="Not authorized for this branch.")
+
+    # Parse CSV
+    try:
+        content = file.file.read().decode("utf-8-sig")  # handles BOM
+        reader  = csv.DictReader(io.StringIO(content))
+        rows    = list(reader)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Could not read file: {e}")
+
+    if not rows:
+        raise HTTPException(status_code=400, detail="CSV file is empty.")
+
+    # Validate headers
+    headers = [h.strip().lower() for h in (reader.fieldnames or [])]
+    if "barcode" not in headers:
+        raise HTTPException(status_code=400, detail="Missing required column: barcode")
+    if "quantity" not in headers:
+        raise HTTPException(status_code=400, detail="Missing required column: quantity")
+
+    restocked, skipped, errors = 0, 0, []
+
+    for i, row in enumerate(rows, start=2):
+        # Normalise keys
+        row = {str(k).strip().lower(): str(v).strip() if v else "" for k, v in row.items()}
+
+        barcode     = row.get("barcode", "").strip()
+        qty_raw     = row.get("quantity", "").strip()
+        expiry_raw  = row.get("expiry_date", "").strip()
+        notes       = row.get("notes", "").strip() or "Bulk restock via CSV"
+
+        # ── Validate row ──────────────────────────────────────────────────────
+        if not barcode:
+            errors.append(f"Row {i}: missing barcode"); continue
+
+        if not qty_raw:
+            errors.append(f"Row {i} (barcode {barcode}): missing quantity"); continue
+
+        try:
+            qty = int(float(qty_raw))
+        except ValueError:
+            errors.append(f"Row {i} (barcode {barcode}): quantity must be a number"); continue
+
+        if qty <= 0:
+            errors.append(f"Row {i} (barcode {barcode}): quantity must be greater than 0"); continue
+
+        # ── Parse expiry date ─────────────────────────────────────────────────
+        expiry = None
+        if expiry_raw:
+            try:
+                expiry = date.fromisoformat(expiry_raw)
+            except ValueError:
+                errors.append(f"Row {i} (barcode {barcode}): invalid expiry_date — use YYYY-MM-DD"); continue
+
+        # ── Look up product ───────────────────────────────────────────────────
+        product = db.query(models.Product).filter(
+            models.Product.barcode == barcode
+        ).first()
+
+        if not product:
+            errors.append(f"Row {i}: barcode '{barcode}' not found — add this product first"); skipped += 1; continue
+
+        # ── Update BranchInventory ────────────────────────────────────────────
+        inventory = db.query(models.BranchInventory).filter(
+            models.BranchInventory.product_id == product.product_id,
+            models.BranchInventory.branch_id  == branch_id,
+        ).first()
+
+        if inventory:
+            inventory.stock_quantity += qty
+        else:
+            inventory = models.BranchInventory(
+                product_id=product.product_id,
+                branch_id=branch_id,
+                stock_quantity=qty,
+                reorder_level=5,
+                expiry_alert_days=90,
+            )
+            db.add(inventory)
+            db.flush()
+
+        # ── Create batch record ───────────────────────────────────────────────
+        db.add(models.InventoryBatch(
+            product_id=product.product_id,
+            branch_id=branch_id,
+            quantity=qty,
+            expiry_date=expiry,
+            received_date=today_lagos(),
+            notes=notes,
+        ))
+
+        # ── Log movement ──────────────────────────────────────────────────────
+        db.add(models.InventoryMovement(
+            product_id=product.product_id,
+            branch_id=branch_id,
+            movement_type="RESTOCK",
+            quantity=qty,
+            movement_date=now_lagos(),
+        ))
+
+        restocked += 1
+
+    db.commit()
+
+    return {
+        "restocked": restocked,
+        "skipped":   skipped,
+        "errors":    errors,
+        "message":   f"{restocked} products restocked, {skipped} skipped, {len(errors)} errors",
     }
 
 
