@@ -102,7 +102,7 @@ export const getExpiringBatches = async () => (await api.get("/inventory/expirin
 export const getProductBatches  = async (productId) => (await api.get(`/inventory/batches/${productId}`, { params: getActiveBranchParam() })).data;
 export const getLowStock    = async (threshold = 5) => {
   const params = { threshold, ...getActiveBranchParam() };
-  return (await api.get("/inventory/low-stock", { params })).data;
+  return (await api.get("/reports/low-stock", { params })).data;
 };
 
 // ── SUPPLIERS ─────────────────────────────────────────────────────────────────
