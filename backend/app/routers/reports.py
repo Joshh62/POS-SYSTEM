@@ -62,7 +62,11 @@ def daily_sales(
     user=Depends(require_role(["admin", "manager"]))
 ):
     today = date.today()
-    q = db.query(func.sum(Sale.total_amount)).filter(func.date(Sale.sale_date) == today)
+    q = (
+        db.query(func.sum(Sale.total_amount))
+        .filter(func.date(Sale.sale_date) == today)
+        .filter(Sale.status == "completed")          # exclude refunded
+    )
     q = _branch_filter(q, Sale, user, _resolve_branch(user, branch_id))
     return {"date": today, "total_sales": q.scalar() or 0}
 
@@ -78,11 +82,17 @@ def top_products(
     q = (
         db.query(Product.product_name, func.sum(SaleItem.quantity).label("total_sold"))
         .join(SaleItem, Product.product_id == SaleItem.product_id)
-        .join(Sale,    Sale.sale_id    == SaleItem.sale_id)
+        .join(Sale,     Sale.sale_id       == SaleItem.sale_id)
         .filter(func.date(Sale.sale_date) == today)
+        .filter(Sale.status == "completed")          # exclude refunded
     )
     q = _branch_filter(q, Sale, user, _resolve_branch(user, branch_id))
-    results = q.group_by(Product.product_name).order_by(func.sum(SaleItem.quantity).desc()).limit(10).all()
+    results = (
+        q.group_by(Product.product_name)
+        .order_by(func.sum(SaleItem.quantity).desc())
+        .limit(10)
+        .all()
+    )
     return [{"product_name": r.product_name, "total_sold": r.total_sold} for r in results]
 
 
@@ -94,8 +104,14 @@ def sales_summary(
     user=Depends(require_role(["admin", "manager"]))
 ):
     resolved = _resolve_branch(user, branch_id)
-    q_sales = db.query(func.sum(Sale.total_amount))
-    q_txns  = db.query(func.count(Sale.sale_id))
+    q_sales = (
+        db.query(func.sum(Sale.total_amount))
+        .filter(Sale.status == "completed")          # exclude refunded
+    )
+    q_txns = (
+        db.query(func.count(Sale.sale_id))
+        .filter(Sale.status == "completed")          # exclude refunded
+    )
     q_sales = _branch_filter(q_sales, Sale, user, resolved)
     q_txns  = _branch_filter(q_txns,  Sale, user, resolved)
     return {
@@ -120,10 +136,18 @@ def sales_by_cashier(
         )
         .join(Sale, Sale.user_id == User.user_id)
         .filter(func.date(Sale.sale_date) == today)
+        .filter(Sale.status == "completed")          # exclude refunded
     )
     q = _branch_filter(q, Sale, user, _resolve_branch(user, branch_id))
-    results = q.group_by(User.full_name).order_by(func.sum(Sale.total_amount).desc()).all()
-    return [{"cashier": r.full_name, "transactions": r.transactions, "total_sales": r.total_sales or 0} for r in results]
+    results = (
+        q.group_by(User.full_name)
+        .order_by(func.sum(Sale.total_amount).desc())
+        .all()
+    )
+    return [
+        {"cashier": r.full_name, "transactions": r.transactions, "total_sales": r.total_sales or 0}
+        for r in results
+    ]
 
 
 # ── Profit ────────────────────────────────────────────────────────────────────
@@ -140,11 +164,14 @@ def profit_report(
         )
         .join(SaleItem, Product.product_id == SaleItem.product_id)
         .join(Sale,     Sale.sale_id       == SaleItem.sale_id)
+        .filter(Sale.status == "completed")          # exclude refunded
     )
     q = _branch_filter(q, Sale, user, _resolve_branch(user, branch_id))
-    results = q.group_by(Product.product_name).order_by(
-        func.sum((SaleItem.unit_price - Product.cost_price) * SaleItem.quantity).desc()
-    ).all()
+    results = (
+        q.group_by(Product.product_name)
+        .order_by(func.sum((SaleItem.unit_price - Product.cost_price) * SaleItem.quantity).desc())
+        .all()
+    )
     return [{"product_name": r.product_name, "profit": r.profit} for r in results]
 
 
@@ -206,17 +233,25 @@ def dashboard(
     today    = date.today()
     resolved = _resolve_branch(user, branch_id)
 
-    q_sales = db.query(func.sum(Sale.total_amount)).filter(func.date(Sale.sale_date) == today)
-    q_txns  = db.query(func.count(Sale.sale_id)).filter(func.date(Sale.sale_date) == today)
+    q_sales = (
+        db.query(func.sum(Sale.total_amount))
+        .filter(func.date(Sale.sale_date) == today)
+        .filter(Sale.status == "completed")          # exclude refunded
+    )
+    q_txns = (
+        db.query(func.count(Sale.sale_id))
+        .filter(func.date(Sale.sale_date) == today)
+        .filter(Sale.status == "completed")          # exclude refunded
+    )
     q_sales = _branch_filter(q_sales, Sale, user, resolved)
     q_txns  = _branch_filter(q_txns,  Sale, user, resolved)
 
     total_products = db.query(func.count(Product.product_id)).scalar()
 
     return {
-        "today_sales":             q_sales.scalar() or 0,
-        "total_transactions_today": q_txns.scalar() or 0,
-        "total_products":          total_products,
+        "today_sales":              q_sales.scalar() or 0,
+        "total_transactions_today": q_txns.scalar()  or 0,
+        "total_products":           total_products,
     }
 
 
@@ -233,14 +268,22 @@ def daily_dashboard(
     days, sales_data = [], []
     for i in range(6, -1, -1):
         day = today - timedelta(days=i)
-        q   = db.query(func.sum(Sale.total_amount)).filter(func.date(Sale.sale_date) == day)
-        q   = _branch_filter(q, Sale, user, resolved)
+        q   = (
+            db.query(func.sum(Sale.total_amount))
+            .filter(func.date(Sale.sale_date) == day)
+            .filter(Sale.status == "completed")      # exclude refunded
+        )
+        q = _branch_filter(q, Sale, user, resolved)
         days.append(day.strftime("%Y-%m-%d"))
         sales_data.append(float(q.scalar() or 0))
 
     total_sales = sales_data[-1]
 
-    q_txns = db.query(func.count(Sale.sale_id)).filter(func.date(Sale.sale_date) == today)
+    q_txns = (
+        db.query(func.count(Sale.sale_id))
+        .filter(func.date(Sale.sale_date) == today)
+        .filter(Sale.status == "completed")          # exclude refunded
+    )
     q_txns = _branch_filter(q_txns, Sale, user, resolved)
 
     q_profit = (
@@ -248,6 +291,7 @@ def daily_dashboard(
         .join(Product, Product.product_id == SaleItem.product_id)
         .join(Sale,    Sale.sale_id       == SaleItem.sale_id)
         .filter(func.date(Sale.sale_date) == today)
+        .filter(Sale.status == "completed")          # exclude refunded
     )
     q_profit = _branch_filter(q_profit, Sale, user, resolved)
 
@@ -276,7 +320,11 @@ def get_low_stock(
     resolved = _resolve_branch(user, branch_id)
 
     q = (
-        db.query(Product.product_name, models.BranchInventory.stock_quantity, models.BranchInventory.reorder_level)
+        db.query(
+            Product.product_name,
+            models.BranchInventory.stock_quantity,
+            models.BranchInventory.reorder_level,
+        )
         .join(models.BranchInventory, Product.product_id == models.BranchInventory.product_id)
         .filter(models.BranchInventory.stock_quantity <= threshold)
     )
@@ -293,36 +341,68 @@ def get_low_stock(
     results = q.order_by(models.BranchInventory.stock_quantity.asc()).all()
     return {
         "low_stock_items": [
-            {"product_name": r.product_name, "stock_quantity": r.stock_quantity, "reorder_level": r.reorder_level}
+            {
+                "product_name":   r.product_name,
+                "stock_quantity": r.stock_quantity,
+                "reorder_level":  r.reorder_level,
+            }
             for r in results
         ]
     }
 
 
-# ── Sales summary / volume (kept for completeness) ────────────────────────────
+# ── Sales volume ──────────────────────────────────────────────────────────────
 @router.get("/sales-volume")
-def sales_volume(db: Session = Depends(get_db), user=Depends(require_role(["admin", "manager"]))):
-    return {"items_sold": db.query(func.sum(SaleItem.quantity)).scalar() or 0}
+def sales_volume(
+    db: Session = Depends(get_db),
+    user=Depends(require_role(["admin", "manager"]))
+):
+    return {
+        "items_sold": (
+            db.query(func.sum(SaleItem.quantity))
+            .join(Sale, Sale.sale_id == SaleItem.sale_id)
+            .filter(Sale.status == "completed")      # exclude refunded
+            .scalar() or 0
+        )
+    }
 
+
+# ── Inventory value ───────────────────────────────────────────────────────────
 @router.get("/inventory-value")
 def inventory_value(db: Session = Depends(get_db)):
-    value = db.query(func.sum(Product.cost_price * models.BranchInventory.stock_quantity))\
-              .join(models.BranchInventory, Product.product_id == models.BranchInventory.product_id).scalar()
+    value = (
+        db.query(func.sum(Product.cost_price * models.BranchInventory.stock_quantity))
+        .join(models.BranchInventory, Product.product_id == models.BranchInventory.product_id)
+        .scalar()
+    )
     return {"total_inventory_value": value or 0}
 
-@router.get("/inventory-history")
-def inventory_history(db: Session = Depends(get_db), user=Depends(require_role(["admin", "manager"]))):
-    movements = (
-        db.query(Product.product_name, models.InventoryMovement.movement_type,
-                 models.InventoryMovement.quantity, models.InventoryMovement.reference_id,
-                 models.InventoryMovement.movement_date)
-        .join(models.InventoryMovement, Product.product_id == models.InventoryMovement.product_id)
-        .order_by(models.InventoryMovement.movement_date.desc()).all()
-    )
-    return [{"product": m.product_name, "movement_type": m.movement_type,
-             "quantity": m.quantity, "reference_id": m.reference_id, "date": m.movement_date}
-            for m in movements]
 
-@router.get("/stock-valuation")
-def stock_valuation_old(db: Session = Depends(get_db), user=Depends(require_role(["admin","manager"]))):
-    pass  # replaced above
+# ── Inventory history ─────────────────────────────────────────────────────────
+@router.get("/inventory-history")
+def inventory_history(
+    db: Session = Depends(get_db),
+    user=Depends(require_role(["admin", "manager"]))
+):
+    movements = (
+        db.query(
+            Product.product_name,
+            models.InventoryMovement.movement_type,
+            models.InventoryMovement.quantity,
+            models.InventoryMovement.reference_id,
+            models.InventoryMovement.movement_date,
+        )
+        .join(models.InventoryMovement, Product.product_id == models.InventoryMovement.product_id)
+        .order_by(models.InventoryMovement.movement_date.desc())
+        .all()
+    )
+    return [
+        {
+            "product":       m.product_name,
+            "movement_type": m.movement_type,
+            "quantity":      m.quantity,
+            "reference_id":  m.reference_id,
+            "date":          m.movement_date,
+        }
+        for m in movements
+    ]
