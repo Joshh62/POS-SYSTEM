@@ -14,6 +14,14 @@ from app.utils.plans import get_plan_limits, is_user_limit_reached
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
 
+def _count_business_users(db: Session, business_id: int) -> int:
+    """Count all active users in a business including admin/owner."""
+    return db.query(func.count(User.user_id)).filter(
+        User.business_id == business_id,
+        User.is_active   == True,
+    ).scalar() or 0
+
+
 # ── List users ────────────────────────────────────────────────────────────────
 @router.get("/users")
 def list_users(
@@ -33,31 +41,27 @@ def plan_info(
     current_user=Depends(require_role(["admin"]))
 ):
     """
-    Returns the current plan, user limit, and how many staff are used.
-    Used by the frontend to disable the New User button when limit is reached.
+    Returns the current plan, user limit, and how many users are active.
+    Counts ALL users including admin/owner toward the limit.
     Superadmin is not subject to plan limits.
     """
     if current_user.role == SUPERADMIN_ROLE:
         return {
-            "plan":        "enterprise",
-            "max_users":   -1,
-            "used_users":  0,
-            "at_limit":    False,
+            "plan":       "enterprise",
+            "max_users":  -1,
+            "used_users": 0,
+            "at_limit":   False,
         }
 
     business = db.query(Business).filter(
         Business.business_id == current_user.business_id
     ).first()
 
-    plan = business.plan if business else "starter"
+    plan   = business.plan if business else "starter"
     limits = get_plan_limits(plan)
 
-    # Count active staff (everyone except the admin owner)
-    used_users = db.query(func.count(User.user_id)).filter(
-        User.business_id == current_user.business_id,
-        User.is_active   == True,
-        User.role        != "admin",        # admin/owner does not count toward staff limit
-    ).scalar() or 0
+    # Count ALL active users in this business including admin
+    used_users = _count_business_users(db, current_user.business_id)
 
     return {
         "plan":       plan,
@@ -90,21 +94,17 @@ def register(
 
         plan = business.plan if business else "starter"
 
-        # Count current active staff (admins don't count toward staff limit)
-        current_staff = db.query(func.count(User.user_id)).filter(
-            User.business_id == current_user.business_id,
-            User.is_active   == True,
-            User.role        != "admin",
-        ).scalar() or 0
+        # Count ALL active users including admin
+        current_count = _count_business_users(db, current_user.business_id)
 
-        if is_user_limit_reached(plan, current_staff):
+        if is_user_limit_reached(plan, current_count):
             limits = get_plan_limits(plan)
             raise HTTPException(
                 status_code=403,
                 detail=(
-                    f"Staff account limit reached for your {plan.title()} plan "
-                    f"({limits['max_users']} staff allowed). "
-                    f"Upgrade your plan to add more staff."
+                    f"User limit reached for your {plan.title()} plan "
+                    f"({limits['max_users']} users allowed). "
+                    f"Upgrade your plan to add more users."
                 )
             )
 
