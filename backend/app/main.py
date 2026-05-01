@@ -9,7 +9,7 @@ from app.database import get_db
 
 from app.routers import businesses
 
-
+from app.routers import admin_tools  # add after businesses import
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -56,6 +56,7 @@ app.include_router(reports.router)
 app.include_router(suppliers.router)
 app.include_router(purchases.router)
 app.include_router(businesses.router)
+app.include_router(admin_tools.router)  # add after businesses router
 
 
 @app.get("/health", tags=["System"])
