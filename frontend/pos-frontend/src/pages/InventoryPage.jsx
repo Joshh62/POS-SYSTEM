@@ -298,7 +298,7 @@ export default function InventoryPage() {
         </>
       )}
 
-      {/* Restock modal */}
+      {/* ── Restock modal ── */}
       {restocking && (
         <div style={overlayStyle}>
           <div style={modalStyle}>
@@ -377,7 +377,7 @@ export default function InventoryPage() {
         </div>
       )}
 
-      {/* Inventory settings modal */}
+      {/* ── Inventory settings modal ── */}
       {editingReorder && (
         <div style={overlayStyle}>
           <div style={modalStyle}>
@@ -447,10 +447,10 @@ export default function InventoryPage() {
         </div>
       )}
 
-      {/* Batch modal */}
+      {/* ── Batch modal ── */}
       {viewingBatches && (
         <div style={overlayStyle}>
-          <div style={{ ...modalStyle, width: 500 }}>
+          <div style={{ ...modalStyle, width: 520 }}>
             <div style={modalHeader}>
               <h2 style={modalTitle}>
                 Batches — {products[viewingBatches.product_id]?.product_name || `#${viewingBatches.product_id}`}
@@ -465,12 +465,12 @@ export default function InventoryPage() {
                 No batch records found. Batches are created when you restock.
               </div>
             ) : (
-              <div style={tableWrapper}>
-                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+              <div style={batchTableWrapper}>
+                <table style={{ width: "100%", borderCollapse: "collapse" }}>
                   <thead>
-                    <tr style={{ borderBottom: "1px solid var(--color-border-tertiary)" }}>
+                    <tr style={{ borderBottom: "1px solid #2a3247" }}>
                       {["Qty", "Received", "Expiry", "Status", "Notes"].map(h => (
-                        <th key={h} style={thStyle}>{h}</th>
+                        <th key={h} style={batchThStyle}>{h}</th>
                       ))}
                     </tr>
                   </thead>
@@ -482,25 +482,25 @@ export default function InventoryPage() {
                             color: b.status === "expired" ? "#A32D2D" : b.status === "expiring_soon" ? "#854F0B" : "#3B6D11",
                             label: b.status === "expired" ? "Expired" : b.status === "expiring_soon" ? `${b.days_left}d left` : "OK",
                           }
-                        : { bg: "#F1EFE8", color: "#5F5E5A", label: "No expiry" };
+                        : { bg: "#252e40", color: "#8a93a6", label: "No expiry" };
                       return (
-                        <tr key={b.batch_id} style={{ borderBottom: "1px solid var(--color-border-tertiary)" }}>
-                          <td style={tdStyle}>{b.quantity}</td>
-                          <td style={tdStyle}>{b.received_date}</td>
-                          <td style={tdStyle}>{b.expiry_date || "—"}</td>
-                          <td style={tdStyle}>
+                        <tr key={b.batch_id} style={{ borderBottom: "1px solid #2a3247" }}>
+                          <td style={batchTdStyle}>{b.quantity}</td>
+                          <td style={batchTdStyle}>{b.received_date}</td>
+                          <td style={{ ...batchTdStyle, color: "#8a93a6" }}>{b.expiry_date || "—"}</td>
+                          <td style={batchTdStyle}>
                             <span style={{
                               fontSize: 11,
                               fontWeight: 500,
-                              padding: "2px 8px",
-                              borderRadius: 8,
+                              padding: "3px 10px",
+                              borderRadius: 10,
                               background: eb.bg,
                               color: eb.color,
                             }}>
                               {eb.label}
                             </span>
                           </td>
-                          <td style={{ ...tdStyle, color: "var(--color-text-secondary)", fontSize: 11 }}>
+                          <td style={{ ...batchTdStyle, color: "#8a93a6", fontSize: 12 }}>
                             {b.notes || "—"}
                           </td>
                         </tr>
@@ -511,7 +511,9 @@ export default function InventoryPage() {
               </div>
             )}
 
-            <button onClick={closeAll} style={{ ...cancelBtn, width: "100%", marginTop: 14 }}>Close</button>
+            <div style={{ marginTop: 16 }}>
+              <button onClick={closeAll} style={cancelBtn}>Close</button>
+            </div>
           </div>
         </div>
       )}
@@ -616,7 +618,7 @@ const primaryBtn = {
 };
 
 const cancelBtn = {
-  padding: "10px 0",
+  padding: "10px 16px",
   borderRadius: 8,
   border: "1px solid #3a4255",
   background: "none",
@@ -744,6 +746,14 @@ const tableWrapper = {
   overflow: "hidden",
 };
 
+// Batch table uses dark theme to match the modal background
+const batchTableWrapper = {
+  background: "#1a2133",
+  border: "1px solid #2a3247",
+  borderRadius: 10,
+  overflow: "hidden",
+};
+
 const thStyle = {
   padding: "9px 14px",
   textAlign: "left",
@@ -754,10 +764,28 @@ const thStyle = {
   letterSpacing: "0.05em",
 };
 
+// Batch modal column headers - muted to match the dark modal
+const batchThStyle = {
+  padding: "9px 14px",
+  textAlign: "left",
+  fontSize: 11,
+  fontWeight: 500,
+  color: "#5a6475",
+  textTransform: "uppercase",
+  letterSpacing: "0.05em",
+};
+
 const tdStyle = {
   padding: "11px 14px",
   fontSize: 13,
   color: "var(--color-text-primary)",
+};
+
+// Batch modal rows use lighter text on dark background
+const batchTdStyle = {
+  padding: "11px 14px",
+  fontSize: 13,
+  color: "#c0c7d4",
 };
 
 const emptyTd = {
