@@ -35,8 +35,7 @@ def run_migrations_online() -> None:
     if cmd_line_url:
         final_url = cmd_line_url.replace("postgresql://", "postgresql+psycopg2://")
     else:
-        # Your specific Neon URL
-        final_url = "postgresql+psycopg2://neondb_owner:npg_9LqTbOBDNVn1@ep-royal-waterfall-an6casv3-pooler.c-6.us-east-1.aws.neon.tech/neondb?sslmode=require"
+        raise Exception("[Alembic] DATABASE_URL not set. Never run alembic locally without setting DATABASE_URL in .env")
 
     connectable = engine_from_config(
         config.get_section(config.config_ini_section, {}),
