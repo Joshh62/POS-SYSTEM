@@ -1,11 +1,14 @@
 import { useState, useEffect } from "react";
 import api from "../api/api";
+import { getPlanInfo } from "../api/api";
 
 export default function UsersPage() {
   const [users, setUsers]       = useState([]);
   const [loading, setLoading]   = useState(true);
   const [error, setError]       = useState(null);
   const [showForm, setShowForm] = useState(false);
+
+  const [planInfo, setPlanInfo] = useState(null);   // { plan, max_users, used_users, at_limit }
 
   const currentUser = JSON.parse(localStorage.getItem("user") || "{}");
 
@@ -27,7 +30,19 @@ export default function UsersPage() {
     }
   };
 
-  useEffect(() => { fetchUsers(); }, []);
+  const fetchPlanInfo = async () => {
+    try {
+      const info = await getPlanInfo();
+      setPlanInfo(info);
+    } catch {
+      // non-critical — fail silently, button stays enabled
+    }
+  };
+
+  useEffect(() => {
+    fetchUsers();
+    fetchPlanInfo();
+  }, []);
 
   const handleCreate = async () => {
     if (!form.full_name || !form.username || !form.password) {
@@ -49,6 +64,7 @@ export default function UsersPage() {
       setFormSuccess(`User "${form.username}" created successfully.`);
       setForm({ full_name: "", username: "", password: "", role: "cashier" });
       fetchUsers();
+      fetchPlanInfo();   // refresh plan usage count after creating a user
     } catch (err) {
       setFormError(err.response?.data?.detail || "Failed to create user.");
     } finally {
@@ -61,6 +77,7 @@ export default function UsersPage() {
     try {
       await api.patch(`/auth/users/${userId}/deactivate`);
       fetchUsers();
+      fetchPlanInfo();
     } catch {
       alert("Failed to deactivate user.");
     }
@@ -71,6 +88,7 @@ export default function UsersPage() {
     try {
       await api.patch(`/auth/users/${userId}/activate`);
       fetchUsers();
+      fetchPlanInfo();
     } catch {
       alert("Failed to activate user.");
     }
@@ -83,11 +101,64 @@ export default function UsersPage() {
     setFormSuccess(null);
   };
 
+  const atLimit    = planInfo?.at_limit ?? false;
+  const planLabel  = planInfo?.plan
+    ? planInfo.plan.charAt(0).toUpperCase() + planInfo.plan.slice(1)
+    : null;
+  const maxUsers   = planInfo?.max_users ?? null;
+  const usedUsers  = planInfo?.used_users ?? null;
+
   return (
     <div style={{ padding: "16px 24px", overflowY: "auto", height: "100%", boxSizing: "border-box" }}>
 
-      <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 16 }}>
-        <button onClick={() => setShowForm(true)} style={primaryBtn}>+ New user</button>
+      {/* Header row */}
+      <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 12, marginBottom: 16 }}>
+
+        {/* Plan usage pill */}
+        {planInfo && maxUsers !== -1 && (
+          <span style={{
+            fontSize: 12,
+            padding: "4px 10px",
+            borderRadius: 20,
+            fontWeight: 500,
+            background: atLimit ? "#FCEBEB" : "#EAF3DE",
+            color:      atLimit ? "#A32D2D" : "#3B6D11",
+          }}>
+            {planLabel} plan · {usedUsers}/{maxUsers} staff used
+          </span>
+        )}
+
+        {/* Unlimited plan pill */}
+        {planInfo && maxUsers === -1 && (
+          <span style={{
+            fontSize: 12,
+            padding: "4px 10px",
+            borderRadius: 20,
+            fontWeight: 500,
+            background: "#EAF3DE",
+            color: "#3B6D11",
+          }}>
+            {planLabel} plan · Unlimited staff
+          </span>
+        )}
+
+        {/* New user button OR limit reached message */}
+        {atLimit ? (
+          <div style={{
+            fontSize: 12,
+            padding: "7px 14px",
+            borderRadius: 8,
+            background: "#FAEEDA",
+            color: "#854F0B",
+            fontWeight: 500,
+            border: "1px solid #EF9F27",
+          }}>
+            Staff limit reached — upgrade to {planLabel === "Starter" ? "Business" : "a higher"} plan to add more
+          </div>
+        ) : (
+          <button onClick={() => setShowForm(true)} style={primaryBtn}>+ New user</button>
+        )}
+
       </div>
 
       {error && <div style={errorBox}>{error}</div>}
@@ -274,7 +345,6 @@ export default function UsersPage() {
 }
 
 // ── Field wrapper component ────────────────────────────────────────────────────
-
 function Field({ label, children }) {
   return (
     <div>
