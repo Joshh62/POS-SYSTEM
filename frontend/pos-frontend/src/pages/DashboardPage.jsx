@@ -17,7 +17,7 @@ export default function DashboardPage() {
           getDailyDashboard(),
           getTopProducts(),
           getSalesByCashier(),
-          getLowStock(5),  // ✅ threshold=5 matches default reorder level
+          getLowStock(5),
         ]);
         setDaily(d);
         setTopProducts(Array.isArray(tp) ? tp : tp?.data ?? []);
@@ -40,23 +40,32 @@ export default function DashboardPage() {
 
   return (
     <PageShell>
-      {/* ── KPI row ── */}
+
+      {/* KPI row */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 12 }}>
-        <KPICard label="Today's sales"
+        <KPICard
+          label="Today's sales"
           value={`₦${Number(daily?.summary?.total_sales || 0).toLocaleString("en-NG", { minimumFractionDigits: 2 })}`}
-          icon="💰" tone="primary" />
-        <KPICard label="Transactions today"
+          icon="💰" tone="primary"
+        />
+        <KPICard
+          label="Transactions today"
           value={daily?.summary?.total_transactions || 0}
-          icon="🧾" tone="success" />
-        <KPICard label="Today's profit"
+          icon="🧾" tone="success"
+        />
+        <KPICard
+          label="Today's profit"
           value={`₦${Number(daily?.summary?.total_profit || 0).toLocaleString("en-NG", { minimumFractionDigits: 2 })}`}
-          icon="📈" tone="success" />
-        <KPICard label="Low stock items"
+          icon="📈" tone="success"
+        />
+        <KPICard
+          label="Low stock items"
           value={lowStock.length}
-          icon="⚠️" tone={lowStock.length > 0 ? "warning" : "success"} />
+          icon="⚠️" tone={lowStock.length > 0 ? "warning" : "success"}
+        />
       </div>
 
-      {/* ── Sales trend chart ── */}
+      {/* Sales trend chart */}
       {chartLabels.length > 0 && (
         <div style={{ ...card, marginTop: 14 }}>
           <div style={cardTitle}>7-day sales trend (₦)</div>
@@ -64,7 +73,7 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* ── Bottom row — 2 columns: left wider, right narrower ── */}
+      {/* Bottom row — 2 columns */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginTop: 14 }}>
 
         {/* Left column — top products + cashier stacked */}
@@ -117,15 +126,24 @@ export default function DashboardPage() {
               const critical = item.stock_quantity <= 3;
               return (
                 <div key={i} style={row}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+                    <span style={rankBadge}>{i + 1}</span>
+                    <span style={{
+                      ...rowLabel,
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                    }}>
+                      {item.product_name}
+                    </span>
+                  </div>
                   <span style={{
-                    ...rowLabel,
-                    overflow: "hidden", textOverflow: "ellipsis",
-                    whiteSpace: "nowrap", marginRight: 8, maxWidth: "70%",
-                  }}>
-                    {item.product_name}
-                  </span>
-                  <span style={{
-                    fontSize: 12, fontWeight: 600, padding: "2px 8px", borderRadius: 10, flexShrink: 0,
+                    fontSize: 12,
+                    fontWeight: 600,
+                    padding: "2px 8px",
+                    borderRadius: 10,
+                    flexShrink: 0,
+                    marginLeft: 8,
                     background: critical ? "#FCEBEB" : "#FAEEDA",
                     color:      critical ? "#A32D2D" : "#854F0B",
                   }}>
@@ -142,7 +160,7 @@ export default function DashboardPage() {
   );
 }
 
-// ── Sales bar chart ───────────────────────────────────────────────────────────
+// ── Sales bar chart ────────────────────────────────────────────────────────────
 function SalesChart({ labels, data }) {
   const max = Math.max(...data, 1);
 
@@ -153,8 +171,8 @@ function SalesChart({ labels, data }) {
   };
 
   const fmt = (v) => {
-    if (v >= 1_000_000) return `₦${(v/1_000_000).toFixed(1)}M`;
-    if (v >= 1_000)     return `₦${(v/1_000).toFixed(0)}k`;
+    if (v >= 1_000_000) return `₦${(v / 1_000_000).toFixed(1)}M`;
+    if (v >= 1_000)     return `₦${(v / 1_000).toFixed(0)}k`;
     return v > 0 ? `₦${v}` : "";
   };
 
@@ -164,13 +182,20 @@ function SalesChart({ labels, data }) {
         const val    = data[i] ?? 0;
         const pct    = max > 0 ? (val / max) * 100 : 0;
         const isLast = i === labels.length - 1;
-        const barH   = Math.max(pct * 1.2, val > 0 ? 8 : 3); // min 8px if has value
+        const barH   = Math.max(pct * 1.2, val > 0 ? 8 : 3);
 
         return (
-          <div key={i} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 4, height: "100%", justifyContent: "flex-end" }}>
-            {/* Value label above bar */}
+          <div
+            key={i}
+            style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 4, height: "100%", justifyContent: "flex-end" }}
+          >
             {val > 0 && (
-              <span style={{ fontSize: 9, color: isLast ? "#185FA5" : "var(--color-text-secondary)", fontWeight: isLast ? 600 : 400, whiteSpace: "nowrap" }}>
+              <span style={{
+                fontSize: 9,
+                color: isLast ? "#185FA5" : "var(--color-text-secondary)",
+                fontWeight: isLast ? 600 : 400,
+                whiteSpace: "nowrap",
+              }}>
                 {fmt(val)}
               </span>
             )}
@@ -186,7 +211,12 @@ function SalesChart({ labels, data }) {
                 minHeight: 3,
               }}
             />
-            <span style={{ fontSize: 10, color: isLast ? "#185FA5" : "var(--color-text-secondary)", fontWeight: isLast ? 600 : 400, whiteSpace: "nowrap" }}>
+            <span style={{
+              fontSize: 10,
+              color: isLast ? "#185FA5" : "var(--color-text-secondary)",
+              fontWeight: isLast ? 600 : 400,
+              whiteSpace: "nowrap",
+            }}>
               {shortLabel(lbl)}
             </span>
           </div>
@@ -196,7 +226,7 @@ function SalesChart({ labels, data }) {
   );
 }
 
-// ── Sub-components ────────────────────────────────────────────────────────────
+// ── Sub-components ─────────────────────────────────────────────────────────────
 function PageShell({ children }) {
   return (
     <div style={{ padding: "16px 24px 24px", overflowY: "auto", height: "100%", boxSizing: "border-box" }}>
@@ -213,7 +243,15 @@ function KPICard({ label, value, icon, tone = "primary" }) {
   };
   const t = tones[tone];
   return (
-    <div style={{ background: "var(--color-background-primary)", border: "1px solid var(--color-border-tertiary)", borderRadius: 12, padding: "16px 18px", display: "flex", flexDirection: "column", gap: 8 }}>
+    <div style={{
+      background: "var(--color-background-primary)",
+      border: "1px solid var(--color-border-tertiary)",
+      borderRadius: 12,
+      padding: "16px 18px",
+      display: "flex",
+      flexDirection: "column",
+      gap: 8,
+    }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <span style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>{label}</span>
         <span style={{ fontSize: 16, background: t.bg, borderRadius: 8, padding: "4px 6px" }}>{icon}</span>
@@ -241,17 +279,66 @@ function Empty({ text, icon = "📭" }) {
   );
 }
 
-// ── Styles ────────────────────────────────────────────────────────────────────
+// ── Styles ─────────────────────────────────────────────────────────────────────
 const card = {
   background: "var(--color-background-primary)",
   border: "1px solid var(--color-border-tertiary)",
-  borderRadius: 12, padding: "16px 18px",
-  display: "flex", flexDirection: "column", gap: 8,
+  borderRadius: 12,
+  padding: "16px 18px",
+  display: "flex",
+  flexDirection: "column",
+  gap: 8,
 };
-const cardTitle = { fontSize: 13, fontWeight: 600, color: "var(--color-text-primary)", marginBottom: 2 };
-const row       = { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "7px 0", borderBottom: "1px solid var(--color-border-tertiary)" };
-const rowLabel  = { fontSize: 13, color: "var(--color-text-primary)" };
-const rowValue  = { fontSize: 13, fontWeight: 500, color: "var(--color-text-primary)" };
-const rankBadge = { fontSize: 10, fontWeight: 600, background: "rgba(24,95,165,0.1)", color: "#185FA5", borderRadius: 10, padding: "2px 7px", minWidth: 20, textAlign: "center", flexShrink: 0 };
-const centreMsg = { textAlign: "center", padding: 60, color: "var(--color-text-secondary)", fontSize: 13 };
-const errorBox  = { background: "#FCEBEB", color: "#A32D2D", borderRadius: 10, padding: "12px 16px", fontSize: 13 };
+
+const cardTitle = {
+  fontSize: 13,
+  fontWeight: 600,
+  color: "var(--color-text-primary)",
+  marginBottom: 2,
+};
+
+const row = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  padding: "7px 0",
+  borderBottom: "1px solid var(--color-border-tertiary)",
+};
+
+const rowLabel = {
+  fontSize: 13,
+  color: "var(--color-text-primary)",
+};
+
+const rowValue = {
+  fontSize: 13,
+  fontWeight: 500,
+  color: "var(--color-text-primary)",
+};
+
+const rankBadge = {
+  fontSize: 10,
+  fontWeight: 600,
+  background: "rgba(24,95,165,0.1)",
+  color: "#185FA5",
+  borderRadius: 10,
+  padding: "2px 7px",
+  minWidth: 20,
+  textAlign: "center",
+  flexShrink: 0,
+};
+
+const centreMsg = {
+  textAlign: "center",
+  padding: 60,
+  color: "var(--color-text-secondary)",
+  fontSize: 13,
+};
+
+const errorBox = {
+  background: "#FCEBEB",
+  color: "#A32D2D",
+  borderRadius: 10,
+  padding: "12px 16px",
+  fontSize: 13,
+};
