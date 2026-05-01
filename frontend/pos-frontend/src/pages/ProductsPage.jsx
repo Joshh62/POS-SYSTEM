@@ -33,7 +33,7 @@ export default function ProductsPage() {
   const [formLoading, setFormLoading] = useState(false);
   const [formError, setFormError]     = useState(null);
 
-  const [scanMsg, setScanMsg]         = useState(null);
+  const [scanMsg, setScanMsg] = useState(null);
 
   const LIMIT = 20;
 
@@ -112,10 +112,10 @@ export default function ProductsPage() {
     try {
       const payload = {
         ...form,
-        category_id:    form.category_id   ? parseInt(form.category_id)  : null,
-        cost_price:     parseFloat(form.cost_price    || 0),
+        category_id:    form.category_id  ? parseInt(form.category_id) : null,
+        cost_price:     parseFloat(form.cost_price   || 0),
         selling_price:  parseFloat(form.selling_price),
-        stock_quantity: parseInt(form.stock_quantity  || 0),
+        stock_quantity: parseInt(form.stock_quantity || 0),
       };
       if (editing) await updateProduct(editing.product_id, payload);
       else         await createProduct(payload);
@@ -147,15 +147,18 @@ export default function ProductsPage() {
           placeholder="Search products..."
           value={searchInput}
           onChange={e => setSearchInput(e.target.value)}
-          style={{ ...inputStyle, flex: 1 }}
+          style={{ ...inputStyle, flex: 1, marginTop: 0 }}
         />
         <button onClick={openCreate} style={primaryBtn}>+ Add product</button>
       </div>
 
       {scanMsg && (
         <div style={{
-          padding: "8px 14px", borderRadius: 8, marginBottom: 12,
-          fontSize: 13, fontWeight: 500,
+          padding: "8px 14px",
+          borderRadius: 8,
+          marginBottom: 12,
+          fontSize: 13,
+          fontWeight: 500,
           background: scanMsg.type === "success" ? "#EAF3DE" : "#FCEBEB",
           color:      scanMsg.type === "success" ? "#3B6D11" : "#A32D2D",
         }}>
@@ -171,7 +174,7 @@ export default function ProductsPage() {
           <thead>
             <tr style={{ borderBottom: "1px solid var(--color-border-tertiary)" }}>
               {["Product", "Barcode", "Category", "Cost price", "Selling price", ""].map(h => (
-                <th key={h} style={th}>{h}</th>
+                <th key={h} style={thStyle}>{h}</th>
               ))}
             </tr>
           </thead>
@@ -182,14 +185,14 @@ export default function ProductsPage() {
               <tr><td colSpan={6} style={emptyTd}>No products found.</td></tr>
             ) : products.map(p => (
               <tr key={p.product_id} style={{ borderBottom: "1px solid var(--color-border-tertiary)" }}>
-                <td style={td}>{p.product_name}</td>
-                <td style={{ ...td, color: "var(--color-text-secondary)" }}>{p.barcode}</td>
-                <td style={td}>{categoryMap[p.category_id] || "—"}</td>
-                <td style={td}>₦{parseFloat(p.cost_price || 0).toLocaleString("en-NG")}</td>
-                <td style={{ ...td, fontWeight: 500 }}>
+                <td style={tdStyle}>{p.product_name}</td>
+                <td style={{ ...tdStyle, color: "var(--color-text-secondary)" }}>{p.barcode}</td>
+                <td style={tdStyle}>{categoryMap[p.category_id] || "—"}</td>
+                <td style={tdStyle}>₦{parseFloat(p.cost_price || 0).toLocaleString("en-NG")}</td>
+                <td style={{ ...tdStyle, fontWeight: 500 }}>
                   ₦{parseFloat(p.selling_price || 0).toLocaleString("en-NG")}
                 </td>
-                <td style={{ ...td, textAlign: "right" }}>
+                <td style={{ ...tdStyle, textAlign: "right" }}>
                   <button onClick={() => openEdit(p)} style={editBtn}>Edit</button>
                 </td>
               </tr>
@@ -201,18 +204,33 @@ export default function ProductsPage() {
       {/* Pagination */}
       {totalPages > 1 && (
         <div style={{ display: "flex", justifyContent: "center", gap: 8, marginTop: 14 }}>
-          <button onClick={() => setPage(p => Math.max(1, p - 1))} style={pageBtn(page === 1)} disabled={page === 1}>← Prev</button>
-          <span style={{ fontSize: 12, color: "var(--color-text-secondary)", alignSelf: "center" }}>{page} / {totalPages}</span>
-          <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} style={pageBtn(page === totalPages)} disabled={page === totalPages}>Next →</button>
+          <button
+            onClick={() => setPage(p => Math.max(1, p - 1))}
+            style={pageBtn(page === 1)}
+            disabled={page === 1}
+          >
+            ← Prev
+          </button>
+          <span style={{ fontSize: 12, color: "var(--color-text-secondary)", alignSelf: "center" }}>
+            {page} / {totalPages}
+          </span>
+          <button
+            onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+            style={pageBtn(page === totalPages)}
+            disabled={page === totalPages}
+          >
+            Next →
+          </button>
         </div>
       )}
 
-      {/* ── Add / Edit Modal ── */}
+      {/* Add / Edit Modal */}
       {showForm && (
         <div style={overlayStyle}>
           <div style={modalStyle}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18 }}>
-              <h2 style={{ fontSize: 15, fontWeight: 600, margin: 0 }}>
+
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+              <h2 style={modalTitle}>
                 {editing ? "Edit product" : "Add product"}
               </h2>
               <button onClick={() => setShowForm(false)} style={closeBtn}>×</button>
@@ -220,19 +238,24 @@ export default function ProductsPage() {
 
             {formError && <div style={errorBox}>{formError}</div>}
 
-            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-              <label style={labelStyle}>
-                Product name *
+            <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+
+              <div>
+                <label style={labelStyle}>
+                  Product name <span style={starStyle}>*</span>
+                </label>
                 <input placeholder="e.g. Indomie Noodles" {...field("product_name")} />
-              </label>
+              </div>
 
-              <label style={labelStyle}>
-                Barcode *
+              <div>
+                <label style={labelStyle}>
+                  Barcode <span style={starStyle}>*</span>
+                </label>
                 <input placeholder="e.g. 0404" {...field("barcode")} />
-              </label>
+              </div>
 
-              <label style={labelStyle}>
-                Category
+              <div>
+                <label style={labelStyle}>Category</label>
                 <select
                   value={form.category_id}
                   onChange={e => setForm(f => ({ ...f, category_id: e.target.value }))}
@@ -243,29 +266,31 @@ export default function ProductsPage() {
                     <option key={c.category_id} value={c.category_id}>{c.category_name}</option>
                   ))}
                 </select>
-              </label>
-
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-                <label style={labelStyle}>
-                  Cost price (₦)
-                  <input type="number" min="0" placeholder="0" {...field("cost_price")} />
-                </label>
-                <label style={labelStyle}>
-                  Selling price (₦) *
-                  <input type="number" min="0" placeholder="0" {...field("selling_price")} />
-                </label>
               </div>
 
-              {/* Stock quantity only shown when creating — editing uses Inventory page */}
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                <div>
+                  <label style={labelStyle}>Cost price (₦)</label>
+                  <input type="number" min="0" placeholder="0" {...field("cost_price")} />
+                </div>
+                <div>
+                  <label style={labelStyle}>
+                    Selling price (₦) <span style={starStyle}>*</span>
+                  </label>
+                  <input type="number" min="0" placeholder="0" {...field("selling_price")} />
+                </div>
+              </div>
+
               {!editing && (
-                <label style={labelStyle}>
-                  Initial stock quantity
+                <div>
+                  <label style={labelStyle}>Initial stock quantity</label>
                   <input type="number" min="0" placeholder="0" {...field("stock_quantity")} />
-                </label>
+                </div>
               )}
+
             </div>
 
-            <div style={{ display: "flex", gap: 8, marginTop: 20 }}>
+            <div style={{ display: "flex", gap: 8, marginTop: 22 }}>
               <button
                 onClick={() => setShowForm(false)}
                 style={{ ...cancelBtn, flex: 1 }}
@@ -281,29 +306,46 @@ export default function ProductsPage() {
                 {formLoading ? "Saving..." : editing ? "Save changes" : "Add product"}
               </button>
             </div>
+
           </div>
         </div>
       )}
+
     </div>
   );
 }
 
-// ── Styles ────────────────────────────────────────────────────────────────────
+// ── Styles ─────────────────────────────────────────────────────────────────────
+
 const inputStyle = {
+  display: "block",
   width: "100%",
-  padding: "7px 10px",
+  padding: "9px 11px",
   borderRadius: 7,
-  border: "1px solid var(--color-border-tertiary)",
+  border: "1.5px solid #3a4255",
   fontSize: 13,
-  background: "var(--color-background-secondary)",
-  color: "var(--color-text-primary)",
+  background: "#1e2535",
+  color: "#e8ecf2",
   boxSizing: "border-box",
-  marginTop: 4,
+  marginTop: 5,
+  outline: "none",
+  fontFamily: "inherit",
+};
+
+const labelStyle = {
+  fontSize: 12,
+  fontWeight: 500,
+  color: "#c0c7d4",
   display: "block",
 };
 
+const starStyle = {
+  color: "#E24B4A",
+  marginLeft: 2,
+};
+
 const primaryBtn = {
-  padding: "8px 16px",
+  padding: "9px 18px",
   borderRadius: 8,
   border: "none",
   background: "#185FA5",
@@ -315,11 +357,11 @@ const primaryBtn = {
 };
 
 const cancelBtn = {
-  padding: "8px 16px",
+  padding: "9px 18px",
   borderRadius: 8,
-  border: "1px solid var(--color-border-tertiary)",
+  border: "1px solid #3a4255",
   background: "none",
-  color: "var(--color-text-primary)",
+  color: "#c0c7d4",
   fontSize: 13,
   cursor: "pointer",
 };
@@ -335,50 +377,90 @@ const editBtn = {
   cursor: "pointer",
 };
 
-const pageBtn = (disabled) => ({
+const pageBtn = (isDisabled) => ({
   padding: "5px 12px",
   borderRadius: 6,
   border: "1px solid var(--color-border-tertiary)",
   background: "none",
   fontSize: 12,
-  cursor: disabled ? "default" : "pointer",
-  opacity: disabled ? 0.4 : 1,
+  cursor: isDisabled ? "default" : "pointer",
+  opacity: isDisabled ? 0.4 : 1,
   color: "var(--color-text-primary)",
 });
 
-const errorBox  = { background: "#FCEBEB", color: "#A32D2D", borderRadius: 8, padding: "9px 13px", fontSize: 13, marginBottom: 12 };
-const tableWrap = { background: "var(--color-background-primary)", border: "1px solid var(--color-border-tertiary)", borderRadius: 12, overflow: "hidden" };
-const th        = { padding: "9px 14px", textAlign: "left", fontSize: 11, fontWeight: 500, color: "var(--color-text-secondary)", textTransform: "uppercase", letterSpacing: "0.05em" };
-const td        = { padding: "11px 14px", fontSize: 13, color: "var(--color-text-primary)" };
-const emptyTd   = { textAlign: "center", padding: 32, color: "var(--color-text-tertiary)", fontSize: 13 };
+const errorBox = {
+  background: "#FCEBEB",
+  color: "#A32D2D",
+  borderRadius: 8,
+  padding: "9px 13px",
+  fontSize: 13,
+  marginBottom: 14,
+};
+
+const tableWrap = {
+  background: "var(--color-background-primary)",
+  border: "1px solid var(--color-border-tertiary)",
+  borderRadius: 12,
+  overflow: "hidden",
+};
+
+const thStyle = {
+  padding: "9px 14px",
+  textAlign: "left",
+  fontSize: 11,
+  fontWeight: 500,
+  color: "var(--color-text-secondary)",
+  textTransform: "uppercase",
+  letterSpacing: "0.05em",
+};
+
+const tdStyle = {
+  padding: "11px 14px",
+  fontSize: 13,
+  color: "var(--color-text-primary)",
+};
+
+const emptyTd = {
+  textAlign: "center",
+  padding: 32,
+  color: "var(--color-text-tertiary)",
+  fontSize: 13,
+};
 
 const overlayStyle = {
-  position: "fixed", inset: 0,
-  background: "rgba(0,0,0,0.5)",
-  display: "flex", alignItems: "center", justifyContent: "center",
+  position: "fixed",
+  inset: 0,
+  background: "rgba(0,0,0,0.6)",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
   zIndex: 999,
 };
 
 const modalStyle = {
-  background: "var(--color-background-primary)",
+  background: "#151b28",
   borderRadius: 14,
   padding: 24,
-  width: 420,
+  width: 440,
   maxHeight: "85vh",
   overflowY: "auto",
-  boxShadow: "0 8px 32px rgba(0,0,0,0.25)",
+  boxShadow: "0 8px 40px rgba(0,0,0,0.5)",
+  border: "1px solid #2a3247",
+};
+
+const modalTitle = {
+  fontSize: 16,
+  fontWeight: 600,
+  margin: 0,
+  color: "#e8ecf2",
 };
 
 const closeBtn = {
-  background: "none", border: "none",
-  fontSize: 22, cursor: "pointer",
-  color: "var(--color-text-secondary)",
-  lineHeight: 1, padding: 0,
-};
-
-const labelStyle = {
-  fontSize: 12,
-  fontWeight: 500,
-  color: "var(--color-text-secondary)",
-  display: "block",
+  background: "none",
+  border: "none",
+  fontSize: 22,
+  cursor: "pointer",
+  color: "#8a93a6",
+  lineHeight: 1,
+  padding: 0,
 };
