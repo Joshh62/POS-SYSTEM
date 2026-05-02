@@ -7,17 +7,31 @@ import {
 } from "../api/api";
 import { useBranch } from "../context/BranchContext";
 
-const TABS = ["Profit", "Stock valuation", "Sales summary", "Audit log"];
+const ALL_TABS       = ["Profit", "Stock valuation", "Sales summary", "Audit log"];
+const MANAGER_TABS   = ["Profit", "Stock valuation", "Sales summary"];  // no audit log
 
 export default function ReportsPage() {
   const { activeBranchId } = useBranch();
+
+  // Determine tabs based on role
+  const currentUser = JSON.parse(localStorage.getItem("user") || "{}");
+  const isAdmin     = ["admin", "superadmin"].includes(currentUser.role);
+  const TABS        = isAdmin ? ALL_TABS : MANAGER_TABS;
 
   const [activeTab, setActiveTab] = useState("Profit");
   const [data, setData]           = useState(null);
   const [loading, setLoading]     = useState(false);
   const [error, setError]         = useState(null);
 
+  // If active tab is no longer available for this role, reset to Profit
+  useEffect(() => {
+    if (!TABS.includes(activeTab)) setActiveTab("Profit");
+  }, []);
+
   const fetchTab = async (tab) => {
+    // Guard — never attempt to fetch audit log for non-admin
+    if (tab === "Audit log" && !isAdmin) return;
+
     setLoading(true);
     setError(null);
     setData(null);
@@ -36,13 +50,13 @@ export default function ReportsPage() {
     }
   };
 
-  // ✅ Re-fetch when tab OR active branch changes
+  // Re-fetch when tab OR active branch changes
   useEffect(() => { fetchTab(activeTab); }, [activeTab, activeBranchId]);
 
   // ── Normalise API shapes ──────────────────────────────────────────────────
-  const stockTotal    = data?.summary?.total_inventory_value ?? 0;
-  const stockProducts = data?.products ?? [];
-  const auditRows     = Array.isArray(data) ? data : (data?.logs ?? data?.data ?? []);
+  const stockTotal     = data?.summary?.total_inventory_value ?? 0;
+  const stockProducts  = data?.products ?? [];
+  const auditRows      = Array.isArray(data) ? data : (data?.logs ?? data?.data ?? []);
   const summaryRevenue = data?.total_sales    ?? data?.total_revenue     ?? 0;
   const summaryTxns    = data?.transactions   ?? data?.total_transactions ?? 0;
 
@@ -146,13 +160,17 @@ export default function ReportsPage() {
       {/* ── Sales summary ── */}
       {!loading && activeTab === "Sales summary" && data && (
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, maxWidth: 500 }}>
-          <StatCard label="Total revenue" value={`₦${parseFloat(summaryRevenue).toLocaleString("en-NG", { minimumFractionDigits: 2 })}`} color="#185FA5" />
+          <StatCard
+            label="Total revenue"
+            value={`₦${parseFloat(summaryRevenue).toLocaleString("en-NG", { minimumFractionDigits: 2 })}`}
+            color="#185FA5"
+          />
           <StatCard label="Total transactions" value={summaryTxns} color="#0F6E56" />
         </div>
       )}
 
-      {/* ── Audit log ── */}
-      {!loading && activeTab === "Audit log" && data && (
+      {/* ── Audit log — admin only ── */}
+      {!loading && activeTab === "Audit log" && isAdmin && data && (
         <div style={tableWrap}>
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
             <thead>
@@ -181,7 +199,11 @@ export default function ReportsPage() {
                     )}
                   </td>
                   <td style={td}>
-                    <span style={{ fontSize: 11, fontWeight: 600, padding: "2px 8px", borderRadius: 8, background: actionBadgeColor(log.action).bg, color: actionBadgeColor(log.action).color }}>
+                    <span style={{
+                      fontSize: 11, fontWeight: 600, padding: "2px 8px", borderRadius: 8,
+                      background: actionBadgeColor(log.action).bg,
+                      color:      actionBadgeColor(log.action).color,
+                    }}>
                       {log.action}
                     </span>
                   </td>
@@ -193,6 +215,7 @@ export default function ReportsPage() {
           </table>
         </div>
       )}
+
     </div>
   );
 }

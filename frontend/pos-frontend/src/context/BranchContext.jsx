@@ -7,11 +7,27 @@ export function BranchProvider({ children }) {
   const user = JSON.parse(localStorage.getItem("user") || "{}");
   const role = user.role || "cashier";
 
-  // Non-admin users are always locked to their own branch
-  const [branches, setBranches]           = useState([]);
-  const [activeBranchId, setActiveBranchIdRaw] = useState(
-    role === "superadmin" ? null : (user.branch_id || null)
-  );
+  // ── On mount: enforce correct activeBranchId for non-admin roles ──────────
+  // If a manager or cashier logs in after an admin was using Branch 2,
+  // localStorage may still have activeBranchId=2 which would cause 403 errors.
+  // Always reset non-admin users to their own branch_id.
+  const getInitialBranchId = () => {
+    if (["admin", "superadmin"].includes(role)) {
+      // Admin: use stored value or fall back to their own branch
+      const stored = localStorage.getItem("activeBranchId");
+      return stored ? parseInt(stored) : (user.branch_id || null);
+    }
+    // Manager/cashier: always locked to their own branch
+    if (user.branch_id) {
+      localStorage.setItem("activeBranchId", user.branch_id);
+    } else {
+      localStorage.removeItem("activeBranchId");
+    }
+    return user.branch_id || null;
+  };
+
+  const [branches, setBranches]                = useState([]);
+  const [activeBranchId, setActiveBranchIdRaw] = useState(getInitialBranchId);
 
   // Keep localStorage in sync so api.js can read it without React context
   const setActiveBranchId = (id) => {
@@ -27,7 +43,6 @@ export function BranchProvider({ children }) {
     const load = async () => {
       try {
         if (role === "superadmin") {
-          // superadmin fetches all branches across all businesses
           const res = await api.get("/businesses/");
           const all = [];
           for (const biz of res.data) {
@@ -36,10 +51,10 @@ export function BranchProvider({ children }) {
           }
           setBranches(all);
         } else {
-          // admin fetches branches for their business
+          // admin: load branches for their business
           const res = await api.get(`/businesses/${user.business_id}/branches`);
           setBranches(res.data);
-          // default to their own branch
+          // Default to their own branch if no active branch set
           if (!activeBranchId) setActiveBranchId(user.branch_id);
         }
       } catch (err) {
