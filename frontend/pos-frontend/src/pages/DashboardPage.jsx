@@ -1,7 +1,10 @@
 import { useState, useEffect } from "react";
 import { getDailyDashboard, getTopProducts, getSalesByCashier, getLowStock } from "../api/api";
+import { useBranch } from "../context/BranchContext";
 
 export default function DashboardPage() {
+  const { activeBranchId } = useBranch();
+
   const [daily, setDaily]             = useState(null);
   const [topProducts, setTopProducts] = useState([]);
   const [cashiers, setCashiers]       = useState([]);
@@ -30,7 +33,7 @@ export default function DashboardPage() {
       }
     }
     fetchAll();
-  }, []);
+  }, [activeBranchId]); // ✅ re-fetch when branch changes
 
   if (loading) return <PageShell><div style={centreMsg}>Loading dashboard...</div></PageShell>;
   if (error)   return <PageShell><div style={errorBox}>{error}</div></PageShell>;
@@ -73,10 +76,9 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* Bottom row — 2 columns */}
+      {/* Bottom row */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginTop: 14 }}>
 
-        {/* Left column — top products + cashier stacked */}
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
 
           <Card title="Top products today">
@@ -117,7 +119,6 @@ export default function DashboardPage() {
 
         </div>
 
-        {/* Right column — low stock full height */}
         <Card title={`Low stock alerts ${lowStock.length > 0 ? `(${lowStock.length})` : ""}`}>
           {lowStock.length === 0 ? (
             <Empty text="All products well stocked" icon="✅" />
@@ -128,22 +129,12 @@ export default function DashboardPage() {
                 <div key={i} style={row}>
                   <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
                     <span style={rankBadge}>{i + 1}</span>
-                    <span style={{
-                      ...rowLabel,
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                      whiteSpace: "nowrap",
-                    }}>
+                    <span style={{ ...rowLabel, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                       {item.product_name}
                     </span>
                   </div>
                   <span style={{
-                    fontSize: 12,
-                    fontWeight: 600,
-                    padding: "2px 8px",
-                    borderRadius: 10,
-                    flexShrink: 0,
-                    marginLeft: 8,
+                    fontSize: 12, fontWeight: 600, padding: "2px 8px", borderRadius: 10, flexShrink: 0, marginLeft: 8,
                     background: critical ? "#FCEBEB" : "#FAEEDA",
                     color:      critical ? "#A32D2D" : "#854F0B",
                   }}>
@@ -185,38 +176,21 @@ function SalesChart({ labels, data }) {
         const barH   = Math.max(pct * 1.2, val > 0 ? 8 : 3);
 
         return (
-          <div
-            key={i}
-            style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 4, height: "100%", justifyContent: "flex-end" }}
-          >
+          <div key={i} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 4, height: "100%", justifyContent: "flex-end" }}>
             {val > 0 && (
-              <span style={{
-                fontSize: 9,
-                color: isLast ? "#185FA5" : "var(--color-text-secondary)",
-                fontWeight: isLast ? 600 : 400,
-                whiteSpace: "nowrap",
-              }}>
+              <span style={{ fontSize: 9, color: isLast ? "#185FA5" : "var(--color-text-secondary)", fontWeight: isLast ? 600 : 400, whiteSpace: "nowrap" }}>
                 {fmt(val)}
               </span>
             )}
             <div
               title={val > 0 ? `₦${Number(val).toLocaleString("en-NG")}` : "No sales"}
               style={{
-                width: "100%",
-                height: `${barH}%`,
+                width: "100%", height: `${barH}%`,
                 background: isLast ? "#185FA5" : val > 0 ? "rgba(24,95,165,0.45)" : "rgba(24,95,165,0.1)",
-                borderRadius: "4px 4px 0 0",
-                transition: "height 0.4s ease",
-                cursor: "default",
-                minHeight: 3,
+                borderRadius: "4px 4px 0 0", transition: "height 0.4s ease", cursor: "default", minHeight: 3,
               }}
             />
-            <span style={{
-              fontSize: 10,
-              color: isLast ? "#185FA5" : "var(--color-text-secondary)",
-              fontWeight: isLast ? 600 : 400,
-              whiteSpace: "nowrap",
-            }}>
+            <span style={{ fontSize: 10, color: isLast ? "#185FA5" : "var(--color-text-secondary)", fontWeight: isLast ? 600 : 400, whiteSpace: "nowrap" }}>
               {shortLabel(lbl)}
             </span>
           </div>
@@ -243,15 +217,7 @@ function KPICard({ label, value, icon, tone = "primary" }) {
   };
   const t = tones[tone];
   return (
-    <div style={{
-      background: "var(--color-background-primary)",
-      border: "1px solid var(--color-border-tertiary)",
-      borderRadius: 12,
-      padding: "16px 18px",
-      display: "flex",
-      flexDirection: "column",
-      gap: 8,
-    }}>
+    <div style={{ background: "var(--color-background-primary)", border: "1px solid var(--color-border-tertiary)", borderRadius: 12, padding: "16px 18px", display: "flex", flexDirection: "column", gap: 8 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <span style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>{label}</span>
         <span style={{ fontSize: 16, background: t.bg, borderRadius: 8, padding: "4px 6px" }}>{icon}</span>
@@ -280,65 +246,11 @@ function Empty({ text, icon = "📭" }) {
 }
 
 // ── Styles ─────────────────────────────────────────────────────────────────────
-const card = {
-  background: "var(--color-background-primary)",
-  border: "1px solid var(--color-border-tertiary)",
-  borderRadius: 12,
-  padding: "16px 18px",
-  display: "flex",
-  flexDirection: "column",
-  gap: 8,
-};
-
-const cardTitle = {
-  fontSize: 13,
-  fontWeight: 600,
-  color: "var(--color-text-primary)",
-  marginBottom: 2,
-};
-
-const row = {
-  display: "flex",
-  justifyContent: "space-between",
-  alignItems: "center",
-  padding: "7px 0",
-  borderBottom: "1px solid var(--color-border-tertiary)",
-};
-
-const rowLabel = {
-  fontSize: 13,
-  color: "var(--color-text-primary)",
-};
-
-const rowValue = {
-  fontSize: 13,
-  fontWeight: 500,
-  color: "var(--color-text-primary)",
-};
-
-const rankBadge = {
-  fontSize: 10,
-  fontWeight: 600,
-  background: "rgba(24,95,165,0.1)",
-  color: "#185FA5",
-  borderRadius: 10,
-  padding: "2px 7px",
-  minWidth: 20,
-  textAlign: "center",
-  flexShrink: 0,
-};
-
-const centreMsg = {
-  textAlign: "center",
-  padding: 60,
-  color: "var(--color-text-secondary)",
-  fontSize: 13,
-};
-
-const errorBox = {
-  background: "#FCEBEB",
-  color: "#A32D2D",
-  borderRadius: 10,
-  padding: "12px 16px",
-  fontSize: 13,
-};
+const card      = { background: "var(--color-background-primary)", border: "1px solid var(--color-border-tertiary)", borderRadius: 12, padding: "16px 18px", display: "flex", flexDirection: "column", gap: 8 };
+const cardTitle = { fontSize: 13, fontWeight: 600, color: "var(--color-text-primary)", marginBottom: 2 };
+const row       = { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "7px 0", borderBottom: "1px solid var(--color-border-tertiary)" };
+const rowLabel  = { fontSize: 13, color: "var(--color-text-primary)" };
+const rowValue  = { fontSize: 13, fontWeight: 500, color: "var(--color-text-primary)" };
+const rankBadge = { fontSize: 10, fontWeight: 600, background: "rgba(24,95,165,0.1)", color: "#185FA5", borderRadius: 10, padding: "2px 7px", minWidth: 20, textAlign: "center", flexShrink: 0 };
+const centreMsg = { textAlign: "center", padding: 60, color: "var(--color-text-secondary)", fontSize: 13 };
+const errorBox  = { background: "#FCEBEB", color: "#A32D2D", borderRadius: 10, padding: "12px 16px", fontSize: 13 };

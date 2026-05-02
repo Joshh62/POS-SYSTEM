@@ -9,10 +9,13 @@ import {
 } from "../api/api";
 import api from "../api/api";
 import { getActiveBranchParam } from "../api/api";
+import { useBranch } from "../context/BranchContext";
 
 const TABS = ["Stock levels", "Expiry alerts", "Bulk restock"];
 
 export default function InventoryPage() {
+  const { activeBranchId } = useBranch();
+
   const [activeTab, setActiveTab] = useState("Stock levels");
   const [inventory, setInventory] = useState([]);
   const [products, setProducts]   = useState({});
@@ -77,8 +80,9 @@ export default function InventoryPage() {
     }
   };
 
-  useEffect(() => { fetchData(); }, []);
-  useEffect(() => { if (activeTab === "Expiry alerts") fetchExpiry(); }, [activeTab]);
+  // ✅ Re-fetch when active branch changes
+  useEffect(() => { fetchData(); }, [activeBranchId]);
+  useEffect(() => { if (activeTab === "Expiry alerts") fetchExpiry(); }, [activeTab, activeBranchId]);
 
   const openRestock = (item) => {
     setRestocking(item);
@@ -191,14 +195,12 @@ export default function InventoryPage() {
   };
 
   const downloadBulkTemplate = async () => {
-    // Use already-loaded products, or fetch fresh if not loaded yet
     let productList = Object.values(products);
 
     if (productList.length === 0) {
       try {
         const prod = await getProducts(1, 500);
         productList = prod.data || [];
-        // Also update local state so inventory tab benefits too
         const map = {};
         productList.forEach(p => { map[p.product_id] = p; });
         setProducts(map);
@@ -207,7 +209,6 @@ export default function InventoryPage() {
       }
     }
 
-    // Today + 1 year as a sample expiry date
     const sampleExpiry = new Date();
     sampleExpiry.setFullYear(sampleExpiry.getFullYear() + 1);
     const sampleExpiryStr = sampleExpiry.toISOString().split("T")[0];
@@ -369,7 +370,6 @@ export default function InventoryPage() {
               <li>Delete rows you don't want to restock, save as <strong style={{ color: "var(--color-text-primary)" }}>.csv</strong> and upload</li>
             </ol>
 
-            {/* Date format explainer */}
             <div style={{
               marginTop: 14, padding: "10px 14px", borderRadius: 8,
               background: "var(--color-background-secondary)",
@@ -383,7 +383,6 @@ export default function InventoryPage() {
               <span style={{ fontFamily: "monospace", color: "var(--color-text-primary)" }}>2027-06-01</span> = 1st June 2027
             </div>
 
-            {/* Column badges */}
             <div style={{ marginTop: 14, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
               <span style={greyBadge}>product_name (reference)</span>
               <span style={requiredBadge}>barcode *</span>
@@ -450,7 +449,6 @@ export default function InventoryPage() {
             </button>
           )}
 
-          {/* Result */}
           {bulkResult && (
             <div style={{ ...infoCard, borderColor: "#3B6D11", background: "#EAF3DE" }}>
               <div style={{ fontSize: 14, fontWeight: 600, color: "#3B6D11", marginBottom: 12 }}>
@@ -469,10 +467,7 @@ export default function InventoryPage() {
                   ))}
                 </div>
               )}
-              <button
-                onClick={() => { setBulkResult(null); setBulkFile(null); }}
-                style={{ ...primaryBtn, marginTop: 14 }}
-              >
+              <button onClick={() => { setBulkResult(null); setBulkFile(null); }} style={{ ...primaryBtn, marginTop: 14 }}>
                 Restock another file
               </button>
             </div>
