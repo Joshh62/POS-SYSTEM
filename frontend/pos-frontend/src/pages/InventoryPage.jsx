@@ -216,7 +216,6 @@ export default function InventoryPage() {
 
     if (productList.length > 0) {
       rows = [
-        "# Instructions: Fill in quantity for each product. expiry_date format: YYYY-MM-DD (e.g. " + sampleExpiryStr + "). Leave expiry_date blank for products with no expiry.",
         "product_name,barcode,quantity,expiry_date,notes",
         ...productList.map(p => {
           const safeName = `"${(p.product_name || "").replace(/"/g, '""')}"`;
@@ -225,7 +224,6 @@ export default function InventoryPage() {
       ];
     } else {
       rows = [
-        "# Instructions: Fill in quantity for each product. expiry_date format: YYYY-MM-DD (e.g. " + sampleExpiryStr + "). Leave expiry_date blank for products with no expiry.",
         "product_name,barcode,quantity,expiry_date,notes",
         `"Men Vintage Shirt - Blue",1,15,,Opening stock`,
         `"Men Polo Shirt - Black",2,8,,`,
