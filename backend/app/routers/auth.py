@@ -8,7 +8,7 @@ from app import models, schemas
 from app.database import get_db
 from app.models import User, Business
 from app.auth import hash_password, verify_password, create_access_token
-from app.dependencies import require_role, SUPERADMIN_ROLE
+from app.dependencies import require_role, get_current_user, SUPERADMIN_ROLE
 from app.utils.plans import get_plan_limits, is_user_limit_reached
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
@@ -40,11 +40,6 @@ def plan_info(
     db: Session = Depends(get_db),
     current_user=Depends(require_role(["admin"]))
 ):
-    """
-    Returns the current plan, user limit, and how many users are active.
-    Counts ALL users including admin/owner toward the limit.
-    Superadmin is not subject to plan limits.
-    """
     if current_user.role == SUPERADMIN_ROLE:
         return {
             "plan":       "enterprise",
@@ -60,12 +55,11 @@ def plan_info(
     plan   = business.plan if business else "starter"
     limits = get_plan_limits(plan)
 
-    # Count ALL active users in this business including admin
     used_users = _count_business_users(db, current_user.business_id)
 
     return {
         "plan":       plan,
-        "max_users":  limits["max_users"],  # -1 means unlimited
+        "max_users":  limits["max_users"],
         "used_users": used_users,
         "at_limit":   is_user_limit_reached(plan, used_users),
     }
@@ -78,7 +72,6 @@ def register(
     db: Session = Depends(get_db),
     current_user=Depends(require_role(["admin"]))
 ):
-    # ── Basic validation ──────────────────────────────────────────────────────
     if len(user.password) < 6:
         raise HTTPException(status_code=400, detail="Password must be at least 6 characters")
 
@@ -86,15 +79,12 @@ def register(
     if existing:
         raise HTTPException(status_code=400, detail="Username already taken")
 
-    # ── Plan limit check (superadmin is exempt) ───────────────────────────────
     if current_user.role != SUPERADMIN_ROLE:
         business = db.query(Business).filter(
             Business.business_id == current_user.business_id
         ).first()
 
-        plan = business.plan if business else "starter"
-
-        # Count ALL active users including admin
+        plan          = business.plan if business else "starter"
         current_count = _count_business_users(db, current_user.business_id)
 
         if is_user_limit_reached(plan, current_count):
@@ -108,7 +98,6 @@ def register(
                 )
             )
 
-    # ── Create the user ───────────────────────────────────────────────────────
     new_user = models.User(
         full_name=user.full_name,
         username=user.username,
@@ -167,6 +156,37 @@ def login(
             "business_id": user.business_id,
         }
     }
+
+
+# ── Change password ───────────────────────────────────────────────────────────
+class ChangePasswordRequest(BaseModel):
+    current_password: str
+    new_password:     str
+
+
+@router.patch("/change-password")
+def change_password(
+    data: ChangePasswordRequest,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user)
+):
+    """
+    Allows any logged-in user to change their own password.
+    Requires the current password to be verified first.
+    """
+    if len(data.new_password) < 6:
+        raise HTTPException(status_code=400, detail="New password must be at least 6 characters")
+
+    if data.current_password == data.new_password:
+        raise HTTPException(status_code=400, detail="New password must be different from current password")
+
+    if not verify_password(data.current_password, current_user.password_hash):
+        raise HTTPException(status_code=401, detail="Current password is incorrect")
+
+    current_user.password_hash = hash_password(data.new_password)
+    db.commit()
+
+    return {"message": "Password changed successfully"}
 
 
 # ── Deactivate / Activate ─────────────────────────────────────────────────────

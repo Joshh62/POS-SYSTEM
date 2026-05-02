@@ -11,7 +11,7 @@ from reportlab.pdfgen import canvas
 
 from app import models, schemas
 from app.database import get_db
-from app.dependencies import require_role, get_current_user
+from app.dependencies import require_role, get_current_user, SUPERADMIN_ROLE
 
 router = APIRouter(prefix="/sales", tags=["Sales"])
 
@@ -35,6 +35,63 @@ def write_audit(db, user_id: int, action: str, table: str, record_id: int, descr
         print(f"[Audit] Failed to write log: {e}")
 
 
+# ── Branch resolver helper ────────────────────────────────────────────────────
+def _resolve_sale_branch(current_user, requested_branch_id, db: Session) -> int:
+    """
+    Determines which branch a sale or query should use.
+    - If a branch_id is passed in the request, validate the user has access to it.
+    - Otherwise fall back to the user's assigned branch_id.
+    - Raises 403 if the user tries to use a branch they don't belong to.
+    """
+    if not requested_branch_id:
+        if not current_user.branch_id:
+            raise HTTPException(status_code=400, detail="User has no branch assigned")
+        return current_user.branch_id
+
+    # Superadmin can use any branch
+    if current_user.role == SUPERADMIN_ROLE:
+        return requested_branch_id
+
+    # Admin can use any branch in their business
+    if current_user.role == "admin":
+        valid_ids = [
+            b.branch_id for b in db.query(models.Branch).filter(
+                models.Branch.business_id == current_user.business_id
+            ).all()
+        ]
+        if requested_branch_id not in valid_ids:
+            raise HTTPException(status_code=403, detail="Not authorized for this branch")
+        return requested_branch_id
+
+    # Manager/cashier can only use their own branch
+    if requested_branch_id != current_user.branch_id:
+        raise HTTPException(status_code=403, detail="Not authorized for this branch")
+    return requested_branch_id
+
+
+# ── Branch ids for list queries ───────────────────────────────────────────────
+def _list_branch_ids(current_user, requested_branch_id, db: Session) -> list[int]:
+    """
+    Returns a list of branch_ids to filter list queries by.
+    - Specific branch requested → [that branch] if authorized
+    - No branch requested → all branches for admin, own branch for others
+    """
+    if requested_branch_id:
+        return [_resolve_sale_branch(current_user, requested_branch_id, db)]
+
+    if current_user.role == SUPERADMIN_ROLE:
+        return []  # no filter — see all
+
+    if current_user.role == "admin":
+        return [
+            b.branch_id for b in db.query(models.Branch).filter(
+                models.Branch.business_id == current_user.business_id
+            ).all()
+        ]
+
+    return [current_user.branch_id]
+
+
 # ------------------------------------
 # CREATE SALE
 # ------------------------------------
@@ -46,10 +103,10 @@ def create_sale(
 ):
     if not sale.items:
         raise HTTPException(status_code=400, detail="Sale must contain items")
-    if not current_user.branch_id:
-        raise HTTPException(status_code=400, detail="User has no branch assigned")
 
-    branch_id    = current_user.branch_id
+    # ✅ Use active branch from request if provided, else fall back to user's branch
+    branch_id = _resolve_sale_branch(current_user, sale.branch_id, db)
+
     customer_id  = sale.customer_id if sale.customer_id else None
     total_amount = 0
 
@@ -74,14 +131,22 @@ def create_sale(
             if not product:
                 raise HTTPException(status_code=404, detail=f"Product {item.product_id} not found")
 
+            # ✅ Check inventory for the ACTIVE branch (not user's default branch)
             inventory = db.query(models.BranchInventory).filter(
                 models.BranchInventory.product_id == item.product_id,
                 models.BranchInventory.branch_id  == branch_id
             ).first()
+
             if not inventory:
-                raise HTTPException(status_code=404, detail=f"Inventory not found for product {item.product_id}")
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"'{product.product_name}' has no inventory record for this branch. Add stock first."
+                )
             if inventory.stock_quantity < item.quantity:
-                raise HTTPException(status_code=400, detail=f"Insufficient stock for {product.product_name}")
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Insufficient stock for '{product.product_name}'. Available: {inventory.stock_quantity}, requested: {item.quantity}"
+                )
 
             unit_price    = product.selling_price
             subtotal      = unit_price * item.quantity
@@ -107,7 +172,6 @@ def create_sale(
 
         new_sale.total_amount = total_amount
 
-        # ✅ Audit log
         write_audit(
             db,
             user_id=current_user.user_id,
@@ -155,13 +219,21 @@ def scan_product(
 def list_sales(
     page: int = 1,
     limit: int = 20,
-    cashier_id: int = None,
-    date_from: date = None,
-    date_to: date = None,
+    branch_id: int = Query(None),
+    cashier_id: int = Query(None),
+    date_from: date = Query(None),
+    date_to: date = Query(None),
     db: Session = Depends(get_db),
     user=Depends(require_role(["admin", "manager", "cashier"]))
 ):
     query = db.query(models.Sale).order_by(models.Sale.sale_date.desc())
+
+    # ✅ Always scope by branch — uses active branch if provided, else all
+    # branches the user is authorized to see
+    branch_ids = _list_branch_ids(user, branch_id, db)
+    if branch_ids:
+        query = query.filter(models.Sale.branch_id.in_(branch_ids))
+
     if cashier_id:
         query = query.filter(models.Sale.user_id == cashier_id)
     if date_from:
@@ -183,7 +255,8 @@ def list_sales(
             "payment_method": sale.payment_method,
             "status":         sale.status,
             "cashier":        cashier.full_name if cashier else "Unknown",
-            "item_count":     len(items)
+            "item_count":     len(items),
+            "branch_id":      sale.branch_id,
         })
     return {"total": total, "page": page, "limit": limit, "data": result}
 
@@ -362,7 +435,6 @@ def refund_sale(
         db.add(models.Refund(sale_id=sale_id, reason=reason, amount=sale.total_amount))
         sale.status = "refunded"
 
-        # ✅ Audit log
         write_audit(
             db,
             user_id=user.user_id,

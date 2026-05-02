@@ -56,6 +56,13 @@ export const register = async (userData) => (await api.post("/auth/register", us
 
 export const getPlanInfo = async () => (await api.get("/auth/plan-info")).data;
 
+export const changePassword = async (currentPassword, newPassword) => (
+  await api.patch("/auth/change-password", {
+    current_password: currentPassword,
+    new_password:     newPassword,
+  })
+).data;
+
 // ── PRODUCTS ──────────────────────────────────────────────────────────────────
 export const getProducts = async (page = 1, limit = 20, search = "") => {
   const params = { page, limit };
