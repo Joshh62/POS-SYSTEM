@@ -13,20 +13,10 @@ router = APIRouter(prefix="/reports", tags=["Reports"])
 
 
 def _branch_filter(query, model_with_branch, user, branch_id: Optional[int]):
-    """
-    Apply branch + business scoping to any query that has a branch_id column.
-    - superadmin + no branch_id  → all data (no filter)
-    - superadmin + branch_id     → that specific branch
-    - admin + no branch_id       → all branches in their business
-    - admin + branch_id          → that specific branch (must be in their business)
-    - manager/cashier            → their own branch only
-    """
     if user.role == SUPERADMIN_ROLE:
         if branch_id:
             query = query.filter(model_with_branch.branch_id == branch_id)
-        # else: no filter — see all
     elif user.role == "admin":
-        # scope to business first
         branch_ids = _business_branch_ids(user)
         if branch_id and branch_id in branch_ids:
             query = query.filter(model_with_branch.branch_id == branch_id)
@@ -38,7 +28,6 @@ def _branch_filter(query, model_with_branch, user, branch_id: Optional[int]):
 
 
 def _business_branch_ids(user) -> list[int]:
-    """Return all branch_ids belonging to the user's business (used for admin queries)."""
     from app.database import SessionLocal
     db = SessionLocal()
     try:
@@ -65,7 +54,7 @@ def daily_sales(
     q = (
         db.query(func.sum(Sale.total_amount))
         .filter(func.date(Sale.sale_date) == today)
-        .filter(Sale.status == "completed")          # exclude refunded
+        .filter(Sale.status == "completed")
     )
     q = _branch_filter(q, Sale, user, _resolve_branch(user, branch_id))
     return {"date": today, "total_sales": q.scalar() or 0}
@@ -84,7 +73,7 @@ def top_products(
         .join(SaleItem, Product.product_id == SaleItem.product_id)
         .join(Sale,     Sale.sale_id       == SaleItem.sale_id)
         .filter(func.date(Sale.sale_date) == today)
-        .filter(Sale.status == "completed")          # exclude refunded
+        .filter(Sale.status == "completed")
     )
     q = _branch_filter(q, Sale, user, _resolve_branch(user, branch_id))
     results = (
@@ -106,11 +95,11 @@ def sales_summary(
     resolved = _resolve_branch(user, branch_id)
     q_sales = (
         db.query(func.sum(Sale.total_amount))
-        .filter(Sale.status == "completed")          # exclude refunded
+        .filter(Sale.status == "completed")
     )
     q_txns = (
         db.query(func.count(Sale.sale_id))
-        .filter(Sale.status == "completed")          # exclude refunded
+        .filter(Sale.status == "completed")
     )
     q_sales = _branch_filter(q_sales, Sale, user, resolved)
     q_txns  = _branch_filter(q_txns,  Sale, user, resolved)
@@ -136,7 +125,7 @@ def sales_by_cashier(
         )
         .join(Sale, Sale.user_id == User.user_id)
         .filter(func.date(Sale.sale_date) == today)
-        .filter(Sale.status == "completed")          # exclude refunded
+        .filter(Sale.status == "completed")
     )
     q = _branch_filter(q, Sale, user, _resolve_branch(user, branch_id))
     results = (
@@ -164,7 +153,7 @@ def profit_report(
         )
         .join(SaleItem, Product.product_id == SaleItem.product_id)
         .join(Sale,     Sale.sale_id       == SaleItem.sale_id)
-        .filter(Sale.status == "completed")          # exclude refunded
+        .filter(Sale.status == "completed")
     )
     q = _branch_filter(q, Sale, user, _resolve_branch(user, branch_id))
     results = (
@@ -199,17 +188,30 @@ def stock_valuation(
     else:
         q = q.filter(models.BranchInventory.branch_id == user.branch_id)
 
-    results = q.all()
-    labels, values, total_value = [], [], 0
+    results     = q.all()
+    products    = []
+    total_value = 0
+
     for r in results:
         sv = float(r.stock_quantity or 0) * float(r.cost_price or 0)
         total_value += sv
-        labels.append(r.product_name)
-        values.append(sv)
+        products.append({
+            "product_name":  r.product_name,
+            "stock_quantity": r.stock_quantity,
+            "cost_price":    float(r.cost_price or 0),
+            "stock_value":   sv,
+        })
+
+    # Sort by stock value descending
+    products.sort(key=lambda x: x["stock_value"], reverse=True)
 
     return {
-        "summary": {"total_inventory_value": total_value},
-        "chart":   {"labels": labels, "datasets": [{"label": "Stock Value (₦)", "data": values}]}
+        "summary":  {"total_inventory_value": total_value},
+        "products": products,                               # ✅ fixed — now returns product list
+        "chart":    {
+            "labels":   [p["product_name"] for p in products],
+            "datasets": [{"label": "Stock Value (₦)", "data": [p["stock_value"] for p in products]}],
+        },
     }
 
 
@@ -219,8 +221,45 @@ def audit_logs(
     db: Session = Depends(get_db),
     user=Depends(require_role(["admin"]))
 ):
-    logs = db.query(AuditLog).order_by(AuditLog.created_at.desc()).limit(100).all()
-    return logs
+    """
+    Returns audit logs with the full name of the user who performed the action.
+    Scoped to the admin's own business (superadmin sees all).
+    """
+    q = (
+        db.query(
+            AuditLog.log_id,
+            AuditLog.action,
+            AuditLog.table_name,
+            AuditLog.record_id,
+            AuditLog.description,
+            AuditLog.created_at,
+            User.full_name.label("performed_by"),
+            User.username.label("username"),
+        )
+        .outerjoin(User, User.user_id == AuditLog.user_id)
+        .order_by(AuditLog.created_at.desc())
+        .limit(100)
+    )
+
+    # Scope to business for non-superadmin
+    if user.role != SUPERADMIN_ROLE:
+        q = q.filter(User.business_id == user.business_id)
+
+    results = q.all()
+
+    return [
+        {
+            "log_id":       r.log_id,
+            "action":       r.action,
+            "table_name":   r.table_name,
+            "record_id":    r.record_id,
+            "description":  r.description,
+            "created_at":   r.created_at,
+            "performed_by": r.performed_by or "System",
+            "username":     r.username     or "—",
+        }
+        for r in results
+    ]
 
 
 # ── Dashboard ─────────────────────────────────────────────────────────────────
@@ -236,12 +275,12 @@ def dashboard(
     q_sales = (
         db.query(func.sum(Sale.total_amount))
         .filter(func.date(Sale.sale_date) == today)
-        .filter(Sale.status == "completed")          # exclude refunded
+        .filter(Sale.status == "completed")
     )
     q_txns = (
         db.query(func.count(Sale.sale_id))
         .filter(func.date(Sale.sale_date) == today)
-        .filter(Sale.status == "completed")          # exclude refunded
+        .filter(Sale.status == "completed")
     )
     q_sales = _branch_filter(q_sales, Sale, user, resolved)
     q_txns  = _branch_filter(q_txns,  Sale, user, resolved)
@@ -271,7 +310,7 @@ def daily_dashboard(
         q   = (
             db.query(func.sum(Sale.total_amount))
             .filter(func.date(Sale.sale_date) == day)
-            .filter(Sale.status == "completed")      # exclude refunded
+            .filter(Sale.status == "completed")
         )
         q = _branch_filter(q, Sale, user, resolved)
         days.append(day.strftime("%Y-%m-%d"))
@@ -282,7 +321,7 @@ def daily_dashboard(
     q_txns = (
         db.query(func.count(Sale.sale_id))
         .filter(func.date(Sale.sale_date) == today)
-        .filter(Sale.status == "completed")          # exclude refunded
+        .filter(Sale.status == "completed")
     )
     q_txns = _branch_filter(q_txns, Sale, user, resolved)
 
@@ -291,7 +330,7 @@ def daily_dashboard(
         .join(Product, Product.product_id == SaleItem.product_id)
         .join(Sale,    Sale.sale_id       == SaleItem.sale_id)
         .filter(func.date(Sale.sale_date) == today)
-        .filter(Sale.status == "completed")          # exclude refunded
+        .filter(Sale.status == "completed")
     )
     q_profit = _branch_filter(q_profit, Sale, user, resolved)
 
@@ -361,7 +400,7 @@ def sales_volume(
         "items_sold": (
             db.query(func.sum(SaleItem.quantity))
             .join(Sale, Sale.sale_id == SaleItem.sale_id)
-            .filter(Sale.status == "completed")      # exclude refunded
+            .filter(Sale.status == "completed")
             .scalar() or 0
         )
     }

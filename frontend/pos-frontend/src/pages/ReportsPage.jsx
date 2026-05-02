@@ -10,9 +10,9 @@ const TABS = ["Profit", "Stock valuation", "Sales summary", "Audit log"];
 
 export default function ReportsPage() {
   const [activeTab, setActiveTab] = useState("Profit");
-  const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
+  const [data, setData]           = useState(null);
+  const [loading, setLoading]     = useState(false);
+  const [error, setError]         = useState(null);
 
   const fetchTab = async (tab) => {
     setLoading(true);
@@ -20,7 +20,7 @@ export default function ReportsPage() {
     setData(null);
     try {
       let result;
-      if (tab === "Profit")          result = await getProfitReport();
+      if (tab === "Profit")             result = await getProfitReport();
       else if (tab === "Stock valuation") result = await getStockValuation();
       else if (tab === "Sales summary")   result = await getSalesSummary();
       else if (tab === "Audit log")       result = await getAuditLogs();
@@ -35,19 +35,16 @@ export default function ReportsPage() {
 
   useEffect(() => { fetchTab(activeTab); }, [activeTab]);
 
-  // ── helpers to normalise API shapes ──────────────────────────────────────
-  // Stock valuation: backend now returns summary + chart + products array
+  // ── Normalise API shapes ──────────────────────────────────────────────────
   const stockTotal    = data?.summary?.total_inventory_value ?? 0;
   const stockProducts = data?.products ?? [];
 
-  // Audit logs: backend may return { logs:[...] } or plain array
   const auditRows = Array.isArray(data)
     ? data
     : (data?.logs ?? data?.data ?? []);
 
-  // Sales summary: handle both snake_case key variants
-  const summaryRevenue = data?.total_sales ?? data?.total_revenue ?? 0;
-  const summaryTxns    = data?.transactions ?? data?.total_transactions ?? 0;
+  const summaryRevenue = data?.total_sales    ?? data?.total_revenue      ?? 0;
+  const summaryTxns    = data?.transactions   ?? data?.total_transactions  ?? 0;
 
   return (
     <div style={{ padding: "16px 24px", overflowY: "auto", height: "100%", boxSizing: "border-box" }}>
@@ -142,7 +139,7 @@ export default function ReportsPage() {
                         : "—"}
                     </td>
                     <td style={{ ...td, textAlign: "right", fontWeight: 500 }}>
-                      ₦{parseFloat(p.stock_value ?? p.value ?? 0).toLocaleString("en-NG", { minimumFractionDigits: 2 })}
+                      ₦{parseFloat(p.stock_value ?? 0).toLocaleString("en-NG", { minimumFractionDigits: 2 })}
                     </td>
                   </tr>
                 ))}
@@ -171,6 +168,7 @@ export default function ReportsPage() {
             <thead>
               <tr style={{ borderBottom: "1px solid var(--color-border-tertiary)" }}>
                 <th style={th}>Time</th>
+                <th style={th}>User</th>
                 <th style={th}>Action</th>
                 <th style={th}>Table</th>
                 <th style={th}>Description</th>
@@ -178,19 +176,37 @@ export default function ReportsPage() {
             </thead>
             <tbody>
               {auditRows.length === 0 ? (
-                <tr><td colSpan={4} style={emptyTd}>No audit logs yet.</td></tr>
+                <tr><td colSpan={5} style={emptyTd}>No audit logs yet.</td></tr>
               ) : auditRows.map((log, i) => (
                 <tr key={i} style={{ borderBottom: "1px solid var(--color-border-tertiary)" }}>
-                  <td style={{ ...td, fontSize: 11, color: "var(--color-text-tertiary)" }}>
+                  <td style={{ ...td, fontSize: 11, color: "var(--color-text-tertiary)", whiteSpace: "nowrap" }}>
                     {new Date(log.created_at ?? log.timestamp ?? log.log_date).toLocaleString()}
                   </td>
                   <td style={td}>
-                    <span style={{ fontSize: 11, fontWeight: 500, padding: "2px 8px", borderRadius: 8, background: "#E6F1FB", color: "#185FA5" }}>
+                    <div style={{ fontSize: 13, fontWeight: 500, color: "var(--color-text-primary)" }}>
+                      {log.performed_by || "System"}
+                    </div>
+                    {log.username && log.username !== "—" && (
+                      <div style={{ fontSize: 11, color: "var(--color-text-tertiary)" }}>
+                        @{log.username}
+                      </div>
+                    )}
+                  </td>
+                  <td style={td}>
+                    <span style={{
+                      fontSize: 11, fontWeight: 600, padding: "2px 8px", borderRadius: 8,
+                      background: actionBadgeColor(log.action).bg,
+                      color:      actionBadgeColor(log.action).color,
+                    }}>
                       {log.action}
                     </span>
                   </td>
-                  <td style={{ ...td, color: "var(--color-text-secondary)" }}>{log.table_name}</td>
-                  <td style={{ ...td, fontSize: 12, color: "var(--color-text-secondary)" }}>{log.description}</td>
+                  <td style={{ ...td, color: "var(--color-text-secondary)", fontSize: 12 }}>
+                    {log.table_name}
+                  </td>
+                  <td style={{ ...td, fontSize: 12, color: "var(--color-text-secondary)", maxWidth: 400 }}>
+                    {log.description}
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -201,9 +217,26 @@ export default function ReportsPage() {
   );
 }
 
+// ── Action badge color helper ─────────────────────────────────────────────────
+function actionBadgeColor(action) {
+  const a = (action || "").toUpperCase();
+  if (a === "SALE")     return { bg: "#EAF3DE", color: "#3B6D11" };
+  if (a === "REFUND")   return { bg: "#FCEBEB", color: "#A32D2D" };
+  if (a === "RESTOCK")  return { bg: "#E6F1FB", color: "#185FA5" };
+  if (a === "UPDATE")   return { bg: "#FAEEDA", color: "#854F0B" };
+  if (a === "DELETE")   return { bg: "#FCEBEB", color: "#A32D2D" };
+  if (a === "CREATE")   return { bg: "#EAF3DE", color: "#3B6D11" };
+  return { bg: "#F1EFE8", color: "#5F5E5A" };
+}
+
 function StatCard({ label, value, color }) {
   return (
-    <div style={{ background: "var(--color-background-primary)", border: "1px solid var(--color-border-tertiary)", borderRadius: 12, padding: "18px 20px" }}>
+    <div style={{
+      background: "var(--color-background-primary)",
+      border: "1px solid var(--color-border-tertiary)",
+      borderRadius: 12,
+      padding: "18px 20px",
+    }}>
       <div style={{ fontSize: 12, color: "var(--color-text-secondary)", marginBottom: 8 }}>{label}</div>
       <div style={{ fontSize: 22, fontWeight: 500, color }}>{value}</div>
     </div>
