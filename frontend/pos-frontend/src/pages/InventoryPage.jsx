@@ -42,18 +42,18 @@ export default function InventoryPage() {
   const [batchLoading, setBatchLoading]     = useState(false);
 
   // ── Bulk restock state ────────────────────────────────────────────────────
-  const [bulkFile, setBulkFile]           = useState(null);
-  const [bulkDragging, setBulkDragging]   = useState(false);
-  const [bulkLoading, setBulkLoading]     = useState(false);
-  const [bulkResult, setBulkResult]       = useState(null);
-  const [bulkError, setBulkError]         = useState(null);
-  const bulkInputRef                      = useRef();
+  const [bulkFile, setBulkFile]         = useState(null);
+  const [bulkDragging, setBulkDragging] = useState(false);
+  const [bulkLoading, setBulkLoading]   = useState(false);
+  const [bulkResult, setBulkResult]     = useState(null);
+  const [bulkError, setBulkError]       = useState(null);
+  const bulkInputRef                    = useRef();
 
   const fetchData = async () => {
     setLoading(true);
     setError(null);
     try {
-      const [inv, prod] = await Promise.all([getInventory(), getProducts(1, 100)]);
+      const [inv, prod] = await Promise.all([getInventory(), getProducts(1, 500)]);
       setInventory(Array.isArray(inv) ? inv : []);
       const map = {};
       (prod.data || []).forEach(p => { map[p.product_id] = p; });
@@ -100,8 +100,11 @@ export default function InventoryPage() {
       setRestockSuccess(`Added ${restockQty} units successfully.`);
       setRestockQty(""); setRestockExpiry(""); setRestockNotes("");
       fetchData();
-    } catch (err) { setRestockError(err.response?.data?.detail || "Restock failed."); }
-    finally { setRestockLoading(false); }
+    } catch (err) {
+      setRestockError(err.response?.data?.detail || "Restock failed.");
+    } finally {
+      setRestockLoading(false);
+    }
   };
 
   const openReorder = (item) => {
@@ -123,8 +126,11 @@ export default function InventoryPage() {
       });
       setReorderSuccess("Settings updated.");
       fetchData();
-    } catch (err) { setReorderError(err.response?.data?.detail || "Update failed."); }
-    finally { setReorderLoading(false); }
+    } catch (err) {
+      setReorderError(err.response?.data?.detail || "Update failed.");
+    } finally {
+      setReorderLoading(false);
+    }
   };
 
   const openBatches = async (item) => {
@@ -176,7 +182,7 @@ export default function InventoryPage() {
       });
       setBulkResult(res.data);
       setBulkFile(null);
-      fetchData();  // refresh stock levels
+      fetchData();
     } catch (err) {
       setBulkError(err.response?.data?.detail || "Bulk restock failed. Check your file.");
     } finally {
@@ -184,26 +190,50 @@ export default function InventoryPage() {
     }
   };
 
-  const downloadBulkTemplate = () => {
-    // Pre-fill template with existing product barcodes
-    const existingProducts = Object.values(products);
+  const downloadBulkTemplate = async () => {
+    // Use already-loaded products, or fetch fresh if not loaded yet
+    let productList = Object.values(products);
+
+    if (productList.length === 0) {
+      try {
+        const prod = await getProducts(1, 500);
+        productList = prod.data || [];
+        // Also update local state so inventory tab benefits too
+        const map = {};
+        productList.forEach(p => { map[p.product_id] = p; });
+        setProducts(map);
+      } catch {
+        // fall through to sample data
+      }
+    }
+
+    // Today + 1 year as a sample expiry date
+    const sampleExpiry = new Date();
+    sampleExpiry.setFullYear(sampleExpiry.getFullYear() + 1);
+    const sampleExpiryStr = sampleExpiry.toISOString().split("T")[0];
+
     let rows;
-    if (existingProducts.length > 0) {
+
+    if (productList.length > 0) {
       rows = [
-        "barcode,quantity,expiry_date,notes",
-        ...existingProducts.slice(0, 5).map(p =>
-          `${p.barcode},0,,`
-        ),
+        "# Instructions: Fill in quantity for each product. expiry_date format: YYYY-MM-DD (e.g. " + sampleExpiryStr + "). Leave expiry_date blank for products with no expiry.",
+        "product_name,barcode,quantity,expiry_date,notes",
+        ...productList.map(p => {
+          const safeName = `"${(p.product_name || "").replace(/"/g, '""')}"`;
+          return `${safeName},${p.barcode},0,,`;
+        }),
       ];
     } else {
       rows = [
-        "barcode,quantity,expiry_date,notes",
-        "0404,50,2027-12-31,Opening stock",
-        "0707,30,,",
-        "1001,20,2026-09-15,Batch A",
+        "# Instructions: Fill in quantity for each product. expiry_date format: YYYY-MM-DD (e.g. " + sampleExpiryStr + "). Leave expiry_date blank for products with no expiry.",
+        "product_name,barcode,quantity,expiry_date,notes",
+        `"Men Vintage Shirt - Blue",1,15,,Opening stock`,
+        `"Men Polo Shirt - Black",2,8,,`,
+        `"Nike Sneakers (Thrift)",9,5,${sampleExpiryStr},Batch from Supplier A`,
       ];
     }
-    const blob = new Blob([rows.join("\n")], { type: "text/csv" });
+
+    const blob = new Blob([rows.join("\n")], { type: "text/csv;charset=utf-8;" });
     const url  = URL.createObjectURL(blob);
     const a    = document.createElement("a");
     a.href     = url;
@@ -324,21 +354,40 @@ export default function InventoryPage() {
       {activeTab === "Bulk restock" && (
         <div style={{ maxWidth: 640 }}>
 
-          {/* Instructions */}
           <div style={infoCard}>
             <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 10, color: "var(--color-text-primary)" }}>
               📦 How to bulk restock
             </div>
-            <ol style={{ margin: 0, paddingLeft: 18, fontSize: 13, color: "var(--color-text-secondary)", lineHeight: 2 }}>
-              <li>Download the template — it's pre-filled with your product barcodes</li>
-              <li>Fill in the <strong>quantity</strong> for each product you want to restock</li>
-              <li>Optionally add <strong>expiry_date</strong> (YYYY-MM-DD) and <strong>notes</strong></li>
-              <li>Delete rows for products you don't want to restock</li>
-              <li>Save as <strong>.csv</strong> and upload below</li>
+            <ol style={{ margin: 0, paddingLeft: 18, fontSize: 13, color: "var(--color-text-secondary)", lineHeight: 2.2 }}>
+              <li>Download the template — it's pre-filled with all your product names and barcodes</li>
+              <li>Fill in the <strong style={{ color: "var(--color-text-primary)" }}>quantity</strong> column for each product you want to restock</li>
+              <li>
+                For products with an expiry date, enter it in the{" "}
+                <strong style={{ color: "var(--color-text-primary)" }}>expiry_date</strong> column using the format{" "}
+                <code style={{ background: "var(--color-background-secondary)", padding: "1px 6px", borderRadius: 4, fontSize: 12 }}>YYYY-MM-DD</code>
+                {" "}— e.g. <code style={{ background: "var(--color-background-secondary)", padding: "1px 6px", borderRadius: 4, fontSize: 12 }}>{new Date(Date.now() + 365*24*60*60*1000).toISOString().split("T")[0]}</code>
+              </li>
+              <li>Leave <strong style={{ color: "var(--color-text-primary)" }}>expiry_date</strong> blank for clothing, accessories or any product with no expiry</li>
+              <li>Delete rows you don't want to restock, save as <strong style={{ color: "var(--color-text-primary)" }}>.csv</strong> and upload</li>
             </ol>
 
-            {/* Column reference */}
-            <div style={{ marginTop: 14, display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {/* Date format explainer */}
+            <div style={{
+              marginTop: 14, padding: "10px 14px", borderRadius: 8,
+              background: "var(--color-background-secondary)",
+              border: "1px solid var(--color-border-tertiary)",
+              fontSize: 12, color: "var(--color-text-secondary)", lineHeight: 1.8,
+            }}>
+              📅 <strong style={{ color: "var(--color-text-primary)" }}>Date format guide</strong><br />
+              YYYY = 4-digit year &nbsp;·&nbsp; MM = 2-digit month &nbsp;·&nbsp; DD = 2-digit day<br />
+              <span style={{ fontFamily: "monospace", color: "var(--color-text-primary)" }}>2026-12-31</span> = 31st December 2026
+              &nbsp;&nbsp;
+              <span style={{ fontFamily: "monospace", color: "var(--color-text-primary)" }}>2027-06-01</span> = 1st June 2027
+            </div>
+
+            {/* Column badges */}
+            <div style={{ marginTop: 14, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+              <span style={greyBadge}>product_name (reference)</span>
               <span style={requiredBadge}>barcode *</span>
               <span style={requiredBadge}>quantity *</span>
               <span style={optionalBadge}>expiry_date</span>
@@ -430,6 +479,7 @@ export default function InventoryPage() {
               </button>
             </div>
           )}
+
         </div>
       )}
 
@@ -637,35 +687,36 @@ function StatBox({ label, value, color }) {
 }
 
 // ── Styles ─────────────────────────────────────────────────────────────────────
-const inputStyle = { display: "block", width: "100%", padding: "9px 11px", borderRadius: 7, border: "1.5px solid #3a4255", fontSize: 13, background: "#1e2535", color: "#e8ecf2", boxSizing: "border-box", marginTop: 5, outline: "none", fontFamily: "inherit" };
-const labelStyle = { fontSize: 12, fontWeight: 500, color: "#c0c7d4", display: "block" };
-const starStyle  = { color: "#E24B4A", marginLeft: 2 };
-const hintStyle  = { fontSize: 11, color: "#5a6475", marginTop: 4, display: "block" };
-const dividerStyle = { borderTop: "1px solid #2a3247", margin: "14px 0" };
-const primaryBtn = { padding: "10px 0", borderRadius: 8, border: "none", background: "#185FA5", color: "#fff", fontSize: 13, fontWeight: 500, cursor: "pointer" };
-const cancelBtn  = { padding: "10px 16px", borderRadius: 8, border: "1px solid #3a4255", background: "none", color: "#c0c7d4", fontSize: 13, cursor: "pointer" };
-const outlineBtn = { padding: "7px 14px", borderRadius: 8, border: "1px solid var(--color-border-tertiary)", background: "none", fontSize: 12, cursor: "pointer", color: "var(--color-text-secondary)" };
-const ghostBtn   = { padding: "4px 10px", borderRadius: 6, border: "1px solid var(--color-border-tertiary)", background: "none", fontSize: 11, cursor: "pointer", color: "var(--color-text-secondary)" };
+const inputStyle     = { display: "block", width: "100%", padding: "9px 11px", borderRadius: 7, border: "1.5px solid #3a4255", fontSize: 13, background: "#1e2535", color: "#e8ecf2", boxSizing: "border-box", marginTop: 5, outline: "none", fontFamily: "inherit" };
+const labelStyle     = { fontSize: 12, fontWeight: 500, color: "#c0c7d4", display: "block" };
+const starStyle      = { color: "#E24B4A", marginLeft: 2 };
+const hintStyle      = { fontSize: 11, color: "#5a6475", marginTop: 4, display: "block" };
+const dividerStyle   = { borderTop: "1px solid #2a3247", margin: "14px 0" };
+const primaryBtn     = { padding: "10px 0", borderRadius: 8, border: "none", background: "#185FA5", color: "#fff", fontSize: 13, fontWeight: 500, cursor: "pointer" };
+const cancelBtn      = { padding: "10px 16px", borderRadius: 8, border: "1px solid #3a4255", background: "none", color: "#c0c7d4", fontSize: 13, cursor: "pointer" };
+const outlineBtn     = { padding: "7px 14px", borderRadius: 8, border: "1px solid var(--color-border-tertiary)", background: "none", fontSize: 12, cursor: "pointer", color: "var(--color-text-secondary)" };
+const ghostBtn       = { padding: "4px 10px", borderRadius: 6, border: "1px solid var(--color-border-tertiary)", background: "none", fontSize: 11, cursor: "pointer", color: "var(--color-text-secondary)" };
 const restockBtnStyle = { padding: "4px 12px", borderRadius: 6, border: "1px solid #185FA5", background: "transparent", color: "#185FA5", cursor: "pointer", fontSize: 11, fontWeight: 500 };
-const refreshBtn = { marginLeft: "auto", padding: "6px 12px", borderRadius: 8, border: "1px solid var(--color-border-tertiary)", background: "none", color: "var(--color-text-secondary)", cursor: "pointer", fontSize: 12 };
-const errorBox   = { background: "#FCEBEB", color: "#A32D2D", borderRadius: 8, padding: "9px 13px", fontSize: 13, marginBottom: 4 };
-const successBox = { background: "#EAF3DE", color: "#3B6D11", borderRadius: 8, padding: "9px 13px", fontSize: 13, marginTop: 14 };
-const infoCard   = { background: "var(--color-background-primary)", border: "1px solid var(--color-border-tertiary)", borderRadius: 12, padding: "16px 18px", marginBottom: 16 };
-const requiredBadge = { fontSize: 11, fontWeight: 500, padding: "3px 10px", borderRadius: 8, background: "#E6F1FB", color: "#185FA5" };
-const optionalBadge = { fontSize: 11, fontWeight: 500, padding: "3px 10px", borderRadius: 8, background: "var(--color-background-secondary)", color: "var(--color-text-secondary)" };
-const overlayStyle = { position: "fixed", inset: 0, background: "rgba(0,0,0,0.65)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 9999 };
-const modalStyle   = { background: "#151b28", borderRadius: 14, padding: 24, width: 420, maxHeight: "85vh", overflowY: "auto", boxShadow: "0 8px 40px rgba(0,0,0,0.5)", border: "1px solid #2a3247" };
-const modalHeader  = { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 };
-const modalTitle   = { fontSize: 16, fontWeight: 600, margin: 0, color: "#e8ecf2" };
-const closeBtn     = { background: "none", border: "none", fontSize: 22, cursor: "pointer", color: "#8a93a6", lineHeight: 1, padding: 0 };
-const infoRow      = { display: "flex", justifyContent: "space-between", padding: "5px 0" };
-const infoLabel    = { fontSize: 12, color: "#8a93a6" };
-const infoValue    = { fontSize: 13, fontWeight: 500, color: "#e8ecf2" };
-const tableWrapper = { background: "var(--color-background-primary)", border: "1px solid var(--color-border-tertiary)", borderRadius: 12, overflow: "hidden" };
+const refreshBtn     = { marginLeft: "auto", padding: "6px 12px", borderRadius: 8, border: "1px solid var(--color-border-tertiary)", background: "none", color: "var(--color-text-secondary)", cursor: "pointer", fontSize: 12 };
+const errorBox       = { background: "#FCEBEB", color: "#A32D2D", borderRadius: 8, padding: "9px 13px", fontSize: 13, marginBottom: 4 };
+const successBox     = { background: "#EAF3DE", color: "#3B6D11", borderRadius: 8, padding: "9px 13px", fontSize: 13, marginTop: 14 };
+const infoCard       = { background: "var(--color-background-primary)", border: "1px solid var(--color-border-tertiary)", borderRadius: 12, padding: "16px 18px", marginBottom: 16 };
+const requiredBadge  = { fontSize: 11, fontWeight: 500, padding: "3px 10px", borderRadius: 8, background: "#E6F1FB", color: "#185FA5" };
+const optionalBadge  = { fontSize: 11, fontWeight: 500, padding: "3px 10px", borderRadius: 8, background: "var(--color-background-secondary)", color: "var(--color-text-secondary)" };
+const greyBadge      = { fontSize: 11, fontWeight: 500, padding: "3px 10px", borderRadius: 8, background: "var(--color-background-secondary)", color: "var(--color-text-tertiary)", fontStyle: "italic" };
+const overlayStyle   = { position: "fixed", inset: 0, background: "rgba(0,0,0,0.65)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 9999 };
+const modalStyle     = { background: "#151b28", borderRadius: 14, padding: 24, width: 420, maxHeight: "85vh", overflowY: "auto", boxShadow: "0 8px 40px rgba(0,0,0,0.5)", border: "1px solid #2a3247" };
+const modalHeader    = { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 };
+const modalTitle     = { fontSize: 16, fontWeight: 600, margin: 0, color: "#e8ecf2" };
+const closeBtn       = { background: "none", border: "none", fontSize: 22, cursor: "pointer", color: "#8a93a6", lineHeight: 1, padding: 0 };
+const infoRow        = { display: "flex", justifyContent: "space-between", padding: "5px 0" };
+const infoLabel      = { fontSize: 12, color: "#8a93a6" };
+const infoValue      = { fontSize: 13, fontWeight: 500, color: "#e8ecf2" };
+const tableWrapper   = { background: "var(--color-background-primary)", border: "1px solid var(--color-border-tertiary)", borderRadius: 12, overflow: "hidden" };
 const batchTableWrapper = { background: "#1a2133", border: "1px solid #2a3247", borderRadius: 10, overflow: "hidden" };
-const thStyle      = { padding: "9px 14px", textAlign: "left", fontSize: 11, fontWeight: 500, color: "var(--color-text-secondary)", textTransform: "uppercase", letterSpacing: "0.05em" };
-const batchThStyle = { padding: "9px 14px", textAlign: "left", fontSize: 11, fontWeight: 500, color: "#5a6475", textTransform: "uppercase", letterSpacing: "0.05em" };
-const tdStyle      = { padding: "11px 14px", fontSize: 13, color: "var(--color-text-primary)" };
-const batchTdStyle = { padding: "11px 14px", fontSize: 13, color: "#c0c7d4" };
-const emptyTd      = { textAlign: "center", padding: 32, color: "var(--color-text-tertiary)", fontSize: 13 };
-const centreMsg    = { textAlign: "center", padding: 40, color: "var(--color-text-tertiary)", fontSize: 13 };
+const thStyle        = { padding: "9px 14px", textAlign: "left", fontSize: 11, fontWeight: 500, color: "var(--color-text-secondary)", textTransform: "uppercase", letterSpacing: "0.05em" };
+const batchThStyle   = { padding: "9px 14px", textAlign: "left", fontSize: 11, fontWeight: 500, color: "#5a6475", textTransform: "uppercase", letterSpacing: "0.05em" };
+const tdStyle        = { padding: "11px 14px", fontSize: 13, color: "var(--color-text-primary)" };
+const batchTdStyle   = { padding: "11px 14px", fontSize: 13, color: "#c0c7d4" };
+const emptyTd        = { textAlign: "center", padding: 32, color: "var(--color-text-tertiary)", fontSize: 13 };
+const centreMsg      = { textAlign: "center", padding: 40, color: "var(--color-text-tertiary)", fontSize: 13 };
