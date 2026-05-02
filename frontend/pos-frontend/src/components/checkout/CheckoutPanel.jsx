@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useCart } from "../../context/CartContext";
-import { createSale, getInvoiceUrl } from "../../api/api";  // ✅ import getInvoiceUrl
+import { createSale, getInvoiceUrl, getActiveBranchParam } from "../../api/api";
 import { queueSale } from "../../utils/offlineQueue";
 
 const PAYMENT_METHODS = ["cash", "card", "transfer"];
@@ -13,8 +13,12 @@ export default function CheckoutPanel({ onClose, onSuccess }) {
   const [error, setError]                 = useState(null);
   const [receipt, setReceipt]             = useState(null);
 
-  const user     = JSON.parse(localStorage.getItem("user") || "{}");
-  const branchId = user.branch_id ?? 13;  // fallback to branch 13 per handoff doc
+  const user = JSON.parse(localStorage.getItem("user") || "{}");
+
+  // ✅ Always use the active branch from localStorage (set by BranchContext)
+  // Falls back to user's own branch_id if no active branch is selected
+  const activeBranchParam = getActiveBranchParam();
+  const branchId = activeBranchParam.branch_id ?? user.branch_id;
 
   const handleSubmit = async () => {
     if (cartItems.length === 0) return;
@@ -32,7 +36,13 @@ export default function CheckoutPanel({ onClose, onSuccess }) {
       if (!navigator.onLine) {
         const queued = queueSale(salePayload);
         clearCart();
-        setReceipt({ sale_id: `QUEUED-${queued.id}`, sale_date: new Date().toISOString(), total_amount: totalAmount, payment_method: paymentMethod, offline: true });
+        setReceipt({
+          sale_id:        `QUEUED-${queued.id}`,
+          sale_date:      new Date().toISOString(),
+          total_amount:   totalAmount,
+          payment_method: paymentMethod,
+          offline:        true,
+        });
         return;
       }
 
@@ -45,7 +55,13 @@ export default function CheckoutPanel({ onClose, onSuccess }) {
       if (!err.response) {
         const queued = queueSale(salePayload);
         clearCart();
-        setReceipt({ sale_id: `QUEUED-${queued.id}`, sale_date: new Date().toISOString(), total_amount: totalAmount, payment_method: paymentMethod, offline: true });
+        setReceipt({
+          sale_id:        `QUEUED-${queued.id}`,
+          sale_date:      new Date().toISOString(),
+          total_amount:   totalAmount,
+          payment_method: paymentMethod,
+          offline:        true,
+        });
         return;
       }
       const detail = err.response?.data?.detail;
@@ -80,7 +96,6 @@ export default function CheckoutPanel({ onClose, onSuccess }) {
 
           <div style={{ display: "flex", gap: 8 }}>
             {!receipt.offline && (
-              // ✅ Fixed: use getInvoiceUrl() so it points to the Render backend, not localhost
               <a href={getInvoiceUrl(receipt.sale_id)} target="_blank" rel="noreferrer" style={secondaryBtn}>
                 Print invoice
               </a>
@@ -140,8 +155,11 @@ export default function CheckoutPanel({ onClose, onSuccess }) {
 
         {error && <div style={errorBox}>{error}</div>}
 
-        <button onClick={handleSubmit} disabled={loading}
-          style={{ ...primaryBtn, width: "100%", opacity: loading ? 0.7 : 1 }}>
+        <button
+          onClick={handleSubmit}
+          disabled={loading}
+          style={{ ...primaryBtn, width: "100%", opacity: loading ? 0.7 : 1 }}
+        >
           {loading
             ? "Processing..."
             : `Confirm — ₦${totalAmount.toLocaleString("en-NG", { minimumFractionDigits: 2 })}`}

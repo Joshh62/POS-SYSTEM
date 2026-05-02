@@ -1,8 +1,10 @@
 import { useState, useEffect } from "react";
-import api, { getInvoiceUrl } from "../api/api";
-// getInvoiceUrl() already imported — used for PDF link below
+import api, { getInvoiceUrl, getActiveBranchParam } from "../api/api";
+import { useBranch } from "../context/BranchContext";
 
 export default function SalesPage() {
+  const { activeBranchId } = useBranch();
+
   const [sales, setSales]     = useState([]);
   const [total, setTotal]     = useState(0);
   const [page, setPage]       = useState(1);
@@ -12,7 +14,7 @@ export default function SalesPage() {
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo]     = useState("");
 
-  const [receipt, setReceipt]           = useState(null);
+  const [receipt, setReceipt]               = useState(null);
   const [receiptLoading, setReceiptLoading] = useState(false);
 
   const LIMIT = 20;
@@ -21,7 +23,7 @@ export default function SalesPage() {
     setLoading(true);
     setError(null);
     try {
-      const params = { page, limit: LIMIT };
+      const params = { page, limit: LIMIT, ...getActiveBranchParam() };
       if (dateFrom) params.date_from = dateFrom;
       if (dateTo)   params.date_to   = dateTo;
       const res = await api.get("/sales/", { params });
@@ -35,7 +37,8 @@ export default function SalesPage() {
     }
   };
 
-  useEffect(() => { fetchSales(); }, [page, dateFrom, dateTo]);
+  // Re-fetch whenever active branch, page or date filters change
+  useEffect(() => { fetchSales(); }, [page, dateFrom, dateTo, activeBranchId]);
 
   const viewReceipt = async (saleId) => {
     setReceiptLoading(true);
@@ -93,6 +96,11 @@ export default function SalesPage() {
         )}
         <span style={{ marginLeft: "auto", fontSize: 12, color: "var(--color-text-secondary)" }}>
           {total} transaction{total !== 1 ? "s" : ""}
+          {activeBranchId && (
+            <span style={{ marginLeft: 6, color: "var(--color-text-tertiary)" }}>
+              · Branch {activeBranchId}
+            </span>
+          )}
         </span>
       </div>
 
@@ -139,7 +147,6 @@ export default function SalesPage() {
                       <button onClick={() => viewReceipt(sale.sale_id)} style={actionBtn("#185FA5", "#E6F1FB")}>
                         Receipt
                       </button>
-                      {/* ✅ Fixed: uses getInvoiceUrl() instead of hardcoded localhost */}
                       <a
                         href={getInvoiceUrl(sale.sale_id)}
                         target="_blank"
@@ -206,84 +213,16 @@ export default function SalesPage() {
 
 // ── Styles ────────────────────────────────────────────────────────────────────
 const labelStyle = { fontSize: 12, color: "var(--color-text-secondary)" };
-
-const dateInput = {
-  padding: "5px 8px",
-  borderRadius: 6,
-  border: "1px solid var(--color-border-tertiary)",
-  fontSize: 12,
-  background: "var(--color-background-primary)",
-  color: "var(--color-text-primary)",
-};
-
-const clearBtn = {
-  padding: "5px 10px",
-  borderRadius: 6,
-  border: "1px solid var(--color-border-tertiary)",
-  background: "none",
-  fontSize: 12,
-  cursor: "pointer",
-  color: "var(--color-text-secondary)",
-};
-
-const errorBox  = { background: "#FCEBEB", color: "#A32D2D", borderRadius: 8, padding: "9px 13px", fontSize: 13, marginBottom: 14 };
-const tableWrap = { background: "var(--color-background-primary)", border: "1px solid var(--color-border-tertiary)", borderRadius: 12, overflow: "hidden" };
-const th        = { padding: "9px 14px", textAlign: "left", fontSize: 11, fontWeight: 500, color: "var(--color-text-secondary)", textTransform: "uppercase", letterSpacing: "0.05em" };
-const td        = { padding: "11px 14px", fontSize: 13, color: "var(--color-text-primary)" };
-const emptyTd   = { textAlign: "center", padding: 32, color: "var(--color-text-tertiary)", fontSize: 13 };
-
-const actionBtn = (color, bg) => ({
-  padding: "4px 10px",
-  borderRadius: 6,
-  border: "none",
-  background: bg,
-  color,
-  fontSize: 11,
-  fontWeight: 500,
-  cursor: "pointer",
-});
-
-const pageBtn = (disabled) => ({
-  padding: "5px 12px",
-  borderRadius: 6,
-  border: "1px solid var(--color-border-tertiary)",
-  background: "none",
-  fontSize: 12,
-  cursor: disabled ? "default" : "pointer",
-  opacity: disabled ? 0.4 : 1,
-  color: "var(--color-text-primary)",
-});
-
-const overlayStyle = {
-  position: "fixed", inset: 0,
-  background: "rgba(0,0,0,0.45)",
-  display: "flex", alignItems: "center", justifyContent: "center",
-  zIndex: 999,
-};
-
-const modalStyle = {
-  background: "var(--color-background-primary)",
-  borderRadius: 12,
-  padding: 24,
-  width: 360,
-  maxHeight: "80vh",
-  overflowY: "auto",
-  boxShadow: "0 8px 32px rgba(0,0,0,0.2)",
-};
-
-const closeBtn = {
-  background: "none", border: "none",
-  fontSize: 20, cursor: "pointer",
-  color: "var(--color-text-secondary)",
-  lineHeight: 1,
-};
-
-const cancelBtn = {
-  padding: "9px 16px",
-  borderRadius: 8,
-  border: "1px solid var(--color-border-tertiary)",
-  background: "none",
-  fontSize: 13,
-  cursor: "pointer",
-  color: "var(--color-text-primary)",
-};
+const dateInput  = { padding: "5px 8px", borderRadius: 6, border: "1px solid var(--color-border-tertiary)", fontSize: 12, background: "var(--color-background-primary)", color: "var(--color-text-primary)" };
+const clearBtn   = { padding: "5px 10px", borderRadius: 6, border: "1px solid var(--color-border-tertiary)", background: "none", fontSize: 12, cursor: "pointer", color: "var(--color-text-secondary)" };
+const errorBox   = { background: "#FCEBEB", color: "#A32D2D", borderRadius: 8, padding: "9px 13px", fontSize: 13, marginBottom: 14 };
+const tableWrap  = { background: "var(--color-background-primary)", border: "1px solid var(--color-border-tertiary)", borderRadius: 12, overflow: "hidden" };
+const th         = { padding: "9px 14px", textAlign: "left", fontSize: 11, fontWeight: 500, color: "var(--color-text-secondary)", textTransform: "uppercase", letterSpacing: "0.05em" };
+const td         = { padding: "11px 14px", fontSize: 13, color: "var(--color-text-primary)" };
+const emptyTd    = { textAlign: "center", padding: 32, color: "var(--color-text-tertiary)", fontSize: 13 };
+const actionBtn  = (color, bg) => ({ padding: "4px 10px", borderRadius: 6, border: "none", background: bg, color, fontSize: 11, fontWeight: 500, cursor: "pointer" });
+const pageBtn    = (disabled) => ({ padding: "5px 12px", borderRadius: 6, border: "1px solid var(--color-border-tertiary)", background: "none", fontSize: 12, cursor: disabled ? "default" : "pointer", opacity: disabled ? 0.4 : 1, color: "var(--color-text-primary)" });
+const overlayStyle = { position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 999 };
+const modalStyle   = { background: "var(--color-background-primary)", borderRadius: 12, padding: 24, width: 360, maxHeight: "80vh", overflowY: "auto", boxShadow: "0 8px 32px rgba(0,0,0,0.2)" };
+const closeBtn     = { background: "none", border: "none", fontSize: 20, cursor: "pointer", color: "var(--color-text-secondary)", lineHeight: 1 };
+const cancelBtn    = { padding: "9px 16px", borderRadius: 8, border: "1px solid var(--color-border-tertiary)", background: "none", fontSize: 13, cursor: "pointer", color: "var(--color-text-primary)" };
