@@ -2,7 +2,7 @@ from app import models
 from datetime import date, datetime, timedelta
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
-from sqlalchemy import func
+from sqlalchemy import func, and_
 from typing import Optional
 
 from app.database import get_db
@@ -196,19 +196,18 @@ def stock_valuation(
         sv = float(r.stock_quantity or 0) * float(r.cost_price or 0)
         total_value += sv
         products.append({
-            "product_name":  r.product_name,
+            "product_name":   r.product_name,
             "stock_quantity": r.stock_quantity,
-            "cost_price":    float(r.cost_price or 0),
-            "stock_value":   sv,
+            "cost_price":     float(r.cost_price or 0),
+            "stock_value":    sv,
         })
 
-    # Sort by stock value descending
     products.sort(key=lambda x: x["stock_value"], reverse=True)
 
     return {
         "summary":  {"total_inventory_value": total_value},
-        "products": products,                               # ✅ fixed — now returns product list
-        "chart":    {
+        "products": products,
+        "chart": {
             "labels":   [p["product_name"] for p in products],
             "datasets": [{"label": "Stock Value (₦)", "data": [p["stock_value"] for p in products]}],
         },
@@ -223,8 +222,20 @@ def audit_logs(
 ):
     """
     Returns audit logs with the full name of the user who performed the action.
-    Scoped to the admin's own business (superadmin sees all).
+    Business scoping is applied in the JOIN condition (not WHERE) to preserve
+    the outer join and avoid turning it into an inner join.
     """
+    if user.role == SUPERADMIN_ROLE:
+        # Superadmin sees all — simple outer join with no business filter
+        join_condition = User.user_id == AuditLog.user_id
+    else:
+        # Admin sees only their own business users' actions
+        # Scoping in JOIN condition preserves the outer join correctly
+        join_condition = and_(
+            User.user_id == AuditLog.user_id,
+            User.business_id == user.business_id,
+        )
+
     q = (
         db.query(
             AuditLog.log_id,
@@ -236,14 +247,15 @@ def audit_logs(
             User.full_name.label("performed_by"),
             User.username.label("username"),
         )
-        .outerjoin(User, User.user_id == AuditLog.user_id)
+        .outerjoin(User, join_condition)
         .order_by(AuditLog.created_at.desc())
         .limit(100)
     )
 
-    # Scope to business for non-superadmin
+    # For non-superadmin: only return rows where a matching user was found
+    # (i.e. logs that belong to this business)
     if user.role != SUPERADMIN_ROLE:
-        q = q.filter(User.business_id == user.business_id)
+        q = q.filter(User.user_id.isnot(None))
 
     results = q.all()
 
