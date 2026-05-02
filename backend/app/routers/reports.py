@@ -221,18 +221,15 @@ def audit_logs(
     user=Depends(require_role(["admin"]))
 ):
     """
-    Returns audit logs with the full name of the user who performed the action.
-    Business scoping is applied in the JOIN condition (not WHERE) to preserve
-    the outer join and avoid turning it into an inner join.
+    Returns audit logs joined with the user who performed the action.
+    Business scoping is in the JOIN condition to preserve the outer join.
+    filter() is called BEFORE limit() to avoid SQLAlchemy InvalidRequestError.
     """
     if user.role == SUPERADMIN_ROLE:
-        # Superadmin sees all — simple outer join with no business filter
         join_condition = User.user_id == AuditLog.user_id
     else:
-        # Admin sees only their own business users' actions
-        # Scoping in JOIN condition preserves the outer join correctly
         join_condition = and_(
-            User.user_id == AuditLog.user_id,
+            User.user_id     == AuditLog.user_id,
             User.business_id == user.business_id,
         )
 
@@ -249,13 +246,13 @@ def audit_logs(
         )
         .outerjoin(User, join_condition)
         .order_by(AuditLog.created_at.desc())
-        .limit(100)
     )
 
-    # For non-superadmin: only return rows where a matching user was found
-    # (i.e. logs that belong to this business)
+    # ✅ filter() BEFORE limit() — avoids InvalidRequestError
     if user.role != SUPERADMIN_ROLE:
         q = q.filter(User.user_id.isnot(None))
+
+    q = q.limit(100)
 
     results = q.all()
 
