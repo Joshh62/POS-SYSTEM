@@ -2,13 +2,33 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app import models, schemas
-from app.dependencies import get_current_user
-from datetime import date
+from app.dependencies import get_current_user, require_role
+from datetime import date, datetime
 import openpyxl
 import csv
 import io
+import pytz
 
 router = APIRouter(prefix="/products", tags=["Products"])
+
+LAGOS = pytz.timezone("Africa/Lagos")
+
+def now_lagos():
+    return datetime.now(LAGOS).replace(tzinfo=None)
+
+
+# ── Audit log helper ──────────────────────────────────────────────────────────
+def write_audit(db, user_id: int, action: str, table: str, record_id: int, description: str):
+    try:
+        db.add(models.AuditLog(
+            user_id=user_id,
+            action=action,
+            table_name=table,
+            record_id=record_id,
+            description=description,
+        ))
+    except Exception as e:
+        print(f"[Audit] Failed to write log: {e}")
 
 
 # ── CREATE ────────────────────────────────────────────────────────────────────
@@ -16,7 +36,7 @@ router = APIRouter(prefix="/products", tags=["Products"])
 def create_product(
     product: schemas.ProductCreate,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user)
+    current_user: models.User = Depends(require_role(["admin", "manager"]))  # ✅ manager allowed
 ):
     if db.query(models.Product).filter(models.Product.barcode == product.barcode).first():
         raise HTTPException(status_code=400, detail="Barcode already exists")
@@ -44,6 +64,16 @@ def create_product(
                 stock_quantity=product.stock_quantity or 0,
                 reorder_level=5,
             ))
+
+    # ✅ Audit log
+    write_audit(
+        db,
+        user_id=current_user.user_id,
+        action="CREATE",
+        table="products",
+        record_id=new_product.product_id,
+        description=f"Added product '{new_product.product_name}' — barcode: {new_product.barcode} — price: ₦{float(new_product.selling_price):,.2f}",
+    )
 
     db.commit()
     db.refresh(new_product)
@@ -87,16 +117,42 @@ def get_product(product_id: int, db: Session = Depends(get_db)):
 
 # ── UPDATE ────────────────────────────────────────────────────────────────────
 @router.put("/{product_id}", response_model=schemas.ProductResponse)
-def update_product(product_id: int, product: schemas.ProductCreate, db: Session = Depends(get_db)):
+def update_product(
+    product_id: int,
+    product: schemas.ProductCreate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(require_role(["admin", "manager"]))  # ✅ manager allowed
+):
     existing = db.query(models.Product).filter(models.Product.product_id == product_id).first()
     if not existing:
         raise HTTPException(status_code=404, detail="Product not found")
+
+    # Track what changed for the audit description
+    changes = []
+    if existing.product_name != product.product_name:
+        changes.append(f"name: '{existing.product_name}' → '{product.product_name}'")
+    if float(existing.selling_price or 0) != float(product.selling_price or 0):
+        changes.append(f"price: ₦{float(existing.selling_price or 0):,.2f} → ₦{float(product.selling_price or 0):,.2f}")
+    if float(existing.cost_price or 0) != float(product.cost_price or 0):
+        changes.append(f"cost: ₦{float(existing.cost_price or 0):,.2f} → ₦{float(product.cost_price or 0):,.2f}")
 
     existing.product_name  = product.product_name
     existing.barcode       = product.barcode
     existing.category_id   = product.category_id
     existing.cost_price    = product.cost_price
     existing.selling_price = product.selling_price
+
+    # ✅ Audit log
+    change_str = ", ".join(changes) if changes else "no price/name changes"
+    write_audit(
+        db,
+        user_id=current_user.user_id,
+        action="UPDATE",
+        table="products",
+        record_id=product_id,
+        description=f"Updated product '{existing.product_name}' (#{product_id}) — {change_str}",
+    )
+
     db.commit()
     db.refresh(existing)
     return existing
@@ -107,7 +163,7 @@ def update_product(product_id: int, product: schemas.ProductCreate, db: Session 
 def import_products(
     file: UploadFile = File(...),
     db:   Session    = Depends(get_db),
-    current_user: models.User = Depends(get_current_user)
+    current_user: models.User = Depends(require_role(["admin", "manager"]))  # ✅ manager allowed
 ):
     """
     Import products from .xlsx or .csv file.
@@ -123,7 +179,6 @@ def import_products(
     filename = file.filename.lower()
     imported, skipped, errors = 0, 0, []
 
-    # Build category name → id map (create missing ones)
     def get_or_create_category(name: str) -> int | None:
         if not name:
             return None
@@ -137,13 +192,11 @@ def import_products(
             db.flush()
         return cat.category_id
 
-    # Fetch branches once
     branches = db.query(models.Branch).all()
 
-    # ── Parse rows ────────────────────────────────────────────────────────────
     try:
         if filename.endswith(".csv"):
-            content = file.file.read().decode("utf-8-sig")  # handles BOM
+            content = file.file.read().decode("utf-8-sig")
             reader  = csv.DictReader(io.StringIO(content))
             rows    = list(reader)
         else:
@@ -156,7 +209,8 @@ def import_products(
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Could not read file: {e}")
 
-    # ── Process each row ──────────────────────────────────────────────────────
+    imported_names = []
+
     for i, row in enumerate(rows, start=2):
         row = {str(k).strip().lower(): v for k, v in row.items()}
 
@@ -166,7 +220,7 @@ def import_products(
         cost_price    = row.get("cost_price")
         stock_qty     = row.get("stock_quantity") or row.get("stock") or 0
         category_name = str(row.get("category")   or "").strip()
-        expiry_raw    = row.get("expiry_date")     # ✅ new column
+        expiry_raw    = row.get("expiry_date")
 
         if not product_name:
             errors.append(f"Row {i}: missing product_name"); continue
@@ -178,7 +232,6 @@ def import_products(
         if db.query(models.Product).filter(models.Product.barcode == barcode).first():
             skipped += 1; continue
 
-        # Parse expiry date
         expiry_date = None
         if expiry_raw:
             try:
@@ -216,7 +269,6 @@ def import_products(
                     expiry_alert_days=90,
                 ))
 
-                # ✅ Create opening batch if stock > 0 or expiry provided
                 if qty > 0 or expiry_date:
                     db.add(models.InventoryBatch(
                         product_id=product.product_id,
@@ -227,12 +279,27 @@ def import_products(
                         notes="Imported via bulk upload",
                     ))
 
+            imported_names.append(product_name)
             imported += 1
 
         except Exception as e:
             errors.append(f"Row {i} ({product_name}): {str(e)}")
             db.rollback()
             continue
+
+    # ✅ Single audit log entry for the whole import
+    if imported > 0:
+        preview = ", ".join(imported_names[:5])
+        if len(imported_names) > 5:
+            preview += f" ... and {len(imported_names) - 5} more"
+        write_audit(
+            db,
+            user_id=current_user.user_id,
+            action="CREATE",
+            table="products",
+            record_id=0,
+            description=f"Bulk imported {imported} product(s) via CSV — {preview}",
+        )
 
     db.commit()
 

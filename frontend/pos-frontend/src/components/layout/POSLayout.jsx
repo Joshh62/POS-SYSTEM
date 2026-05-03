@@ -1,19 +1,20 @@
 import { useState } from "react";
 import BarcodeScannerIndicator from "../scanner/BarcodeScannerIndicator";
 import { useBranch } from "../../context/BranchContext";
+import { changePassword } from "../../api/api";
 
 const SHOP_NAME = import.meta.env.VITE_SHOP_NAME || "POS System";
 
 const NAV_ITEMS = [
-  { key: "pos",       label: "POS",           icon: "🛒", roles: ["admin", "manager", "cashier", "superadmin"] },
-  { key: "dashboard", label: "Dashboard",     icon: "📊", roles: ["admin", "manager", "superadmin"] },
-  { key: "sales",     label: "Sales history", icon: "🧾", roles: ["admin", "manager", "cashier", "superadmin"] },
-  { key: "products",  label: "Products",      icon: "📦", roles: ["admin", "manager", "superadmin"] },
-  { key: "inventory", label: "Inventory",     icon: "🏭", roles: ["admin", "manager", "superadmin"] },
-  { key: "reports",   label: "Reports",       icon: "📈", roles: ["admin", "manager", "superadmin"] },
-  { key: "users",     label: "Users",         icon: "👥", roles: ["admin", "superadmin"] },
-  { key: "import",    label: "Import products",icon: "⬆️", roles: ["admin", "superadmin"] },
-  { key: "businesses",label: "Businesses",    icon: "🏢", roles: ["superadmin"] },
+  { key: "pos",        label: "POS",            icon: "🛒", roles: ["admin", "manager", "cashier", "superadmin"] },
+  { key: "dashboard",  label: "Dashboard",      icon: "📊", roles: ["admin", "manager", "superadmin"] },
+  { key: "sales",      label: "Sales history",  icon: "🧾", roles: ["admin", "manager", "cashier", "superadmin"] },
+  { key: "products",   label: "Products",       icon: "📦", roles: ["admin", "manager", "superadmin"] },
+  { key: "inventory",  label: "Inventory",      icon: "🏭", roles: ["admin", "manager", "superadmin"] },
+  { key: "reports",    label: "Reports",        icon: "📈", roles: ["admin", "manager", "superadmin"] },
+  { key: "users",      label: "Users",          icon: "👥", roles: ["admin", "superadmin"] },
+  { key: "import",     label: "Import products",icon: "⬆️", roles: ["admin", "manager", "superadmin"] },
+  { key: "businesses", label: "Businesses",     icon: "🏢", roles: ["superadmin"] },
 ];
 
 const PAGE_TITLES = {
@@ -30,14 +31,54 @@ const PAGE_TITLES = {
 
 export default function POSLayout({ children, activePage, onNavigate, onLogout, lastScan }) {
   const [collapsed, setCollapsed] = useState(false);
-  const { activeBranchId, setActiveBranchId, branches, role: ctxRole } = useBranch();
+  const { activeBranchId, setActiveBranchId, branches } = useBranch();
 
-  const user    = JSON.parse(localStorage.getItem("user") || "{}");
-  const role    = user.role || "cashier";
-  const visible = NAV_ITEMS.filter(i => i.roles.includes(role));
-  const sideW   = collapsed ? 56 : 210;
+  const user  = JSON.parse(localStorage.getItem("user") || "{}");
+  const role  = user.role || "cashier";
+  const sideW = collapsed ? 56 : 210;
 
+  const visible         = NAV_ITEMS.filter(i => i.roles.includes(role));
   const canSwitchBranch = ["admin", "superadmin"].includes(role) && branches.length > 1;
+
+  // ── Sign out confirmation ─────────────────────────────────────────────────
+  const [showSignOut, setShowSignOut] = useState(false);
+
+  // ── Change password (all roles) ───────────────────────────────────────────
+  const [showChangePwd, setShowChangePwd] = useState(false);
+  const [pwdForm, setPwdForm]             = useState({ current: "", newPwd: "", confirm: "" });
+  const [pwdLoading, setPwdLoading]       = useState(false);
+  const [pwdError, setPwdError]           = useState(null);
+  const [pwdSuccess, setPwdSuccess]       = useState(null);
+
+  const openChangePwd = () => {
+    setPwdForm({ current: "", newPwd: "", confirm: "" });
+    setPwdError(null);
+    setPwdSuccess(null);
+    setShowChangePwd(true);
+  };
+
+  const handleChangePwd = async () => {
+    if (!pwdForm.current || !pwdForm.newPwd || !pwdForm.confirm) {
+      setPwdError("All fields are required."); return;
+    }
+    if (pwdForm.newPwd.length < 6) {
+      setPwdError("New password must be at least 6 characters."); return;
+    }
+    if (pwdForm.newPwd !== pwdForm.confirm) {
+      setPwdError("New passwords do not match."); return;
+    }
+    setPwdLoading(true);
+    setPwdError(null);
+    try {
+      await changePassword(pwdForm.current, pwdForm.newPwd);
+      setPwdSuccess("Password changed successfully.");
+      setPwdForm({ current: "", newPwd: "", confirm: "" });
+    } catch (err) {
+      setPwdError(err.response?.data?.detail || "Failed to change password.");
+    } finally {
+      setPwdLoading(false);
+    }
+  };
 
   return (
     <div style={{ position: "fixed", inset: 0, display: "flex", overflow: "hidden", background: "var(--color-background-tertiary)" }}>
@@ -100,11 +141,29 @@ export default function POSLayout({ children, activePage, onNavigate, onLogout, 
         <div style={{ borderTop: "1px solid var(--color-border-tertiary)", padding: collapsed ? "10px 0" : "10px 12px" }}>
           {!collapsed && (
             <div style={{ marginBottom: 8 }}>
-              <div style={{ fontSize: 13, fontWeight: 500, color: "var(--color-text-primary)" }}>{user.username}</div>
-              <div style={{ fontSize: 11, color: "var(--color-text-tertiary)", textTransform: "capitalize" }}>{role}</div>
+              <div style={{ fontSize: 13, fontWeight: 500, color: "var(--color-text-primary)" }}>
+                {user.username}
+              </div>
+              <div style={{ fontSize: 11, color: "var(--color-text-tertiary)", textTransform: "capitalize" }}>
+                {role}
+              </div>
             </div>
           )}
-          <button onClick={onLogout} style={{
+
+          {/* Change password — all roles */}
+          <button onClick={openChangePwd} style={{
+            display: "flex", alignItems: "center",
+            justifyContent: collapsed ? "center" : "flex-start",
+            gap: 6, background: "none", border: "none",
+            color: "var(--color-text-secondary)", fontSize: 12, cursor: "pointer",
+            padding: "4px 0", width: "100%", marginBottom: 2,
+          }}>
+            <span style={{ fontSize: 14 }}>🔒</span>
+            {!collapsed && <span>Change password</span>}
+          </button>
+
+          {/* Sign out */}
+          <button onClick={() => setShowSignOut(true)} style={{
             display: "flex", alignItems: "center",
             justifyContent: collapsed ? "center" : "flex-start",
             gap: 6, background: "none", border: "none",
@@ -132,7 +191,7 @@ export default function POSLayout({ children, activePage, onNavigate, onLogout, 
             {PAGE_TITLES[activePage] || ""}
           </span>
 
-          {/* ── Branch switcher ── */}
+          {/* Branch switcher */}
           {canSwitchBranch && (
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <span style={{ fontSize: 11, color: "var(--color-text-tertiary)", flexShrink: 0 }}>
@@ -149,9 +208,7 @@ export default function POSLayout({ children, activePage, onNavigate, onLogout, 
                   maxWidth: 200,
                 }}
               >
-                {role === "superadmin" && (
-                  <option value="">All branches</option>
-                )}
+                {role === "superadmin" && <option value="">All branches</option>}
                 {branches.map(b => (
                   <option key={b.branch_id} value={b.branch_id}>
                     {role === "superadmin" ? `${b.business_name} — ${b.name}` : b.name}
@@ -174,12 +231,140 @@ export default function POSLayout({ children, activePage, onNavigate, onLogout, 
           {children}
         </div>
       </div>
+
+      {/* ── Sign out confirmation modal ── */}
+      {showSignOut && (
+        <div style={overlayStyle}>
+          <div style={modalStyle}>
+            <div style={{ fontSize: 32, textAlign: "center", marginBottom: 12 }}>🚪</div>
+            <h2 style={{ fontSize: 16, fontWeight: 600, color: "#e8ecf2", margin: "0 0 8px", textAlign: "center" }}>
+              Sign out?
+            </h2>
+            <p style={{ fontSize: 13, color: "#8a93a6", textAlign: "center", margin: "0 0 20px", lineHeight: 1.5 }}>
+              You are signed in as <strong style={{ color: "#e8ecf2" }}>{user.username}</strong>.<br />
+              Any unsaved changes will be lost.
+            </p>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              <button
+                onClick={() => { setShowSignOut(false); onLogout(); }}
+                style={{
+                  width: "100%", padding: "11px 0", borderRadius: 10,
+                  border: "none", background: "#A32D2D",
+                  color: "#fff", fontSize: 14, fontWeight: 500, cursor: "pointer",
+                }}
+              >
+                Yes, sign out
+              </button>
+              <button
+                onClick={() => setShowSignOut(false)}
+                style={{
+                  width: "100%", padding: "11px 0", borderRadius: 10,
+                  border: "1px solid #3a4255", background: "none",
+                  color: "#c0c7d4", fontSize: 14, cursor: "pointer",
+                }}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Change password modal ── */}
+      {showChangePwd && (
+        <div style={overlayStyle}>
+          <div style={modalStyle}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18 }}>
+              <h2 style={{ fontSize: 16, fontWeight: 600, color: "#e8ecf2", margin: 0 }}>
+                Change password
+              </h2>
+              <button onClick={() => setShowChangePwd(false)} style={closeBtn}>×</button>
+            </div>
+
+            <div style={{ background: "#1e2535", border: "1px solid #2a3247", borderRadius: 8, padding: "9px 12px", fontSize: 12, color: "#8a93a6", marginBottom: 18 }}>
+              Changing password for{" "}
+              <strong style={{ color: "#e8ecf2" }}>@{user.username}</strong>
+            </div>
+
+            {pwdSuccess ? (
+              <>
+                <div style={successBox}>{pwdSuccess}</div>
+                <button
+                  onClick={() => setShowChangePwd(false)}
+                  style={{ ...actionBtn, background: "#185FA5", color: "#fff", cursor: "pointer", marginTop: 14 }}
+                >
+                  Done
+                </button>
+              </>
+            ) : (
+              <>
+                <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                  <Field label="Current password">
+                    <input type="password" style={inputStyle} value={pwdForm.current}
+                      onChange={e => setPwdForm({ ...pwdForm, current: e.target.value })}
+                      placeholder="Enter current password" />
+                  </Field>
+                  <Field label="New password">
+                    <input type="password" style={inputStyle} value={pwdForm.newPwd}
+                      onChange={e => setPwdForm({ ...pwdForm, newPwd: e.target.value })}
+                      placeholder="Min. 6 characters" />
+                  </Field>
+                  <Field label="Confirm new password">
+                    <input type="password" style={inputStyle} value={pwdForm.confirm}
+                      onChange={e => setPwdForm({ ...pwdForm, confirm: e.target.value })}
+                      placeholder="Repeat new password" />
+                  </Field>
+                </div>
+
+                {pwdError && <div style={{ ...errorBox, marginTop: 12 }}>{pwdError}</div>}
+
+                <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 18 }}>
+                  <button
+                    onClick={handleChangePwd}
+                    disabled={pwdLoading}
+                    style={{
+                      ...actionBtn,
+                      background: pwdLoading ? "#2a3247" : "#185FA5",
+                      color: pwdLoading ? "#5a6475" : "#fff",
+                      cursor: pwdLoading ? "not-allowed" : "pointer",
+                    }}
+                  >
+                    {pwdLoading ? "Changing..." : "Change password"}
+                  </button>
+                  <button
+                    onClick={() => setShowChangePwd(false)}
+                    style={{ ...actionBtn, background: "none", border: "1px solid #3a4255", color: "#c0c7d4", cursor: "pointer" }}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
 
-const iconBtn = {
-  background: "none", border: "none", cursor: "pointer",
-  color: "var(--color-text-tertiary)", fontSize: 11,
-  padding: "4px 6px", borderRadius: 4,
-};
+function Field({ label, children }) {
+  return (
+    <div>
+      <label style={{ display: "block", fontSize: 12, fontWeight: 500, color: "#c0c7d4", marginBottom: 5 }}>
+        {label}
+      </label>
+      {children}
+    </div>
+  );
+}
+
+// ── Styles ─────────────────────────────────────────────────────────────────────
+const iconBtn    = { background: "none", border: "none", cursor: "pointer", color: "var(--color-text-tertiary)", fontSize: 11, padding: "4px 6px", borderRadius: 4 };
+const overlayStyle = { position: "fixed", inset: 0, background: "rgba(0,0,0,0.65)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 9999 };
+const modalStyle   = { background: "#151b28", borderRadius: 14, padding: 24, width: "100%", maxWidth: 380, maxHeight: "85vh", overflowY: "auto", boxShadow: "0 20px 60px rgba(0,0,0,0.6)", border: "1px solid #2a3247" };
+const closeBtn     = { background: "none", border: "none", fontSize: 22, color: "#8a93a6", cursor: "pointer", padding: 0, lineHeight: 1 };
+const inputStyle   = { display: "block", width: "100%", padding: "9px 11px", borderRadius: 7, border: "1.5px solid #3a4255", fontSize: 13, background: "#1e2535", color: "#e8ecf2", boxSizing: "border-box", outline: "none", fontFamily: "inherit" };
+const actionBtn    = { width: "100%", padding: "11px 0", borderRadius: 10, border: "none", fontSize: 14, fontWeight: 500 };
+const errorBox     = { background: "#FCEBEB", color: "#A32D2D", borderRadius: 8, padding: "9px 13px", fontSize: 13 };
+const successBox   = { background: "#EAF3DE", color: "#3B6D11", borderRadius: 8, padding: "10px 14px", fontSize: 13 };
