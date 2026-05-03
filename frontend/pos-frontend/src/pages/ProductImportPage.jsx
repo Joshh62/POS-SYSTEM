@@ -1,17 +1,17 @@
 import { useState, useRef } from "react";
 import api from "../api/api";
 
-// ── Excel template columns (shown to user) ────────────────────────────────────
+// ── Excel template columns ────────────────────────────────────────────────────
 const REQUIRED_COLS = ["product_name", "barcode", "selling_price"];
 const OPTIONAL_COLS = ["category", "cost_price", "stock_quantity", "expiry_date"];
 
 export default function ProductImportPage() {
-  const [file, setFile]           = useState(null);
-  const [dragging, setDragging]   = useState(false);
-  const [loading, setLoading]     = useState(false);
-  const [result, setResult]       = useState(null);   // { imported, skipped, errors }
-  const [error, setError]         = useState(null);
-  const inputRef                  = useRef();
+  const [file, setFile]         = useState(null);
+  const [dragging, setDragging] = useState(false);
+  const [loading, setLoading]   = useState(false);
+  const [result, setResult]     = useState(null);
+  const [error, setError]       = useState(null);
+  const inputRef                = useRef();
 
   const handleFile = (f) => {
     if (!f) return;
@@ -36,10 +36,8 @@ export default function ProductImportPage() {
     setLoading(true);
     setError(null);
     setResult(null);
-
     const formData = new FormData();
     formData.append("file", file);
-
     try {
       const res = await api.post("/products/import", formData, {
         headers: { "Content-Type": "multipart/form-data" },
@@ -54,15 +52,19 @@ export default function ProductImportPage() {
   };
 
   const downloadTemplate = () => {
-    // Build a minimal CSV template the user can open in Excel
+    // Sample expiry date one year from today
+    const sampleExpiry = new Date();
+    sampleExpiry.setFullYear(sampleExpiry.getFullYear() + 1);
+    const sampleExpiryStr = sampleExpiry.toISOString().split("T")[0]; // YYYY-MM-DD
+
     const rows = [
-      [...REQUIRED_COLS, ...OPTIONAL_COLS].join(","),
-      "Indomie Noodles,0404,600,Food,450,100,2026-12-31",
-      "Milk 500ml,0707,700,Beverages,500,50,2026-09-15",
-      "Moisturizer SPF30,1001,3500,Skincare,2500,30,2027-06-01",
+      // Header
+      "product_name,barcode,selling_price,category,cost_price,stock_quantity,expiry_date",
+      // One empty example row with hints — user fills this in or deletes it
+      `"Product name here","barcode here",0,"Category",0,0,`,
     ].join("\n");
 
-    const blob = new Blob([rows], { type: "text/csv" });
+    const blob = new Blob([rows], { type: "text/csv;charset=utf-8;" });
     const url  = URL.createObjectURL(blob);
     const a    = document.createElement("a");
     a.href     = url;
@@ -79,13 +81,21 @@ export default function ProductImportPage() {
         <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 10, color: "var(--color-text-primary)" }}>
           📋 How to import products
         </div>
-        <ol style={{ margin: 0, paddingLeft: 18, fontSize: 13, color: "var(--color-text-secondary)", lineHeight: 2 }}>
-          <li>Download the template below and open it in Excel or Google Sheets</li>
-          <li>Fill in your products — one product per row</li>
-          <li>Save as <strong>.xlsx</strong> or <strong>.csv</strong></li>
-          <li>Upload the file here — products are added to your branch automatically</li>
+        <ol style={{ margin: 0, paddingLeft: 18, fontSize: 13, color: "var(--color-text-secondary)", lineHeight: 2.1 }}>
+          <li>Download the template and open it in Excel or Google Sheets</li>
+          <li>Delete the example row and fill in your products — one per row</li>
+          <li>
+            For <strong style={{ color: "var(--color-text-primary)" }}>expiry_date</strong>, use format{" "}
+            <code style={{ background: "var(--color-background-secondary)", padding: "1px 6px", borderRadius: 4, fontSize: 12 }}>YYYY-MM-DD</code>
+            {" "}— e.g. <code style={{ background: "var(--color-background-secondary)", padding: "1px 6px", borderRadius: 4, fontSize: 12 }}>
+              {new Date(Date.now() + 365*24*60*60*1000).toISOString().split("T")[0]}
+            </code>. Leave blank for products with no expiry.
+          </li>
+          <li>Save as <strong style={{ color: "var(--color-text-primary)" }}>.xlsx</strong> or <strong style={{ color: "var(--color-text-primary)" }}>.csv</strong></li>
+          <li>Upload the file — products are added to all branches automatically</li>
         </ol>
 
+        {/* Column reference */}
         <div style={{ marginTop: 14 }}>
           <div style={{ fontSize: 12, fontWeight: 500, color: "var(--color-text-secondary)", marginBottom: 6 }}>
             Required columns
@@ -105,6 +115,19 @@ export default function ProductImportPage() {
           </div>
         </div>
 
+        {/* Date format hint */}
+        <div style={{
+          marginTop: 14, padding: "10px 14px", borderRadius: 8,
+          background: "var(--color-background-secondary)",
+          border: "1px solid var(--color-border-tertiary)",
+          fontSize: 12, color: "var(--color-text-secondary)", lineHeight: 1.8,
+        }}>
+          📅 <strong style={{ color: "var(--color-text-primary)" }}>Date format:</strong>{" "}
+          YYYY = 4-digit year · MM = 2-digit month · DD = 2-digit day<br />
+          <span style={{ fontFamily: "monospace", color: "var(--color-text-primary)" }}>2026-12-31</span> = 31 Dec 2026 &nbsp;·&nbsp;
+          <span style={{ fontFamily: "monospace", color: "var(--color-text-primary)" }}>2027-06-01</span> = 1 Jun 2027
+        </div>
+
         <button onClick={downloadTemplate} style={{ ...outlineBtn, marginTop: 14 }}>
           ⬇ Download template (.csv)
         </button>
@@ -118,13 +141,10 @@ export default function ProductImportPage() {
         onClick={() => inputRef.current?.click()}
         style={{
           border: `2px dashed ${dragging ? "#185FA5" : "var(--color-border-tertiary)"}`,
-          borderRadius: 12,
-          padding: "40px 24px",
-          textAlign: "center",
+          borderRadius: 12, padding: "40px 24px", textAlign: "center",
           cursor: "pointer",
           background: dragging ? "rgba(24,95,165,0.04)" : "var(--color-background-primary)",
-          transition: "all 0.2s",
-          marginBottom: 16,
+          transition: "all 0.2s", marginBottom: 16,
         }}
       >
         <input
@@ -137,9 +157,7 @@ export default function ProductImportPage() {
         <div style={{ fontSize: 32, marginBottom: 10 }}>📂</div>
         {file ? (
           <>
-            <div style={{ fontSize: 14, fontWeight: 500, color: "var(--color-text-primary)" }}>
-              {file.name}
-            </div>
+            <div style={{ fontSize: 14, fontWeight: 500, color: "var(--color-text-primary)" }}>{file.name}</div>
             <div style={{ fontSize: 12, color: "var(--color-text-secondary)", marginTop: 4 }}>
               {(file.size / 1024).toFixed(1)} KB · Click to change file
             </div>
@@ -156,10 +174,8 @@ export default function ProductImportPage() {
         )}
       </div>
 
-      {/* Error */}
       {error && <div style={errorBox}>{error}</div>}
 
-      {/* Upload button */}
       {file && !result && (
         <button
           onClick={handleUpload}
@@ -178,27 +194,20 @@ export default function ProductImportPage() {
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginBottom: 14 }}>
             <StatBox label="Imported" value={result.imported ?? result.created ?? 0} color="#3B6D11" />
-            <StatBox label="Skipped"  value={result.skipped  ?? 0} color="#854F0B" />
-            <StatBox label="Errors"   value={result.errors?.length ?? 0} color="#A32D2D" />
+            <StatBox label="Skipped"  value={result.skipped  ?? 0}                  color="#854F0B" />
+            <StatBox label="Errors"   value={result.errors?.length ?? 0}            color="#A32D2D" />
           </div>
-
           {result.errors?.length > 0 && (
             <div style={{ marginTop: 8 }}>
               <div style={{ fontSize: 12, fontWeight: 500, color: "#A32D2D", marginBottom: 6 }}>
                 Rows with errors:
               </div>
               {result.errors.map((e, i) => (
-                <div key={i} style={{ fontSize: 12, color: "#A32D2D", padding: "3px 0" }}>
-                  • {e}
-                </div>
+                <div key={i} style={{ fontSize: 12, color: "#A32D2D", padding: "3px 0" }}>• {e}</div>
               ))}
             </div>
           )}
-
-          <button
-            onClick={() => { setResult(null); setFile(null); }}
-            style={{ ...primaryBtn, marginTop: 14 }}
-          >
+          <button onClick={() => { setResult(null); setFile(null); }} style={{ ...primaryBtn, marginTop: 14 }}>
             Import another file
           </button>
         </div>
@@ -209,10 +218,7 @@ export default function ProductImportPage() {
 
 function StatBox({ label, value, color }) {
   return (
-    <div style={{
-      background: "rgba(255,255,255,0.6)", borderRadius: 8,
-      padding: "10px 14px", textAlign: "center",
-    }}>
+    <div style={{ background: "rgba(255,255,255,0.6)", borderRadius: 8, padding: "10px 14px", textAlign: "center" }}>
       <div style={{ fontSize: 22, fontWeight: 700, color }}>{value}</div>
       <div style={{ fontSize: 11, color: "var(--color-text-secondary)", marginTop: 2 }}>{label}</div>
     </div>
@@ -220,9 +226,9 @@ function StatBox({ label, value, color }) {
 }
 
 // ── Styles ────────────────────────────────────────────────────────────────────
-const infoCard     = { background: "var(--color-background-primary)", border: "1px solid var(--color-border-tertiary)", borderRadius: 12, padding: "16px 18px", marginBottom: 16 };
-const primaryBtn   = { padding: "8px 20px", borderRadius: 8, border: "none", background: "#185FA5", color: "#fff", fontSize: 13, fontWeight: 500, cursor: "pointer" };
-const outlineBtn   = { padding: "7px 14px", borderRadius: 8, border: "1px solid var(--color-border-tertiary)", background: "none", fontSize: 12, cursor: "pointer", color: "var(--color-text-secondary)" };
-const errorBox     = { background: "#FCEBEB", color: "#A32D2D", borderRadius: 8, padding: "9px 13px", fontSize: 13, marginBottom: 12 };
+const infoCard      = { background: "var(--color-background-primary)", border: "1px solid var(--color-border-tertiary)", borderRadius: 12, padding: "16px 18px", marginBottom: 16 };
+const primaryBtn    = { padding: "8px 20px", borderRadius: 8, border: "none", background: "#185FA5", color: "#fff", fontSize: 13, fontWeight: 500, cursor: "pointer" };
+const outlineBtn    = { padding: "7px 14px", borderRadius: 8, border: "1px solid var(--color-border-tertiary)", background: "none", fontSize: 12, cursor: "pointer", color: "var(--color-text-secondary)" };
+const errorBox      = { background: "#FCEBEB", color: "#A32D2D", borderRadius: 8, padding: "9px 13px", fontSize: 13, marginBottom: 12 };
 const requiredBadge = { fontSize: 11, fontWeight: 500, padding: "3px 10px", borderRadius: 8, background: "#E6F1FB", color: "#185FA5" };
 const optionalBadge = { fontSize: 11, fontWeight: 500, padding: "3px 10px", borderRadius: 8, background: "var(--color-background-secondary)", color: "var(--color-text-secondary)" };
