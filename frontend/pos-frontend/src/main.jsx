@@ -4,12 +4,15 @@ import App from "./App";
 import "./index.css";
 import { registerServiceWorker } from "./registerSW";
 import { FeatureProvider } from "./context/FeatureContext";
+import { ThemeProvider } from "./context/ThemeContext";
 
 ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>
-    <FeatureProvider>
-      <App />
-    </FeatureProvider>
+    <ThemeProvider>
+      <FeatureProvider>
+        <App />
+      </FeatureProvider>
+    </ThemeProvider>
   </React.StrictMode>
 );
 

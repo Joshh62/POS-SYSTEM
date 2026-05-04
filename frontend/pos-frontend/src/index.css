@@ -1,61 +1,29 @@
-:root {
-  /* BRAND COLORS */
-  --color-primary: #1E3A8A;   /* Deep Blue */
-  --color-secondary: #14B8A6; /* Teal */
-  --color-accent: #F97316;    /* Orange */
+/*
+  index.css — Base layout, typography, and utility rules.
+  All colors come from theme.css via CSS variables.
+  Do NOT add hardcoded color values here.
+*/
 
-  /* UI COLORS */
-  --bg: #F3F4F6;
-  --surface: #FFFFFF;
-  --text: #374151;
-  --text-h: #111827;
-  --border: #E5E7EB;
+/* Import theme token system */
+@import "./theme.css";
 
-  /* STATES */
-  --success-bg: #EAF3DE;
-  --success-text: #14B8A6;
-  --error-bg: #FCEBEB;
-  --error-text: #A32D2D;
-
-  /* SHADOW */
-  --shadow:
-    rgba(0, 0, 0, 0.1) 0 10px 15px -3px,
-    rgba(0, 0, 0, 0.05) 0 4px 6px -2px;
-
-  /* FONTS */
-  --sans: 'Inter', system-ui, -apple-system, sans-serif;
-  --heading: 'Poppins', system-ui, sans-serif;
-  --mono: ui-monospace, Consolas, monospace;
-
-  font: 16px/145% var(--sans);
-  letter-spacing: 0.18px;
-  color: var(--text);
-  background: var(--bg);
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #111827;
-    --surface: #1F2937;
-    --text: #D1D5DB;
-    --text-h: #F9FAFB;
-    --border: #374151;
-
-    --success-bg: #064E3B;
-    --success-text: #34D399;
-
-    --error-bg: #7F1D1D;
-    --error-text: #FCA5A5;
-  }
+/* ── Base reset ──────────────────────────────────────────────────────────────*/
+*, *::before, *::after {
+  box-sizing: border-box;
 }
 
 body {
   margin: 0;
   background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: 16px;
+  line-height: 1.45;
+  letter-spacing: 0.18px;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 #root {
@@ -65,49 +33,71 @@ body {
   min-height: 100vh;
   display: flex;
   flex-direction: column;
-  box-sizing: border-box;
 }
 
-/* HEADINGS */
-h1, h2 {
-  font-family: var(--heading);
+/* ── Typography ──────────────────────────────────────────────────────────────*/
+h1, h2, h3, h4 {
+  font-family: var(--font-heading);
   font-weight: 500;
   color: var(--text-h);
-}
-
-h1 {
-  font-size: 36px;
-  margin: 20px 0;
-}
-
-h2 {
-  font-size: 20px;
-  margin-bottom: 8px;
-}
-
-p {
   margin: 0;
 }
 
-/* BUTTON SYSTEM */
+h1 { font-size: 32px; }
+h2 { font-size: 20px; }
+h3 { font-size: 16px; }
+
+p { margin: 0; }
+
+/* ── Scrollbar — subtle, themed ─────────────────────────────────────────────*/
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: var(--color-border-tertiary);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-text-tertiary);
+}
+
+/* ── Focus ring ──────────────────────────────────────────────────────────────*/
+:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+/* ── Button base ─────────────────────────────────────────────────────────────*/
+button { font-family: var(--font-sans); }
+
+/* ── Utility classes ─────────────────────────────────────────────────────────*/
 .btn-primary {
-  background: var(--color-accent);
+  background: var(--color-primary);
   color: #fff;
   border: none;
   padding: 8px 16px;
   border-radius: 8px;
   cursor: pointer;
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 500;
+  transition: opacity 0.15s;
 }
-
-.btn-primary:hover {
-  opacity: 0.9;
-}
+.btn-primary:hover { opacity: 0.88; }
 
 .btn-secondary {
-  border: 1px solid var(--color-secondary);
-  color: var(--color-secondary);
+  border: 1px solid var(--color-primary);
+  color: var(--color-primary);
   background: transparent;
   padding: 8px 16px;
   border-radius: 8px;
   cursor: pointer;
+  font-family: var(--font-sans);
+  font-size: 13px;
+}
+
+/* ── Theme transition — smooth palette swap ──────────────────────────────────*/
+html {
+  transition:
+    background-color 0.25s ease,
+    color 0.25s ease;
 }

@@ -1,0 +1,256 @@
+/*
+  theme.css — ProfitTrack POS Design Token System
+  ================================================
+  Six palettes across three themes × two modes.
+  Applied via data-theme and data-mode attributes on <html>.
+
+  Theme identities:
+    A1 — Warm Navy   : deep navy sidebar, gold accents (Kuda-inspired)
+    A2 — Deep Amber  : brown/copper tones, burnt orange (default)
+    A3 — Forest Night: dark forest green, emerald + gold accents
+
+  Token naming:
+    --color-background-primary    main content background
+    --color-background-secondary  subtle surface (inputs, tags)
+    --color-background-tertiary   page-level background
+    --color-text-primary          main body text
+    --color-text-secondary        labels, subtext
+    --color-text-tertiary         placeholders, meta
+    --color-border-tertiary       card/table borders
+    --color-primary               accent color (buttons, active states)
+    --color-primary-light         accent bg tint
+    --color-danger                destructive action color
+
+    Legacy aliases kept for backward compat with POS/checkout components:
+    --bg --surface --text --text-h --border --shadow
+    --success-bg --success-text --error-bg --error-text
+*/
+
+/* ============================================================
+   A2 LIGHT — Warm Cream (DEFAULT)
+   Parchment base · burnt copper accent · amber highlights
+   ============================================================ */
+:root,
+[data-theme="a2"][data-mode="light"] {
+  /* Backgrounds */
+  --color-background-primary:   #fdf6ec;
+  --color-background-secondary: #f5ede0;
+  --color-background-tertiary:  #ede4d4;
+
+  /* Text */
+  --color-text-primary:   #3a2810;
+  --color-text-secondary: #7a6040;
+  --color-text-tertiary:  #a89070;
+
+  /* Borders */
+  --color-border-tertiary: #e0c8a8;
+
+  /* Accent — burnt copper */
+  --color-primary:       #b8640a;
+  --color-primary-light: rgba(184,100,10,0.10);
+  --color-danger:        #a32d2d;
+
+  /* Legacy aliases */
+  --bg:          #f5ede0;
+  --surface:     #fdf6ec;
+  --text:        #7a6040;
+  --text-h:      #3a2810;
+  --border:      #e0c8a8;
+  --shadow:      rgba(58,40,16,0.08) 0 4px 16px -2px,
+                 rgba(58,40,16,0.04) 0 2px 6px -1px;
+
+  --success-bg:   #f0f7ec;
+  --success-text: #3b6d11;
+  --error-bg:     #fdf0f0;
+  --error-text:   #a32d2d;
+
+  /* Font stack */
+  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+  --font-heading: 'Poppins', system-ui, sans-serif;
+  --font-mono: ui-monospace, Consolas, monospace;
+}
+
+/* ============================================================
+   A2 DARK — Deep Amber
+   Near-black brown base · burnt copper accent
+   ============================================================ */
+[data-theme="a2"][data-mode="dark"] {
+  --color-background-primary:   #161008;
+  --color-background-secondary: #1e1608;
+  --color-background-tertiary:  #0d0a06;
+
+  --color-text-primary:   #f0dfc0;
+  --color-text-secondary: #b8a070;
+  --color-text-tertiary:  #6b5a3a;
+
+  --color-border-tertiary: rgba(255,255,255,0.07);
+
+  --color-primary:       #e8903a;
+  --color-primary-light: rgba(184,100,10,0.18);
+  --color-danger:        #e07060;
+
+  --bg:      #0d0a06;
+  --surface: #161008;
+  --text:    #b8a070;
+  --text-h:  #f0dfc0;
+  --border:  rgba(255,255,255,0.07);
+  --shadow:  rgba(0,0,0,0.5) 0 8px 24px -4px,
+             rgba(0,0,0,0.3) 0 2px 8px -2px;
+
+  --success-bg:   rgba(59,109,17,0.15);
+  --success-text: #6ab87a;
+  --error-bg:     rgba(163,45,45,0.15);
+  --error-text:   #e07060;
+
+  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+  --font-heading: 'Poppins', system-ui, sans-serif;
+  --font-mono: ui-monospace, Consolas, monospace;
+}
+
+/* ============================================================
+   A1 LIGHT — Soft Ivory Navy
+   Warm white base · navy sidebar energy · gold accent
+   ============================================================ */
+[data-theme="a1"][data-mode="light"] {
+  --color-background-primary:   #faf9f7;
+  --color-background-secondary: #f0ede8;
+  --color-background-tertiary:  #e8e4dc;
+
+  --color-text-primary:   #1a1f2e;
+  --color-text-secondary: #5a6070;
+  --color-text-tertiary:  #9098a8;
+
+  --color-border-tertiary: #dcd8d0;
+
+  --color-primary:       #d4a34f;
+  --color-primary-light: rgba(212,163,79,0.12);
+  --color-danger:        #a32d2d;
+
+  --bg:      #f0ede8;
+  --surface: #faf9f7;
+  --text:    #5a6070;
+  --text-h:  #1a1f2e;
+  --border:  #dcd8d0;
+  --shadow:  rgba(26,31,46,0.08) 0 4px 16px -2px,
+             rgba(26,31,46,0.04) 0 2px 6px -1px;
+
+  --success-bg:   #eaf3de;
+  --success-text: #3b6d11;
+  --error-bg:     #fcebeb;
+  --error-text:   #a32d2d;
+
+  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+  --font-heading: 'Poppins', system-ui, sans-serif;
+  --font-mono: ui-monospace, Consolas, monospace;
+}
+
+/* ============================================================
+   A1 DARK — Warm Navy
+   Deep navy base · gold/amber accent · cream text
+   ============================================================ */
+[data-theme="a1"][data-mode="dark"] {
+  --color-background-primary:   #141c28;
+  --color-background-secondary: #1a2436;
+  --color-background-tertiary:  #0c1119;
+
+  --color-text-primary:   #e8dfc8;
+  --color-text-secondary: #8a93a6;
+  --color-text-tertiary:  #4a5568;
+
+  --color-border-tertiary: rgba(255,255,255,0.07);
+
+  --color-primary:       #d4a34f;
+  --color-primary-light: rgba(212,163,79,0.12);
+  --color-danger:        #e07060;
+
+  --bg:      #0c1119;
+  --surface: #141c28;
+  --text:    #8a93a6;
+  --text-h:  #e8dfc8;
+  --border:  rgba(255,255,255,0.07);
+  --shadow:  rgba(0,0,0,0.5) 0 8px 24px -4px,
+             rgba(0,0,0,0.3) 0 2px 8px -2px;
+
+  --success-bg:   rgba(59,109,17,0.15);
+  --success-text: #6bb87e;
+  --error-bg:     rgba(163,45,45,0.15);
+  --error-text:   #e07060;
+
+  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+  --font-heading: 'Poppins', system-ui, sans-serif;
+  --font-mono: ui-monospace, Consolas, monospace;
+}
+
+/* ============================================================
+   A3 LIGHT — Sage Garden
+   Soft sage base · forest green accent · amber highlights
+   ============================================================ */
+[data-theme="a3"][data-mode="light"] {
+  --color-background-primary:   #f0f7f0;
+  --color-background-secondary: #e4efe4;
+  --color-background-tertiary:  #d8ebd8;
+
+  --color-text-primary:   #1a3020;
+  --color-text-secondary: #4a6a4a;
+  --color-text-tertiary:  #7a9a7a;
+
+  --color-border-tertiary: #c8dcc8;
+
+  --color-primary:       #1a5c2a;
+  --color-primary-light: rgba(26,92,42,0.10);
+  --color-danger:        #a32d2d;
+
+  --bg:      #e4efe4;
+  --surface: #f0f7f0;
+  --text:    #4a6a4a;
+  --text-h:  #1a3020;
+  --border:  #c8dcc8;
+  --shadow:  rgba(26,48,32,0.08) 0 4px 16px -2px,
+             rgba(26,48,32,0.04) 0 2px 6px -1px;
+
+  --success-bg:   #eaf3de;
+  --success-text: #1a5c2a;
+  --error-bg:     #fcebeb;
+  --error-text:   #a32d2d;
+
+  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+  --font-heading: 'Poppins', system-ui, sans-serif;
+  --font-mono: ui-monospace, Consolas, monospace;
+}
+
+/* ============================================================
+   A3 DARK — Forest Night
+   Near-black forest green · emerald accent · gold highlights
+   ============================================================ */
+[data-theme="a3"][data-mode="dark"] {
+  --color-background-primary:   #0c160e;
+  --color-background-secondary: #121e14;
+  --color-background-tertiary:  #060d07;
+
+  --color-text-primary:   #d8f0c8;
+  --color-text-secondary: #6a9a6a;
+  --color-text-tertiary:  #3a5a3a;
+
+  --color-border-tertiary: rgba(255,255,255,0.06);
+
+  --color-primary:       #6ab87a;
+  --color-primary-light: rgba(26,92,42,0.25);
+  --color-danger:        #e07060;
+
+  --bg:      #060d07;
+  --surface: #0c160e;
+  --text:    #6a9a6a;
+  --text-h:  #d8f0c8;
+  --border:  rgba(255,255,255,0.06);
+  --shadow:  rgba(0,0,0,0.5) 0 8px 24px -4px,
+             rgba(0,0,0,0.3) 0 2px 8px -2px;
+
+  --success-bg:   rgba(26,92,42,0.2);
+  --success-text: #6ab87a;
+  --error-bg:     rgba(163,45,45,0.15);
+  --error-text:   #e07060;
+
+  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+  --font-heading: 'Poppins', system-ui, sans-serif;
+  --font-mono: ui-monospace, Consolas, monospace;
+}
