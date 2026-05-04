@@ -8,8 +8,10 @@ from app.routers import auth, customers, suppliers, purchases, category
 from app.database import get_db
 
 from app.routers import businesses
+from app.routers import admin_tools
 
-from app.routers import admin_tools  # add after businesses import
+from app.middleware.rls_middleware import RLSMiddleware  # ✅ RLS import
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -28,9 +30,12 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# ------------------------------------
-# CORS — explicitly list all allowed origins
-# ------------------------------------
+# ── RLS middleware — must be added BEFORE CORSMiddleware ─────────────────────
+# Sets app.current_business_id on every DB connection based on the JWT token.
+# This is what enforces PostgreSQL Row Level Security on every query.
+app.add_middleware(RLSMiddleware)  # ✅ RLS middleware
+
+# ── CORS ──────────────────────────────────────────────────────────────────────
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -46,6 +51,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# ── Routers ───────────────────────────────────────────────────────────────────
 app.include_router(auth.router)
 app.include_router(products.router)
 app.include_router(category.router)
@@ -56,7 +62,7 @@ app.include_router(reports.router)
 app.include_router(suppliers.router)
 app.include_router(purchases.router)
 app.include_router(businesses.router)
-app.include_router(admin_tools.router)  # add after businesses router
+app.include_router(admin_tools.router)
 
 
 @app.get("/health", tags=["System"])
