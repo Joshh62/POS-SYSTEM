@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, Dict
 from datetime import datetime
 
 from app.database import get_db
@@ -9,6 +9,7 @@ from app import models
 from app.dependencies import require_role, SUPERADMIN_ROLE
 from app.auth import hash_password
 from app.utils.plans import PLAN_LIMITS
+from app.utils.features import DEFAULT_FEATURES, FEATURE_LABELS, get_features
 
 router = APIRouter(prefix="/businesses", tags=["Businesses"])
 
@@ -42,9 +43,11 @@ class AdminCreate(BaseModel):
 class PlanUpdate(BaseModel):
     plan: str   # solo | starter | business | enterprise
 
+class FeatureUpdate(BaseModel):
+    features: Dict[str, bool]   # partial update — only send changed flags
 
-# ── Endpoints ─────────────────────────────────────────────────────────────────
 
+# ── List businesses ───────────────────────────────────────────────────────────
 @router.get("/")
 def list_businesses(
     db: Session = Depends(get_db),
@@ -72,10 +75,12 @@ def list_businesses(
             "max_branches": limits["max_branches"],
             "branch_count": branch_count,
             "user_count":   user_count,
+            "features":     get_features(b.features),
         })
     return result
 
 
+# ── Create business ───────────────────────────────────────────────────────────
 @router.post("/")
 def create_business(
     data: BusinessCreate,
@@ -92,6 +97,7 @@ def create_business(
     return business
 
 
+# ── Update business ───────────────────────────────────────────────────────────
 @router.patch("/{business_id}")
 def update_business(
     business_id: int,
@@ -121,11 +127,9 @@ def update_plan(
     db: Session = Depends(get_db),
     user=Depends(require_role([]))
 ):
-    """Superadmin only — change a business subscription plan."""
     if user.role != SUPERADMIN_ROLE:
         raise HTTPException(status_code=403, detail="Superadmin only")
 
-    # Validate plan name
     valid_plans = list(PLAN_LIMITS.keys())
     if data.plan not in valid_plans:
         raise HTTPException(
@@ -153,6 +157,101 @@ def update_plan(
     }
 
 
+# ── Get feature flags for a business ─────────────────────────────────────────
+@router.get("/{business_id}/features")
+def get_business_features(
+    business_id: int,
+    db: Session = Depends(get_db),
+    user=Depends(require_role([]))
+):
+    """Returns resolved feature flags for a business (merges with defaults)."""
+    if user.role != SUPERADMIN_ROLE:
+        raise HTTPException(status_code=403, detail="Superadmin only")
+
+    biz = db.query(models.Business).filter(models.Business.business_id == business_id).first()
+    if not biz:
+        raise HTTPException(status_code=404, detail="Business not found")
+
+    resolved = get_features(biz.features)
+    return {
+        "business_id": business_id,
+        "name":        biz.name,
+        "features":    resolved,
+        "labels":      FEATURE_LABELS,
+    }
+
+
+# ── Update feature flags for a business ──────────────────────────────────────
+@router.patch("/{business_id}/features")
+def update_business_features(
+    business_id: int,
+    data: FeatureUpdate,
+    db: Session = Depends(get_db),
+    user=Depends(require_role([]))
+):
+    """
+    Superadmin only — toggle feature flags for a specific business.
+    Accepts a partial update — only the flags you send get changed.
+    Unrecognised flag keys are silently ignored.
+    """
+    if user.role != SUPERADMIN_ROLE:
+        raise HTTPException(status_code=403, detail="Superadmin only")
+
+    biz = db.query(models.Business).filter(models.Business.business_id == business_id).first()
+    if not biz:
+        raise HTTPException(status_code=404, detail="Business not found")
+
+    # Only allow known flag keys
+    valid_flags = set(DEFAULT_FEATURES.keys())
+    incoming    = {k: v for k, v in data.features.items() if k in valid_flags}
+
+    if not incoming:
+        raise HTTPException(status_code=400, detail="No valid feature flags provided")
+
+    # Merge with existing — preserve flags not being updated
+    current  = biz.features or {}
+    updated  = {**current, **incoming}
+    biz.features = updated
+
+    # SQLAlchemy won't detect in-place dict mutation — force update
+    from sqlalchemy.orm.attributes import flag_modified
+    flag_modified(biz, "features")
+
+    db.commit()
+    db.refresh(biz)
+
+    return {
+        "message":     f"Features updated for {biz.name}",
+        "business_id": business_id,
+        "features":    get_features(biz.features),
+    }
+
+
+# ── Current user's own feature flags ─────────────────────────────────────────
+@router.get("/my/features")
+def my_features(
+    db: Session = Depends(get_db),
+    user=Depends(require_role(["admin", "manager", "cashier"]))
+):
+    """
+    Returns feature flags for the logged-in user's business.
+    Used by the frontend FeatureContext on login.
+    Superadmin gets all features enabled.
+    """
+    if user.role == SUPERADMIN_ROLE:
+        return {f: True for f in DEFAULT_FEATURES}
+
+    biz = db.query(models.Business).filter(
+        models.Business.business_id == user.business_id
+    ).first()
+
+    if not biz:
+        return DEFAULT_FEATURES.copy()
+
+    return get_features(biz.features)
+
+
+# ── List branches ─────────────────────────────────────────────────────────────
 @router.get("/{business_id}/branches")
 def list_branches(
     business_id: int,
@@ -168,6 +267,7 @@ def list_branches(
     return branches
 
 
+# ── Create branch ─────────────────────────────────────────────────────────────
 @router.post("/branches")
 def create_branch(
     data: BranchCreate,
@@ -188,13 +288,13 @@ def create_branch(
     return branch
 
 
+# ── Create business admin ─────────────────────────────────────────────────────
 @router.post("/admin")
 def create_business_admin(
     data: AdminCreate,
     db: Session = Depends(get_db),
     user=Depends(require_role([]))
 ):
-    """Superadmin creates the first admin user for a new business."""
     if user.role != SUPERADMIN_ROLE:
         raise HTTPException(status_code=403, detail="Superadmin only")
 

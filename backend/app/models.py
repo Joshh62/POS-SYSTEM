@@ -1,6 +1,7 @@
 from datetime import datetime
 import sqlalchemy as sa
 from sqlalchemy import Column, DateTime, Integer, String, Numeric, ForeignKey, Boolean, UniqueConstraint, Date
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import relationship
 from app.database import Base
 
@@ -17,7 +18,8 @@ class Business(Base):
     is_active   = Column(Boolean, default=True)
     created_at  = Column(DateTime, default=datetime.utcnow)
     plan        = Column(String, default="starter", nullable=False)  # solo | starter | business | enterprise
-
+    features = Column(JSONB, nullable=False, server_default="{}")
+    
     branches = relationship("Branch", back_populates="business")
     users    = relationship("User",   back_populates="business")
 
