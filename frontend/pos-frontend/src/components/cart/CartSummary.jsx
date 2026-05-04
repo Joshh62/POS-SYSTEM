@@ -6,19 +6,18 @@ export default function CartSummary({ onCheckout }) {
   const isEmpty = cartItems.length === 0;
 
   return (
-    <div
-      style={{
-        borderTop: "1px solid var(--border)", // ✅ fixed
-        paddingTop: 12,
-        display: "flex",
-        flexDirection: "column",
-        gap: 10,
-      }}
-    >
+    <div style={{
+      borderTop: "1px solid var(--color-border-tertiary)",
+      paddingTop: 12,
+      display: "flex",
+      flexDirection: "column",
+      gap: 10,
+    }}>
+
       {/* Total row */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <span style={{ fontSize: 14, color: "var(--text)" }}>Total</span>
-        <span style={{ fontSize: 20, fontWeight: 600, color: "var(--text-h)" }}>
+        <span style={{ fontSize: 14, color: "var(--color-text-secondary)" }}>Total</span>
+        <span style={{ fontSize: 20, fontWeight: 600, color: "var(--color-text-primary)" }}>
           ₦{totalAmount.toLocaleString("en-NG", { minimumFractionDigits: 2 })}
         </span>
       </div>
@@ -31,9 +30,9 @@ export default function CartSummary({ onCheckout }) {
           width: "100%",
           padding: "12px 0",
           borderRadius: 10,
-          border: "none",
-          background: isEmpty ? "var(--border)" : "var(--color-accent)", // 🔥 ORANGE CTA
-          color: isEmpty ? "var(--text)" : "#fff",
+          border: isEmpty ? "1px solid var(--color-border-tertiary)" : "none",
+          background: isEmpty ? "var(--color-background-secondary)" : "var(--color-primary)",
+          color: isEmpty ? "var(--color-text-tertiary)" : "#fff",
           fontSize: 15,
           fontWeight: 600,
           cursor: isEmpty ? "not-allowed" : "pointer",
