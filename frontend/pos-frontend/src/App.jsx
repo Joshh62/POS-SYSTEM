@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { CartProvider }   from "./context/CartContext";
 import { BranchProvider } from "./context/BranchContext";
 import POSLayout from "./components/layout/POSLayout";
+import SplashScreen from "./components/SplashScreen";
 
 import LandingPage       from "./pages/LandingPage";
 import LoginPage         from "./pages/LoginPage";
@@ -16,6 +17,17 @@ import BusinessesPage    from "./pages/BusinessesPage";
 import ProductImportPage from "./pages/ProductImportPage";
 
 export default function App() {
+  // Show splash for a brief moment on every cold load so the theme
+  // and auth state have time to resolve before anything renders.
+  const [booting, setBooting] = useState(true);
+
+  useEffect(() => {
+    // 1.2s is enough for theme CSS to apply and auth to be read from
+    // localStorage — prevents a flash of unstyled/wrong content.
+    const t = setTimeout(() => setBooting(false), 1200);
+    return () => clearTimeout(t);
+  }, []);
+
   const [isLoggedIn, setIsLoggedIn] = useState(() => !!localStorage.getItem("token"));
 
   const [view, setView] = useState(() => {
@@ -39,6 +51,9 @@ export default function App() {
     setIsLoggedIn(false);
     setView("login");
   };
+
+  // Show splash while booting
+  if (booting) return <SplashScreen />;
 
   if (view === "landing") return <LandingPage onStart={() => setView("login")} />;
   if (!isLoggedIn)        return <LoginPage onLogin={handleLogin} />;

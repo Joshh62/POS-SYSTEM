@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { getDailyDashboard, getTopProducts, getSalesByCashier, getLowStock } from "../api/api";
 import { useBranch } from "../context/BranchContext";
+import { PageLoader } from "../components/SplashScreen";
 
 export default function DashboardPage() {
   const { activeBranchId } = useBranch();
@@ -35,7 +36,7 @@ export default function DashboardPage() {
     fetchAll();
   }, [activeBranchId]); // ✅ re-fetch when branch changes
 
-  if (loading) return <PageShell><div style={centreMsg}>Loading dashboard...</div></PageShell>;
+  if (loading) return <PageShell><PageLoader label="Loading dashboard..." /></PageShell>;
   if (error)   return <PageShell><div style={errorBox}>{error}</div></PageShell>;
 
   const chartLabels = daily?.chart?.labels ?? [];
