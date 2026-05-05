@@ -1,4 +1,5 @@
 import axios from "axios";
+import { cacheProducts, getCachedProducts } from "../utils/offlineQueue";
 
 const BASE_URL = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
 
@@ -67,7 +68,36 @@ export const changePassword = async (currentPassword, newPassword) => (
 export const getProducts = async (page = 1, limit = 20, search = "") => {
   const params = { page, limit };
   if (search) params.search = search;
-  return withRetry(() => api.get("/products/", { params }).then(r => r.data));
+ 
+  return withRetry(async () => {
+    try {
+      const result = await api.get("/products/", { params }).then(r => r.data);
+ 
+      // Cache the first page (no search) for offline use
+      // Only cache full unfiltered product list — not search results
+      if (page === 1 && !search && result?.data) {
+        cacheProducts(result.data);
+      }
+ 
+      return result;
+    } catch (err) {
+      // If offline and we have a cache, return cached data
+      if (!navigator.onLine || !err.response) {
+        const cached = getCachedProducts();
+        if (cached) {
+          console.log("[api] Returning cached products (offline)");
+          return {
+            total: cached.length,
+            page:  1,
+            limit: cached.length,
+            data:  cached,
+            offline: true,
+          };
+        }
+      }
+      throw err;
+    }
+  });
 };
 
 export const getProductByBarcode = async (barcode) =>

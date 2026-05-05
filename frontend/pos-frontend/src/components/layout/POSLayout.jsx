@@ -4,6 +4,7 @@ import { useBranch }  from "../../context/BranchContext";
 import { useFeature } from "../../context/FeatureContext";
 import { useTheme }   from "../../context/ThemeContext";
 import { changePassword } from "../../api/api";
+import OfflineIndicator from "../OfflineIndicator";
 
 const SHOP_NAME = import.meta.env.VITE_SHOP_NAME || "ProfitTrack POS";
 
@@ -281,6 +282,8 @@ function Field({ label, children }) {
     <div>
       <label style={{ display: "block", fontSize: 12, fontWeight: 500, color: "var(--color-text-secondary)", marginBottom: 5 }}>{label}</label>
       {children}
+      <OfflineIndicator />
+
     </div>
   );
 }
