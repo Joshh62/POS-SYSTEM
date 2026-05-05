@@ -4,10 +4,17 @@
  * Stores failed/offline sales in localStorage.
  * Retries automatically when back online or when SW requests sync.
  * Notifies UI via custom events.
+ *
+ * FIX: Added isSyncing lock to prevent concurrent sync runs which caused
+ * every offline sale to be submitted twice (once from the online event
+ * listener and once from the SW_SYNC_REQUESTED message).
  */
 
-const QUEUE_KEY     = "pos_offline_queue";
-const PRODUCTS_KEY  = "pos_cached_products";
+const QUEUE_KEY    = "pos_offline_queue";
+const PRODUCTS_KEY = "pos_cached_products";
+
+// ── Sync lock — prevents concurrent sync runs ─────────────────────────────────
+let isSyncing = false;
 
 // ── Sale queue ────────────────────────────────────────────────────────────────
 
@@ -46,9 +53,16 @@ export function getPendingCount() {
 }
 
 export async function syncQueue(createSaleFn) {
+  // ── Lock: only one sync run at a time ────────────────────────────────────
+  if (isSyncing) {
+    console.log("[OfflineQueue] Sync already in progress — skipping duplicate trigger");
+    return { synced: 0, remaining: getQueue().length };
+  }
+
   const queue = getQueue();
   if (queue.length === 0) return { synced: 0, remaining: 0 };
 
+  isSyncing = true;
   console.log(`[OfflineQueue] Syncing ${queue.length} pending sale(s)...`);
 
   // Notify UI sync is starting
@@ -75,6 +89,7 @@ export async function syncQueue(createSaleFn) {
   }
 
   saveQueue(remaining);
+  isSyncing = false;
 
   window.dispatchEvent(new CustomEvent("pos-queue-synced", {
     detail: { synced, remaining: remaining.length }
@@ -84,7 +99,7 @@ export async function syncQueue(createSaleFn) {
   return { synced, remaining: remaining.length };
 }
 
-// ── Product cache for offline POS ────────────────────────────────────────────
+// ── Product cache for offline POS ─────────────────────────────────────────────
 
 export function cacheProducts(products) {
   try {
@@ -101,8 +116,8 @@ export function getCachedProducts() {
   try {
     const raw = localStorage.getItem(PRODUCTS_KEY);
     if (!raw) return null;
-    const parsed = JSON.parse(raw);
-    return parsed.data ?? null;
+    const { data } = JSON.parse(raw);
+    return data ?? null;
   } catch {
     return null;
   }
@@ -113,16 +128,24 @@ export function getCacheAge() {
     const raw = localStorage.getItem(PRODUCTS_KEY);
     if (!raw) return null;
     const { cached_at } = JSON.parse(raw);
-    const mins = Math.round((Date.now() - new Date(cached_at).getTime()) / 60000);
-    return mins;
+    return Math.round((Date.now() - new Date(cached_at).getTime()) / 60000);
   } catch {
     return null;
   }
 }
 
-// ── Listeners ─────────────────────────────────────────────────────────────────
+// ── Listeners ──────────────────────────────────────────────────────────────────
+// Only register once — guards against multiple calls to registerSyncListener
+
+let listenersRegistered = false;
 
 export function registerSyncListener(createSaleFn) {
+  if (listenersRegistered) {
+    console.log("[OfflineQueue] Listeners already registered — skipping");
+    return;
+  }
+  listenersRegistered = true;
+
   // Sync when browser comes back online
   window.addEventListener("online", () => {
     console.log("[OfflineQueue] Back online — syncing...");
@@ -140,7 +163,7 @@ export function registerSyncListener(createSaleFn) {
   }
 }
 
-// ── Internal ──────────────────────────────────────────────────────────────────
+// ── Internal ───────────────────────────────────────────────────────────────────
 
 function saveQueue(queue) {
   localStorage.setItem(QUEUE_KEY, JSON.stringify(queue));
