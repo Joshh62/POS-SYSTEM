@@ -15,7 +15,8 @@ import SalesPage         from "./pages/SalesPage";
 import ReportsPage       from "./pages/ReportsPage";
 import BusinessesPage    from "./pages/BusinessesPage";
 import ProductImportPage from "./pages/ProductImportPage";
-import ExpensesPage from "./pages/ExpensesPage";
+import ExpensesPage      from "./pages/ExpensesPage";
+import DebtTrackingPage  from "./pages/DebtTrackingPage";
 
 
 export default function App() {
@@ -71,7 +72,8 @@ export default function App() {
       case "users":      return <UsersPage />;
       case "businesses": return <BusinessesPage />;
       case "import":     return <ProductImportPage />;
-      case "expenses": return <ExpensesPage />;
+      case "expenses":   return <ExpensesPage />;
+      case "debts":      return <DebtTrackingPage />;
 
       default:           return <POS onScanResult={setLastScan} />;
     }

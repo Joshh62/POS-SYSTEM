@@ -174,3 +174,13 @@ export const deleteExpense = async (id) =>
 
 export const getExpenseCategories = async () =>
   (await api.get("/expenses/categories")).data;
+
+
+// ── DEBTS ─────────────────────────────────────────────────────────────────────
+export const getDebts          = async (params = {}) => (await api.get("/debts/",        { params })).data;
+export const getDebtSummary    = async (params = {}) => (await api.get("/debts/summary", { params })).data;
+export const createDebt        = async (data)        => (await api.post("/debts/", data)).data;
+export const recordDebtPayment = async (id, data)    => (await api.post(`/debts/${id}/payments`, data)).data;
+export const getDebtPayments   = async (id)          => (await api.get(`/debts/${id}/payments`)).data;
+export const writeOffDebt      = async (id)          => (await api.patch(`/debts/${id}/write-off`)).data;
+export const searchDebtCustomers = async (q)         => (await api.get("/debts/customers/search", { params: { q } })).data;
