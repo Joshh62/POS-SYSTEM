@@ -43,6 +43,19 @@ def _resolve_branch(user, branch_id_param: Optional[int]) -> Optional[int]:
     return get_active_branch_id(user, branch_id_param)
 
 
+def _get_expense_total(db, user, branch_id: Optional[int]) -> float:
+    """Get total expenses for the current business/branch scope."""
+    q = db.query(func.sum(models.Expense.amount))
+    if user.role == SUPERADMIN_ROLE:
+        if branch_id:
+            q = q.filter(models.Expense.branch_id == branch_id)
+    else:
+        q = q.filter(models.Expense.business_id == user.business_id)
+        if branch_id:
+            q = q.filter(models.Expense.branch_id == branch_id)
+    return float(q.scalar() or 0)
+
+
 # ── Daily sales ───────────────────────────────────────────────────────────────
 @router.get("/daily-sales")
 def daily_sales(
@@ -146,22 +159,60 @@ def profit_report(
     db: Session = Depends(get_db),
     user=Depends(require_role(["admin", "manager"]))
 ):
+    resolved = _resolve_branch(user, branch_id)
+
+    # Product-level gross profit
     q = (
         db.query(
             Product.product_name,
-            func.sum((SaleItem.unit_price - Product.cost_price) * SaleItem.quantity).label("profit")
+            func.sum(
+                (SaleItem.unit_price - Product.cost_price) * SaleItem.quantity
+            ).label("profit")
         )
         .join(SaleItem, Product.product_id == SaleItem.product_id)
         .join(Sale,     Sale.sale_id       == SaleItem.sale_id)
         .filter(Sale.status == "completed")
     )
-    q = _branch_filter(q, Sale, user, _resolve_branch(user, branch_id))
+    q = _branch_filter(q, Sale, user, resolved)
     results = (
         q.group_by(Product.product_name)
-        .order_by(func.sum((SaleItem.unit_price - Product.cost_price) * SaleItem.quantity).desc())
+        .order_by(
+            func.sum((SaleItem.unit_price - Product.cost_price) * SaleItem.quantity).desc()
+        )
         .all()
     )
-    return [{"product_name": r.product_name, "profit": r.profit} for r in results]
+
+    product_rows  = [{"product_name": r.product_name, "profit": float(r.profit or 0)} for r in results]
+    gross_profit  = sum(r["profit"] for r in product_rows)
+
+    # Total expenses for this business/branch
+    total_expenses = _get_expense_total(db, user, resolved)
+
+    # Expense breakdown by category
+    eq = db.query(
+        models.Expense.category,
+        func.sum(models.Expense.amount).label("total"),
+    )
+    if user.role != SUPERADMIN_ROLE:
+        eq = eq.filter(models.Expense.business_id == user.business_id)
+    if resolved:
+        eq = eq.filter(models.Expense.branch_id == resolved)
+    expense_rows = eq.group_by(models.Expense.category).order_by(
+        func.sum(models.Expense.amount).desc()
+    ).all()
+
+    net_profit = gross_profit - total_expenses
+
+    return {
+        "products":        product_rows,
+        "gross_profit":    gross_profit,
+        "total_expenses":  total_expenses,
+        "net_profit":      net_profit,
+        "expense_breakdown": [
+            {"category": r.category, "total": float(r.total)}
+            for r in expense_rows
+        ],
+    }
 
 
 # ── Stock valuation ───────────────────────────────────────────────────────────
@@ -220,11 +271,6 @@ def audit_logs(
     db: Session = Depends(get_db),
     user=Depends(require_role(["admin"]))
 ):
-    """
-    Returns audit logs joined with the user who performed the action.
-    Business scoping is in the JOIN condition to preserve the outer join.
-    filter() is called BEFORE limit() to avoid SQLAlchemy InvalidRequestError.
-    """
     if user.role == SUPERADMIN_ROLE:
         join_condition = User.user_id == AuditLog.user_id
     else:
@@ -248,12 +294,10 @@ def audit_logs(
         .order_by(AuditLog.created_at.desc())
     )
 
-    # ✅ filter() BEFORE limit() — avoids InvalidRequestError
     if user.role != SUPERADMIN_ROLE:
         q = q.filter(User.user_id.isnot(None))
 
     q = q.limit(100)
-
     results = q.all()
 
     return [

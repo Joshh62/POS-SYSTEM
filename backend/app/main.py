@@ -3,7 +3,7 @@ from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 
-from app.routers import sales, products, inventory, reports
+from app.routers import sales, products, inventory, reports, expenses
 from app.routers import auth, customers, suppliers, purchases, category
 from app.database import get_db
 
@@ -63,6 +63,7 @@ app.include_router(suppliers.router)
 app.include_router(purchases.router)
 app.include_router(businesses.router)
 app.include_router(admin_tools.router)
+app.include_router(expenses.router)
 
 
 @app.get("/health", tags=["System"])

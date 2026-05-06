@@ -310,3 +310,23 @@ class AuditLog(Base):
     created_at  = Column(DateTime, default=datetime.utcnow)
 
     user = relationship("User")
+
+
+
+# -------------------- EXPENSE --------------------
+class Expense(Base):
+    __tablename__ = "expenses"
+
+    expense_id   = Column(Integer, primary_key=True, index=True)
+    business_id  = Column(Integer, ForeignKey("businesses.business_id"), nullable=False, index=True)
+    branch_id    = Column(Integer, ForeignKey("branches.branch_id"),     nullable=False)
+    user_id      = Column(Integer, ForeignKey("users.user_id"),          nullable=False)
+    category     = Column(String(100), nullable=False)
+    amount       = Column(Numeric(12, 2), nullable=False)
+    description  = Column(String(500), nullable=True)
+    expense_date = Column(Date, nullable=False, server_default="CURRENT_DATE")
+    created_at   = Column(DateTime, default=datetime.utcnow)
+
+    branch   = relationship("Branch")
+    user     = relationship("User")
+    business = relationship("Business")
