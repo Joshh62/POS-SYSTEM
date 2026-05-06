@@ -330,3 +330,46 @@ class Expense(Base):
     branch   = relationship("Branch")
     user     = relationship("User")
     business = relationship("Business")
+
+
+# ── ADD these two classes to the END of models.py ────────────────────────────
+
+# -------------------- DEBT --------------------
+class Debt(Base):
+    __tablename__ = "debts"
+
+    debt_id      = Column(Integer, primary_key=True, index=True)
+    business_id  = Column(Integer, ForeignKey("businesses.business_id"), nullable=False, index=True)
+    branch_id    = Column(Integer, ForeignKey("branches.branch_id"),     nullable=False)
+    customer_id  = Column(Integer, ForeignKey("customers.customer_id"),  nullable=False, index=True)
+    user_id      = Column(Integer, ForeignKey("users.user_id"),          nullable=False)
+    sale_id      = Column(Integer, ForeignKey("sales.sale_id"),          nullable=True)
+    total_amount = Column(Numeric(12, 2), nullable=False)
+    amount_paid  = Column(Numeric(12, 2), nullable=False, default=0)
+    balance      = Column(Numeric(12, 2), nullable=False)
+    description  = Column(String(500), nullable=True)
+    due_date     = Column(Date, nullable=True)
+    status       = Column(String(20), nullable=False, default="open")
+    created_at   = Column(DateTime, default=datetime.utcnow)
+    updated_at   = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    customer = relationship("Customer")
+    branch   = relationship("Branch")
+    user     = relationship("User")
+    payments = relationship("DebtPayment", back_populates="debt", cascade="all, delete-orphan")
+
+
+# -------------------- DEBT PAYMENT --------------------
+class DebtPayment(Base):
+    __tablename__ = "debt_payments"
+
+    payment_id     = Column(Integer, primary_key=True, index=True)
+    debt_id        = Column(Integer, ForeignKey("debts.debt_id"), nullable=False, index=True)
+    user_id        = Column(Integer, ForeignKey("users.user_id"), nullable=False)
+    amount         = Column(Numeric(12, 2), nullable=False)
+    payment_method = Column(String(50), nullable=False, default="cash")
+    notes          = Column(String(500), nullable=True)
+    created_at     = Column(DateTime, default=datetime.utcnow)
+
+    debt = relationship("Debt", back_populates="payments")
+    user = relationship("User")

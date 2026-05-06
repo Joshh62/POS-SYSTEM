@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from app.routers import sales, products, inventory, reports, expenses
 from app.routers import auth, customers, suppliers, purchases, category
 from app.database import get_db
-
+from app.routers import debts
 from app.routers import businesses
 from app.routers import admin_tools
 
@@ -64,6 +64,7 @@ app.include_router(purchases.router)
 app.include_router(businesses.router)
 app.include_router(admin_tools.router)
 app.include_router(expenses.router)
+app.include_router(debts.router)
 
 
 @app.get("/health", tags=["System"])
