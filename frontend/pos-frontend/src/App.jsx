@@ -15,6 +15,8 @@ import SalesPage         from "./pages/SalesPage";
 import ReportsPage       from "./pages/ReportsPage";
 import BusinessesPage    from "./pages/BusinessesPage";
 import ProductImportPage from "./pages/ProductImportPage";
+import ExpensesPage from "./pages/ExpensesPage";
+
 
 export default function App() {
   // Show splash for a brief moment on every cold load so the theme
@@ -69,6 +71,8 @@ export default function App() {
       case "users":      return <UsersPage />;
       case "businesses": return <BusinessesPage />;
       case "import":     return <ProductImportPage />;
+      case "expenses": return <ExpensesPage />;
+
       default:           return <POS onScanResult={setLastScan} />;
     }
   };

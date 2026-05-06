@@ -18,12 +18,14 @@ const NAV_ITEMS = [
   { key: "users",      label: "Users",           icon: "👥", roles: ["admin", "superadmin"],                       flag: null },
   { key: "import",     label: "Import products", icon: "⬆️", roles: ["admin", "manager", "superadmin"],            flag: "bulk_import" },
   { key: "businesses", label: "Businesses",      icon: "🏢", roles: ["superadmin"],                                flag: null },
+  { key: "expenses",   label: "Expenses",        icon: "💸", roles: ["admin", "manager", "superadmin"],            flag: "expense_tracking" },
 ];
 
 const PAGE_TITLES = {
   pos: "Point of sale", dashboard: "Dashboard", sales: "Sales history",
   products: "Products", inventory: "Inventory", reports: "Reports",
   users: "Users", import: "Import products", businesses: "Businesses",
+  expenses: "Expenses",
 };
 
 // Theme dot colors — used in the picker UI
@@ -273,6 +275,8 @@ export default function POSLayout({ children, activePage, onNavigate, onLogout, 
           </div>
         </div>
       )}
+      <OfflineIndicator />
+      
     </div>
   );
 }
@@ -282,7 +286,6 @@ function Field({ label, children }) {
     <div>
       <label style={{ display: "block", fontSize: 12, fontWeight: 500, color: "var(--color-text-secondary)", marginBottom: 5 }}>{label}</label>
       {children}
-      <OfflineIndicator />
 
     </div>
   );

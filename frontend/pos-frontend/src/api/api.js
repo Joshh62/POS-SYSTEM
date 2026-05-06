@@ -158,3 +158,19 @@ export const getStockValuation = async () => (await api.get("/reports/stock-valu
 export const getAuditLogs      = async () => (await api.get("/reports/audit-logs")).data;
 
 export default api;
+
+// ── EXPENSES ──────────────────────────────────────────────────────────────────
+export const getExpenses = async (params = {}) =>
+  (await api.get("/expenses/", { params })).data;
+
+export const getExpenseSummary = async (params = {}) =>
+  (await api.get("/expenses/summary", { params })).data;
+
+export const createExpense = async (data) =>
+  (await api.post("/expenses/", data)).data;
+
+export const deleteExpense = async (id) =>
+  (await api.delete(`/expenses/${id}`)).data;
+
+export const getExpenseCategories = async () =>
+  (await api.get("/expenses/categories")).data;

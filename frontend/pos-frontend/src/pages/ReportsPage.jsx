@@ -7,13 +7,12 @@ import {
 } from "../api/api";
 import { useBranch } from "../context/BranchContext";
 
-const ALL_TABS       = ["Profit", "Stock valuation", "Sales summary", "Audit log"];
-const MANAGER_TABS   = ["Profit", "Stock valuation", "Sales summary"];  // no audit log
+const ALL_TABS     = ["Profit", "Stock valuation", "Sales summary", "Audit log"];
+const MANAGER_TABS = ["Profit", "Stock valuation", "Sales summary"];
 
 export default function ReportsPage() {
   const { activeBranchId } = useBranch();
 
-  // Determine tabs based on role
   const currentUser = JSON.parse(localStorage.getItem("user") || "{}");
   const isAdmin     = ["admin", "superadmin"].includes(currentUser.role);
   const TABS        = isAdmin ? ALL_TABS : MANAGER_TABS;
@@ -23,18 +22,13 @@ export default function ReportsPage() {
   const [loading, setLoading]     = useState(false);
   const [error, setError]         = useState(null);
 
-  // If active tab is no longer available for this role, reset to Profit
   useEffect(() => {
     if (!TABS.includes(activeTab)) setActiveTab("Profit");
   }, []);
 
   const fetchTab = async (tab) => {
-    // Guard — never attempt to fetch audit log for non-admin
     if (tab === "Audit log" && !isAdmin) return;
-
-    setLoading(true);
-    setError(null);
-    setData(null);
+    setLoading(true); setError(null); setData(null);
     try {
       let result;
       if (tab === "Profit")               result = await getProfitReport();
@@ -50,15 +44,27 @@ export default function ReportsPage() {
     }
   };
 
-  // Re-fetch when tab OR active branch changes
   useEffect(() => { fetchTab(activeTab); }, [activeTab, activeBranchId]);
 
   // ── Normalise API shapes ──────────────────────────────────────────────────
-  const stockTotal     = data?.summary?.total_inventory_value ?? 0;
-  const stockProducts  = data?.products ?? [];
-  const auditRows      = Array.isArray(data) ? data : (data?.logs ?? data?.data ?? []);
-  const summaryRevenue = data?.total_sales    ?? data?.total_revenue     ?? 0;
-  const summaryTxns    = data?.transactions   ?? data?.total_transactions ?? 0;
+  const stockTotal    = data?.summary?.total_inventory_value ?? 0;
+  const stockProducts = data?.products ?? [];
+  const auditRows     = Array.isArray(data) ? data : (data?.logs ?? data?.data ?? []);
+  const summaryRevenue = data?.total_sales ?? data?.total_revenue ?? 0;
+  const summaryTxns    = data?.transactions ?? data?.total_transactions ?? 0;
+
+  // Profit tab — new shape from backend
+  // data.products = per-product rows
+  // data.gross_profit, data.total_expenses, data.net_profit
+  // data.expense_breakdown = [{ category, total }]
+  const profitProducts      = data?.products ?? (Array.isArray(data) ? data : []);
+  const grossProfit         = data?.gross_profit    ?? null;
+  const totalExpenses       = data?.total_expenses  ?? 0;
+  const netProfit           = data?.net_profit      ?? null;
+  const expenseBreakdown    = data?.expense_breakdown ?? [];
+  const hasNewProfitShape   = data?.gross_profit !== undefined;
+
+  const fmt = (v) => `₦${parseFloat(v || 0).toLocaleString("en-NG", { minimumFractionDigits: 2 })}`;
 
   return (
     <div style={{ padding: "16px 24px", overflowY: "auto", height: "100%", boxSizing: "border-box" }}>
@@ -72,9 +78,9 @@ export default function ReportsPage() {
             style={{
               padding: "8px 14px", border: "none", background: "none", fontSize: 13,
               fontWeight: activeTab === tab ? 500 : 400,
-              color: activeTab === tab ? "#185FA5" : "var(--color-text-secondary)",
+              color: activeTab === tab ? "var(--color-primary)" : "var(--color-text-secondary)",
               cursor: "pointer",
-              borderBottom: activeTab === tab ? "2px solid #185FA5" : "2px solid transparent",
+              borderBottom: activeTab === tab ? `2px solid var(--color-primary)` : "2px solid transparent",
               marginBottom: -1,
             }}
           >
@@ -93,27 +99,89 @@ export default function ReportsPage() {
 
       {/* ── Profit ── */}
       {!loading && activeTab === "Profit" && data && (
-        <div style={tableWrap}>
-          <table style={{ width: "100%", borderCollapse: "collapse" }}>
-            <thead>
-              <tr style={{ borderBottom: "1px solid var(--color-border-tertiary)" }}>
-                <th style={th}>Product</th>
-                <th style={{ ...th, textAlign: "right" }}>Profit</th>
-              </tr>
-            </thead>
-            <tbody>
-              {(Array.isArray(data) ? data : []).length === 0 ? (
-                <tr><td colSpan={2} style={emptyTd}>No sales data yet.</td></tr>
-              ) : (Array.isArray(data) ? data : []).map((row, i) => (
-                <tr key={i} style={{ borderBottom: "1px solid var(--color-border-tertiary)" }}>
-                  <td style={td}>{row.product_name}</td>
-                  <td style={{ ...td, textAlign: "right", fontWeight: 500, color: row.profit >= 0 ? "#3B6D11" : "#A32D2D" }}>
-                    ₦{parseFloat(row.profit || 0).toLocaleString("en-NG", { minimumFractionDigits: 2 })}
-                  </td>
+        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+
+          {/* Summary KPI row — only when new shape available */}
+          {hasNewProfitShape && (
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
+              <div style={kpiCard}>
+                <div style={kpiLabel}>Gross profit</div>
+                <div style={{ ...kpiValue, color: grossProfit >= 0 ? "#3B6D11" : "#A32D2D" }}>
+                  {fmt(grossProfit)}
+                </div>
+                <div style={kpiSub}>from product sales</div>
+              </div>
+              <div style={kpiCard}>
+                <div style={kpiLabel}>Total expenses</div>
+                <div style={{ ...kpiValue, color: "#A32D2D" }}>
+                  {fmt(totalExpenses)}
+                </div>
+                <div style={kpiSub}>{expenseBreakdown.length} categor{expenseBreakdown.length === 1 ? "y" : "ies"}</div>
+              </div>
+              <div style={{ ...kpiCard, borderColor: netProfit >= 0 ? "rgba(59,109,17,0.3)" : "rgba(163,45,45,0.3)" }}>
+                <div style={kpiLabel}>Net profit</div>
+                <div style={{ ...kpiValue, fontSize: 24, color: netProfit >= 0 ? "#3B6D11" : "#A32D2D" }}>
+                  {fmt(netProfit)}
+                </div>
+                <div style={kpiSub}>after expenses</div>
+              </div>
+            </div>
+          )}
+
+          {/* Expense breakdown */}
+          {hasNewProfitShape && expenseBreakdown.length > 0 && (
+            <div style={{ ...tableWrap }}>
+              <div style={{ padding: "12px 14px", borderBottom: "1px solid var(--color-border-tertiary)", fontSize: 12, fontWeight: 600, color: "var(--color-text-primary)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                Expenses by category
+              </div>
+              <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                <tbody>
+                  {expenseBreakdown.map((e, i) => (
+                    <tr key={i} style={{ borderBottom: "1px solid var(--color-border-tertiary)" }}>
+                      <td style={td}>{e.category}</td>
+                      <td style={{ ...td, textAlign: "right", fontWeight: 500, color: "#A32D2D" }}>
+                        − {fmt(e.total)}
+                      </td>
+                    </tr>
+                  ))}
+                  <tr>
+                    <td style={{ ...td, fontWeight: 600, color: "var(--color-text-primary)" }}>Total expenses</td>
+                    <td style={{ ...td, textAlign: "right", fontWeight: 700, color: "#A32D2D" }}>
+                      − {fmt(totalExpenses)}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {/* Per-product profit breakdown */}
+          <div style={tableWrap}>
+            <div style={{ padding: "12px 14px", borderBottom: "1px solid var(--color-border-tertiary)", fontSize: 12, fontWeight: 600, color: "var(--color-text-primary)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+              Profit by product
+            </div>
+            <table style={{ width: "100%", borderCollapse: "collapse" }}>
+              <thead>
+                <tr style={{ borderBottom: "1px solid var(--color-border-tertiary)" }}>
+                  <th style={th}>Product</th>
+                  <th style={{ ...th, textAlign: "right" }}>Gross profit</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {profitProducts.length === 0 ? (
+                  <tr><td colSpan={2} style={emptyTd}>No sales data yet.</td></tr>
+                ) : profitProducts.map((row, i) => (
+                  <tr key={i} style={{ borderBottom: "1px solid var(--color-border-tertiary)" }}>
+                    <td style={td}>{row.product_name}</td>
+                    <td style={{ ...td, textAlign: "right", fontWeight: 500, color: row.profit >= 0 ? "#3B6D11" : "#A32D2D" }}>
+                      {fmt(row.profit)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
         </div>
       )}
 
@@ -122,8 +190,8 @@ export default function ReportsPage() {
         <>
           <div style={{ ...kpiCard, marginBottom: 16 }}>
             <span style={{ fontSize: 13, color: "var(--color-text-secondary)" }}>Total inventory value</span>
-            <span style={{ fontSize: 22, fontWeight: 500, color: "#185FA5" }}>
-              ₦{parseFloat(stockTotal).toLocaleString("en-NG", { minimumFractionDigits: 2 })}
+            <span style={{ fontSize: 22, fontWeight: 500, color: "var(--color-primary)" }}>
+              {fmt(stockTotal)}
             </span>
           </div>
           <div style={tableWrap}>
@@ -144,10 +212,10 @@ export default function ReportsPage() {
                     <td style={td}>{p.product_name}</td>
                     <td style={{ ...td, textAlign: "right" }}>{p.stock_quantity}</td>
                     <td style={{ ...td, textAlign: "right", color: "var(--color-text-secondary)" }}>
-                      {p.cost_price != null ? `₦${parseFloat(p.cost_price).toLocaleString("en-NG", { minimumFractionDigits: 2 })}` : "—"}
+                      {p.cost_price != null ? fmt(p.cost_price) : "—"}
                     </td>
                     <td style={{ ...td, textAlign: "right", fontWeight: 500 }}>
-                      ₦{parseFloat(p.stock_value ?? 0).toLocaleString("en-NG", { minimumFractionDigits: 2 })}
+                      {fmt(p.stock_value ?? 0)}
                     </td>
                   </tr>
                 ))}
@@ -160,12 +228,8 @@ export default function ReportsPage() {
       {/* ── Sales summary ── */}
       {!loading && activeTab === "Sales summary" && data && (
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, maxWidth: 500 }}>
-          <StatCard
-            label="Total revenue"
-            value={`₦${parseFloat(summaryRevenue).toLocaleString("en-NG", { minimumFractionDigits: 2 })}`}
-            color="#185FA5"
-          />
-          <StatCard label="Total transactions" value={summaryTxns} color="#0F6E56" />
+          <StatCard label="Total revenue"       value={fmt(summaryRevenue)} color="var(--color-primary)" />
+          <StatCard label="Total transactions"  value={summaryTxns}         color="#0F6E56" />
         </div>
       )}
 
@@ -215,7 +279,6 @@ export default function ReportsPage() {
           </table>
         </div>
       )}
-
     </div>
   );
 }
@@ -240,9 +303,12 @@ function StatCard({ label, value, color }) {
   );
 }
 
-const errorBox  = { background: "#FCEBEB", color: "#A32D2D", borderRadius: 8, padding: "9px 13px", fontSize: 13, marginBottom: 14 };
+const errorBox = { background: "var(--error-bg)", color: "var(--error-text)", borderRadius: 8, padding: "9px 13px", fontSize: 13, marginBottom: 14 };
 const tableWrap = { background: "var(--color-background-primary)", border: "1px solid var(--color-border-tertiary)", borderRadius: 12, overflow: "hidden" };
-const th        = { padding: "9px 14px", textAlign: "left", fontSize: 11, fontWeight: 500, color: "var(--color-text-secondary)", textTransform: "uppercase", letterSpacing: "0.05em" };
-const td        = { padding: "11px 14px", fontSize: 13, color: "var(--color-text-primary)" };
-const emptyTd   = { textAlign: "center", padding: 32, color: "var(--color-text-tertiary)", fontSize: 13 };
-const kpiCard   = { background: "var(--color-background-primary)", border: "1px solid var(--color-border-tertiary)", borderRadius: 12, padding: "16px 20px", display: "flex", justifyContent: "space-between", alignItems: "center" };
+const th       = { padding: "9px 14px", textAlign: "left", fontSize: 11, fontWeight: 500, color: "var(--color-text-secondary)", textTransform: "uppercase", letterSpacing: "0.05em" };
+const td       = { padding: "11px 14px", fontSize: 13, color: "var(--color-text-primary)" };
+const emptyTd  = { textAlign: "center", padding: 32, color: "var(--color-text-tertiary)", fontSize: 13 };
+const kpiCard  = { background: "var(--color-background-primary)", border: "1px solid var(--color-border-tertiary)", borderRadius: 12, padding: "16px 18px" };
+const kpiLabel = { fontSize: 11, color: "var(--color-text-secondary)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 6 };
+const kpiValue = { fontSize: 22, fontWeight: 600, marginBottom: 3 };
+const kpiSub   = { fontSize: 11, color: "var(--color-text-tertiary)" };
