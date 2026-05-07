@@ -33,7 +33,24 @@ def upgrade():
 
     # ── Add credit fields to customers ────────────────────────────────────────
     sql("ALTER TABLE customers ADD COLUMN IF NOT EXISTS business_id INTEGER REFERENCES businesses(business_id);")
-    sql("UPDATE customers SET business_id = 1 WHERE business_id IS NULL;")
+
+    # ── Bypass RLS for the UPDATE — set superadmin context (business_id = 0) ─
+    # RLS is active on businesses table so the FK check fails without a context.
+    # Setting business_id = 0 allows the migration connection to see all rows.
+    sql("SET LOCAL app.current_business_id = '0';")
+
+    # Get the first business_id that actually exists instead of hardcoding 1
+    result = conn.execute(sa.text("SELECT business_id FROM businesses ORDER BY business_id LIMIT 1;"))
+    row = result.fetchone()
+    first_business_id = row[0] if row else None
+
+    if first_business_id:
+        conn.execute(sa.text(
+            f"UPDATE customers SET business_id = {first_business_id} WHERE business_id IS NULL;"
+        ))
+    else:
+        # No businesses exist yet — leave business_id NULL for now
+        print("[Migration 0009] No businesses found — customers business_id left NULL")
     sql("ALTER TABLE customers ADD COLUMN IF NOT EXISTS credit_enabled BOOLEAN NOT NULL DEFAULT FALSE;")
     sql("ALTER TABLE customers ADD COLUMN IF NOT EXISTS credit_limit NUMERIC(12,2) DEFAULT NULL;")
     sql("ALTER TABLE customers ADD COLUMN IF NOT EXISTS credit_due_days INTEGER NOT NULL DEFAULT 30;")
