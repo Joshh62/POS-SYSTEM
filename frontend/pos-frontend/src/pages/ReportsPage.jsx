@@ -18,10 +18,11 @@ export default function ReportsPage() {
   const isAdmin     = ["admin", "superadmin"].includes(currentUser.role);
   const TABS        = isAdmin ? ALL_TABS : MANAGER_TABS;
 
-  const [activeTab, setActiveTab] = useState("Profit");
-  const [data,      setData]      = useState(null);
-  const [loading,   setLoading]   = useState(false);
-  const [error,     setError]     = useState(null);
+  const [activeTab,    setActiveTab]    = useState("Profit");
+  const [data,         setData]         = useState(null);
+  const [discountData, setDiscountData] = useState(null);
+  const [loading,      setLoading]      = useState(false);
+  const [error,        setError]        = useState(null);
 
   useEffect(() => {
     if (!TABS.includes(activeTab)) setActiveTab("Profit");
@@ -29,12 +30,20 @@ export default function ReportsPage() {
 
   const fetchTab = async (tab) => {
     if (tab === "Audit log" && !isAdmin) return;
-    setLoading(true); setError(null); setData(null);
+    setLoading(true); setError(null); setData(null); setDiscountData(null);
     try {
       let result;
       if (tab === "Profit")               result = await getProfitReport();
       else if (tab === "Stock valuation") result = await getStockValuation();
-      else if (tab === "Sales summary")   result = await getSalesSummary();
+      else if (tab === "Sales summary") {
+        const params = activeBranchId ? { branch_id: activeBranchId } : {};
+        const [summary, discounts] = await Promise.all([
+          getSalesSummary(),
+          api.get("/sales/discount-summary", { params }).then(r => r.data).catch(() => null),
+        ]);
+        result = summary;
+        setDiscountData(discounts);
+      }
       else if (tab === "Audit log")       result = await getAuditLogs();
       else if (tab === "Credit accounts") result = await api.get("/ledger/summary").then(r => r.data);
       setData(result);
@@ -62,7 +71,6 @@ export default function ReportsPage() {
   const expenseBreakdown  = data?.expense_breakdown ?? [];
   const hasNewProfitShape = data?.gross_profit !== undefined;
 
-  // Credit accounts shape
   const creditSummary  = activeTab === "Credit accounts" ? data : null;
   const creditAccounts = creditSummary?.accounts ?? [];
 
@@ -181,7 +189,9 @@ export default function ReportsPage() {
                   <tr key={i} style={{ borderBottom: "1px solid var(--color-border-tertiary)" }}>
                     <td style={td}>{p.product_name}</td>
                     <td style={{ ...td, textAlign: "right" }}>{p.stock_quantity}</td>
-                    <td style={{ ...td, textAlign: "right", color: "var(--color-text-secondary)" }}>{p.cost_price != null ? fmt(p.cost_price) : "—"}</td>
+                    <td style={{ ...td, textAlign: "right", color: "var(--color-text-secondary)" }}>
+                      {p.cost_price != null ? fmt(p.cost_price) : "—"}
+                    </td>
                     <td style={{ ...td, textAlign: "right", fontWeight: 500 }}>{fmt(p.stock_value ?? 0)}</td>
                   </tr>
                 ))}
@@ -193,17 +203,71 @@ export default function ReportsPage() {
 
       {/* ── Sales summary ── */}
       {!loading && activeTab === "Sales summary" && data && (
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, maxWidth: 500 }}>
-          <StatCard label="Total revenue"      value={fmt(summaryRevenue)} color="var(--color-primary)" />
-          <StatCard label="Total transactions" value={summaryTxns}         color="#0F6E56" />
+        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+
+          {/* Revenue KPIs */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, maxWidth: 500 }}>
+            <StatCard label="Total revenue"      value={fmt(summaryRevenue)} color="var(--color-primary)" />
+            <StatCard label="Total transactions" value={summaryTxns}         color="#0F6E56" />
+          </div>
+
+          {/* Loyalty discount summary */}
+          {discountData && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              <div style={{ fontSize: 11, fontWeight: 600, color: "var(--color-text-secondary)", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+                Loyalty discount summary
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
+                <div style={kpiCard}>
+                  <div style={kpiLabel}>Total discounts given</div>
+                  <div style={{ ...kpiValue, color: "#854F0B" }}>{fmt(discountData.total_discounts)}</div>
+                  <div style={kpiSub}>via loyalty redemptions</div>
+                </div>
+                <div style={kpiCard}>
+                  <div style={kpiLabel}>Discounted sales</div>
+                  <div style={{ ...kpiValue, color: "var(--color-text-primary)" }}>{discountData.discounted_sales}</div>
+                  <div style={kpiSub}>transactions with discount</div>
+                </div>
+                <div style={kpiCard}>
+                  <div style={kpiLabel}>Revenue after discounts</div>
+                  <div style={{ ...kpiValue, color: "#3B6D11" }}>{fmt(discountData.revenue_after_discounts)}</div>
+                  <div style={kpiSub}>actual cash collected</div>
+                </div>
+              </div>
+
+              {/* Context row */}
+              {discountData.discounted_sales > 0 && (
+                <div style={{ background: "var(--color-background-secondary)", border: "1px solid var(--color-border-tertiary)", borderRadius: 10, padding: "10px 14px", fontSize: 12, color: "var(--color-text-secondary)", display: "flex", gap: 24, flexWrap: "wrap" }}>
+                  <span>
+                    Avg discount per redemption:{" "}
+                    <strong style={{ color: "var(--color-text-primary)" }}>
+                      {fmt(discountData.total_discounts / discountData.discounted_sales)}
+                    </strong>
+                  </span>
+                  {summaryRevenue > 0 && (
+                    <span>
+                      Discount as % of revenue:{" "}
+                      <strong style={{ color: "#854F0B" }}>
+                        {((discountData.total_discounts / parseFloat(summaryRevenue)) * 100).toFixed(2)}%
+                      </strong>
+                    </span>
+                  )}
+                </div>
+              )}
+
+              {discountData.discounted_sales === 0 && (
+                <div style={{ fontSize: 12, color: "var(--color-text-tertiary)", padding: "8px 0" }}>
+                  No loyalty discounts applied yet.
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
 
       {/* ── Credit accounts ── */}
       {!loading && activeTab === "Credit accounts" && creditSummary && (
         <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-
-          {/* KPI summary */}
           <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
             <div style={kpiCard}>
               <div style={kpiLabel}>Total outstanding</div>
@@ -224,7 +288,6 @@ export default function ReportsPage() {
             </div>
           </div>
 
-          {/* Accounts table */}
           <div style={tableWrap}>
             <div style={sectionTitle}>Credit accounts — outstanding balances</div>
             <table style={{ width: "100%", borderCollapse: "collapse" }}>
@@ -244,34 +307,22 @@ export default function ReportsPage() {
                   <tr><td colSpan={7} style={emptyTd}>No outstanding credit accounts.</td></tr>
                 ) : creditAccounts.map((acc, i) => (
                   <tr key={i} style={{ borderBottom: "1px solid var(--color-border-tertiary)" }}>
-                    <td style={td}>
-                      <div style={{ fontWeight: 500, color: "var(--color-text-primary)" }}>{acc.full_name}</div>
-                    </td>
-                    <td style={{ ...td, fontSize: 12, color: "var(--color-text-secondary)" }}>
-                      {acc.phone || "—"}
-                    </td>
+                    <td style={td}><div style={{ fontWeight: 500 }}>{acc.full_name}</div></td>
+                    <td style={{ ...td, fontSize: 12, color: "var(--color-text-secondary)" }}>{acc.phone || "—"}</td>
                     <td style={{ ...td, textAlign: "right", fontWeight: 600, color: acc.balance < 0 ? "#3B6D11" : "#A32D2D" }}>
                       {acc.balance < 0 ? `${fmt(Math.abs(acc.balance))} credit` : fmt(acc.balance)}
                     </td>
                     <td style={{ ...td, textAlign: "center", fontSize: 12, color: "var(--color-text-secondary)" }}>
                       {acc.credit_limit ? fmt(acc.credit_limit) : "No limit"}
                     </td>
-                    <td style={{ ...td, textAlign: "center", fontSize: 12, color: "var(--color-text-secondary)" }}>
-                      {acc.credit_due_days}d
-                    </td>
+                    <td style={{ ...td, textAlign: "center", fontSize: 12, color: "var(--color-text-secondary)" }}>{acc.credit_due_days}d</td>
                     <td style={{ ...td, textAlign: "center" }}>
                       {acc.is_overdue ? (
-                        <span style={{ fontSize: 11, fontWeight: 500, padding: "2px 8px", borderRadius: 20, background: "#FCEBEB", color: "#A32D2D" }}>
-                          ⚠️ Overdue
-                        </span>
+                        <span style={{ fontSize: 11, fontWeight: 500, padding: "2px 8px", borderRadius: 20, background: "#FCEBEB", color: "#A32D2D" }}>⚠️ Overdue</span>
                       ) : acc.balance > 0 ? (
-                        <span style={{ fontSize: 11, fontWeight: 500, padding: "2px 8px", borderRadius: 20, background: "#FAEEDA", color: "#854F0B" }}>
-                          Owing
-                        </span>
+                        <span style={{ fontSize: 11, fontWeight: 500, padding: "2px 8px", borderRadius: 20, background: "#FAEEDA", color: "#854F0B" }}>Owing</span>
                       ) : (
-                        <span style={{ fontSize: 11, fontWeight: 500, padding: "2px 8px", borderRadius: 20, background: "#EAF3DE", color: "#3B6D11" }}>
-                          Credit
-                        </span>
+                        <span style={{ fontSize: 11, fontWeight: 500, padding: "2px 8px", borderRadius: 20, background: "#EAF3DE", color: "#3B6D11" }}>Credit</span>
                       )}
                     </td>
                     <td style={{ ...td, textAlign: "right", fontSize: 12, color: "var(--color-text-tertiary)" }}>
@@ -351,13 +402,13 @@ function StatCard({ label, value, color }) {
   );
 }
 
-const errorBox    = { background: "var(--error-bg)", color: "var(--error-text)", borderRadius: 8, padding: "9px 13px", fontSize: 13, marginBottom: 14 };
-const tableWrap   = { background: "var(--color-background-primary)", border: "1px solid var(--color-border-tertiary)", borderRadius: 12, overflow: "hidden" };
+const errorBox     = { background: "var(--error-bg)", color: "var(--error-text)", borderRadius: 8, padding: "9px 13px", fontSize: 13, marginBottom: 14 };
+const tableWrap    = { background: "var(--color-background-primary)", border: "1px solid var(--color-border-tertiary)", borderRadius: 12, overflow: "hidden" };
 const sectionTitle = { padding: "12px 14px", borderBottom: "1px solid var(--color-border-tertiary)", fontSize: 12, fontWeight: 600, color: "var(--color-text-primary)", textTransform: "uppercase", letterSpacing: "0.05em" };
-const th          = { padding: "9px 14px", textAlign: "left", fontSize: 11, fontWeight: 500, color: "var(--color-text-secondary)", textTransform: "uppercase", letterSpacing: "0.05em" };
-const td          = { padding: "11px 14px", fontSize: 13, color: "var(--color-text-primary)" };
-const emptyTd     = { textAlign: "center", padding: 32, color: "var(--color-text-tertiary)", fontSize: 13 };
-const kpiCard     = { background: "var(--color-background-primary)", border: "1px solid var(--color-border-tertiary)", borderRadius: 12, padding: "16px 18px" };
-const kpiLabel    = { fontSize: 11, color: "var(--color-text-secondary)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 6 };
-const kpiValue    = { fontSize: 22, fontWeight: 600, marginBottom: 3 };
-const kpiSub      = { fontSize: 11, color: "var(--color-text-tertiary)" };
+const th           = { padding: "9px 14px", textAlign: "left", fontSize: 11, fontWeight: 500, color: "var(--color-text-secondary)", textTransform: "uppercase", letterSpacing: "0.05em" };
+const td           = { padding: "11px 14px", fontSize: 13, color: "var(--color-text-primary)" };
+const emptyTd      = { textAlign: "center", padding: 32, color: "var(--color-text-tertiary)", fontSize: 13 };
+const kpiCard      = { background: "var(--color-background-primary)", border: "1px solid var(--color-border-tertiary)", borderRadius: 12, padding: "16px 18px" };
+const kpiLabel     = { fontSize: 11, color: "var(--color-text-secondary)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 6 };
+const kpiValue     = { fontSize: 22, fontWeight: 600, marginBottom: 3 };
+const kpiSub       = { fontSize: 11, color: "var(--color-text-tertiary)" };

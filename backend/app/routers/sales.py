@@ -60,7 +60,6 @@ def _resolve_sale_branch(current_user, requested_branch_id, db: Session) -> int:
     return requested_branch_id
 
 
-# ── Branch ids for list queries ───────────────────────────────────────────────
 def _list_branch_ids(current_user, requested_branch_id, db: Session) -> list[int]:
     if requested_branch_id:
         return [_resolve_sale_branch(current_user, requested_branch_id, db)]
@@ -92,9 +91,9 @@ def create_sale(
 
     branch_id    = _resolve_sale_branch(current_user, sale.branch_id, db)
     customer_id  = sale.customer_id if sale.customer_id else None
-    total_amount = 0
+    total_amount = 0.0
 
-    # Loyalty discount — validated as non-negative
+    # Loyalty discount — validated as non-negative float
     discount = max(0.0, float(sale.discount or 0))
 
     try:
@@ -134,7 +133,7 @@ def create_sale(
                     detail=f"Insufficient stock for '{product.product_name}'. Available: {inventory.stock_quantity}, requested: {item.quantity}"
                 )
 
-            unit_price    = product.selling_price
+            unit_price    = float(product.selling_price)
             subtotal      = unit_price * item.quantity
             total_amount += subtotal
             item_names.append(f"{product.product_name} x{item.quantity}")
@@ -156,18 +155,12 @@ def create_sale(
                 movement_date=now_lagos()
             ))
 
-        # ── Apply loyalty discount to final total ─────────────────────────────
-        # discount is capped at total — cannot go below zero
-        discount          = min(float(discount), float(total_amount))
-        discounted_total  = max(0.0, float(total_amount) - float(discount))
-        new_sale.total_amount = discounted_total
+        # ── Apply loyalty discount ────────────────────────────────────────────
+        discount         = min(discount, total_amount)   # cap at total
+        discounted_total = round(max(0.0, total_amount - discount), 2)
 
-        # Store discount on the sale record for invoice retrieval
-        # Uses a dynamic attribute — no schema change needed if Sale model
-        # doesn't have a discount column yet. If Sale model has discount column,
-        # this line sets it properly. Otherwise it's only used in this session.
-        if hasattr(new_sale, "discount"):
-            new_sale.discount = discount
+        new_sale.total_amount = discounted_total
+        new_sale.discount     = round(discount, 2)       # store on sale record
 
         discount_note = f" — loyalty discount ₦{discount:,.2f}" if discount > 0 else ""
         write_audit(
@@ -176,23 +169,21 @@ def create_sale(
             action="SALE",
             table="sales",
             record_id=new_sale.sale_id,
-            description=f"Sale #{new_sale.sale_id} — ₦{float(discounted_total):,.2f}{discount_note} — {', '.join(item_names)} — via {sale.payment_method}",
+            description=f"Sale #{new_sale.sale_id} — ₦{discounted_total:,.2f}{discount_note} — {', '.join(item_names)} — via {sale.payment_method}",
         )
 
         db.commit()
         db.refresh(new_sale)
 
-        # Return extra fields for the receipt UI
-        response = {
-            "sale_id":        new_sale.sale_id,
-            "sale_date":      new_sale.sale_date,
-            "total_amount":   float(new_sale.total_amount),
-            "payment_method": new_sale.payment_method,
-            "status":         new_sale.status,
-            "discount":       discount,
-            "subtotal_before_discount": float(total_amount),
+        return {
+            "sale_id":                  new_sale.sale_id,
+            "sale_date":                new_sale.sale_date,
+            "total_amount":             float(new_sale.total_amount),
+            "payment_method":           new_sale.payment_method,
+            "status":                   new_sale.status,
+            "discount":                 float(new_sale.discount),
+            "subtotal_before_discount": round(total_amount, 2),
         }
-        return response
 
     except HTTPException:
         db.rollback()
@@ -217,7 +208,7 @@ def scan_product(
     return {
         "product_id":    product.product_id,
         "product_name":  product.product_name,
-        "selling_price": product.selling_price
+        "selling_price": float(product.selling_price),
     }
 
 
@@ -259,6 +250,7 @@ def list_sales(
             "sale_id":        sale.sale_id,
             "sale_date":      sale.sale_date,
             "total_amount":   float(sale.total_amount),
+            "discount":       float(sale.discount) if sale.discount else 0.0,
             "payment_method": sale.payment_method,
             "status":         sale.status,
             "cashier":        cashier.full_name if cashier else "Unknown",
@@ -282,10 +274,9 @@ def get_receipt(
         raise HTTPException(status_code=404, detail="Sale not found")
     items = db.query(models.SaleItem).filter(models.SaleItem.sale_id == sale_id).all()
 
-    # Compute subtotal from items to derive discount if stored
-    items_total = sum(float(i.subtotal) for i in items)
+    discount    = float(sale.discount) if sale.discount else 0.0
     sale_total  = float(sale.total_amount)
-    discount    = round(items_total - sale_total, 2) if items_total > sale_total else 0.0
+    items_total = round(sale_total + discount, 2)
 
     return {
         "sale_id":      sale.sale_id,
@@ -321,10 +312,9 @@ def generate_invoice(sale_id: int, db: Session = Depends(get_db)):
     cashier      = db.query(models.User).filter(models.User.user_id == sale.user_id).first()
     customer     = db.query(models.Customer).filter(models.Customer.customer_id == sale.customer_id).first() if sale.customer_id else None
 
-    # ── Derive discount from item subtotals vs sale total ────────────────────
-    items_total  = sum(float(i.subtotal) for i in items)
-    sale_total   = float(sale.total_amount)
-    discount     = round(items_total - sale_total, 2) if items_total > sale_total else 0.0
+    discount   = float(sale.discount) if sale.discount else 0.0
+    sale_total = float(sale.total_amount)
+    items_total = round(sale_total + discount, 2)
 
     PAGE_W, PAGE_H = letter
     MARGIN = 50
@@ -395,7 +385,7 @@ def generate_invoice(sale_id: int, db: Session = Depends(get_db)):
     pdf.line(MARGIN, y, PAGE_W - MARGIN, y)
     y -= 18
 
-    # ── Subtotal row (only show if there's a discount) ────────────────────────
+    # ── Discount rows (only when discount > 0) ────────────────────────────────
     if discount > 0:
         pdf.setFont("Helvetica", 9)
         pdf.setFillColorRGB(0.15, 0.15, 0.15)
@@ -403,14 +393,12 @@ def generate_invoice(sale_id: int, db: Session = Depends(get_db)):
         pdf.drawRightString(COL["total"] + 55, y, f"N{items_total:,.2f}")
         y -= 16
 
-        # Loyalty discount row
-        pdf.setFillColorRGB(0.059, 0.435, 0.196)   # green
+        pdf.setFillColorRGB(0.059, 0.435, 0.196)
         pdf.drawString(COL["item"], y, "Loyalty points discount")
         pdf.drawRightString(COL["price"] + 55, y, "DISCOUNT")
         pdf.drawRightString(COL["total"] + 55, y, f"-N{discount:,.2f}")
         y -= 16
 
-        # Divider before total
         pdf.setStrokeColorRGB(0.094, 0.373, 0.647)
         pdf.setLineWidth(0.5)
         pdf.line(MARGIN, y, PAGE_W - MARGIN, y)
@@ -499,3 +487,43 @@ def refund_sale(
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ------------------------------------
+# DISCOUNT SUMMARY (admin/manager)
+# ------------------------------------
+@router.get("/discount-summary")
+def discount_summary(
+    branch_id: int = Query(None),
+    date_from: date = Query(None),
+    date_to:   date = Query(None),
+    db: Session = Depends(get_db),
+    user=Depends(require_role(["admin", "manager"]))
+):
+    """Total discounts given via loyalty redemptions."""
+    from sqlalchemy import func
+
+    q = db.query(
+        func.sum(models.Sale.discount).label("total_discounts"),
+        func.count(models.Sale.sale_id).label("discounted_sales"),
+        func.sum(models.Sale.total_amount).label("total_revenue"),
+    ).filter(
+        models.Sale.status == "completed",
+        models.Sale.discount > 0,
+    )
+
+    branch_ids = _list_branch_ids(user, branch_id, db)
+    if branch_ids:
+        q = q.filter(models.Sale.branch_id.in_(branch_ids))
+    if date_from:
+        q = q.filter(models.Sale.sale_date >= datetime.combine(date_from, datetime.min.time()))
+    if date_to:
+        q = q.filter(models.Sale.sale_date <= datetime.combine(date_to, datetime.max.time()))
+
+    result = q.first()
+
+    return {
+        "total_discounts":   float(result.total_discounts or 0),
+        "discounted_sales":  result.discounted_sales or 0,
+        "revenue_after_discounts": float(result.total_revenue or 0),
+    }

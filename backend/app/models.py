@@ -144,6 +144,7 @@ class Sale(Base):
     branch_id      = Column(Integer, ForeignKey("branches.branch_id"))
     payment_method = Column(String, nullable=False)
     total_amount   = Column(Numeric(12, 2))
+    discount       = Column(Numeric(12, 2), nullable=False, default=0)
     status         = Column(String, default="completed")
 
     items    = relationship("SaleItem", back_populates="sale", cascade="all, delete-orphan")

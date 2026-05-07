@@ -37,7 +37,6 @@ export default function SalesPage() {
     }
   };
 
-  // Re-fetch whenever active branch, page or date filters change
   useEffect(() => { fetchSales(); }, [page, dateFrom, dateTo, activeBranchId]);
 
   const viewReceipt = async (saleId) => {
@@ -69,6 +68,8 @@ export default function SalesPage() {
     if (status === "refunded")  return { bg: "#FAEEDA", color: "#854F0B" };
     return { bg: "#F1EFE8", color: "#5F5E5A" };
   };
+
+  const fmt = (v) => `₦${parseFloat(v || 0).toLocaleString("en-NG", { minimumFractionDigits: 2 })}`;
 
   const totalPages = Math.max(1, Math.ceil(total / LIMIT));
 
@@ -111,18 +112,25 @@ export default function SalesPage() {
         <table style={{ width: "100%", borderCollapse: "collapse" }}>
           <thead>
             <tr style={{ borderBottom: "1px solid var(--color-border-tertiary)" }}>
-              {["Sale #", "Date & time", "Cashier", "Items", "Total", "Payment", "Status", ""].map(h => (
-                <th key={h} style={th}>{h}</th>
-              ))}
+              <th style={th}>Sale #</th>
+              <th style={th}>Date & time</th>
+              <th style={th}>Cashier</th>
+              <th style={th}>Items</th>
+              <th style={{ ...th, textAlign: "right" }}>Total</th>
+              <th style={{ ...th, textAlign: "right" }}>Discount</th>
+              <th style={th}>Payment</th>
+              <th style={th}>Status</th>
+              <th style={th}></th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={8} style={emptyTd}>Loading sales...</td></tr>
+              <tr><td colSpan={9} style={emptyTd}>Loading sales...</td></tr>
             ) : sales.length === 0 ? (
-              <tr><td colSpan={8} style={emptyTd}>No sales found.</td></tr>
+              <tr><td colSpan={9} style={emptyTd}>No sales found.</td></tr>
             ) : sales.map((sale) => {
-              const sc = statusColor(sale.status);
+              const sc       = statusColor(sale.status);
+              const discount = parseFloat(sale.discount || 0);
               return (
                 <tr key={sale.sale_id} style={{ borderBottom: "1px solid var(--color-border-tertiary)" }}>
                   <td style={{ ...td, fontWeight: 500 }}>#{sale.sale_id}</td>
@@ -131,11 +139,28 @@ export default function SalesPage() {
                   </td>
                   <td style={td}>{sale.cashier || "—"}</td>
                   <td style={{ ...td, color: "var(--color-text-secondary)" }}>{sale.item_count ?? 0}</td>
-                  <td style={{ ...td, fontWeight: 500 }}>
-                    ₦{parseFloat(sale.total_amount || 0).toLocaleString("en-NG", { minimumFractionDigits: 2 })}
+                  <td style={{ ...td, textAlign: "right", fontWeight: 500 }}>
+                    {fmt(sale.total_amount)}
+                  </td>
+                  <td style={{ ...td, textAlign: "right" }}>
+                    {discount > 0 ? (
+                      <span style={{
+                        fontSize: 11, fontWeight: 500,
+                        padding: "2px 8px", borderRadius: 20,
+                        background: "#EAF3DE", color: "#3B6D11",
+                      }}>
+                        🎁 −{fmt(discount)}
+                      </span>
+                    ) : (
+                      <span style={{ fontSize: 12, color: "var(--color-text-tertiary)" }}>—</span>
+                    )}
                   </td>
                   <td style={{ ...td, textTransform: "capitalize", color: "var(--color-text-secondary)" }}>
-                    {sale.payment_method || "—"}
+                    {sale.payment_method === "credit" ? (
+                      <span style={{ color: "#854F0B" }}>Credit</span>
+                    ) : (
+                      sale.payment_method || "—"
+                    )}
                   </td>
                   <td style={td}>
                     <span style={{ fontSize: 11, fontWeight: 500, padding: "3px 9px", borderRadius: 10, background: sc.bg, color: sc.color }}>
@@ -187,22 +212,46 @@ export default function SalesPage() {
         <div style={overlayStyle}>
           <div style={modalStyle}>
             <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 16 }}>
-              <h2 style={{ fontSize: 16, margin: 0 }}>Receipt — Sale #{receipt.sale_id}</h2>
+              <h2 style={{ fontSize: 16, margin: 0, color: "var(--color-text-primary)" }}>
+                Receipt — Sale #{receipt.sale_id}
+              </h2>
               <button onClick={() => setReceipt(null)} style={closeBtn}>×</button>
             </div>
             <div style={{ fontSize: 12, marginBottom: 14, color: "var(--color-text-secondary)" }}>
               {receipt.sale_date ? new Date(receipt.sale_date).toLocaleString() : "—"}
             </div>
+
+            {/* Items */}
             {(receipt.items || []).map((item, i) => (
-              <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", borderBottom: "1px solid var(--color-border-tertiary)" }}>
+              <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", borderBottom: "1px solid var(--color-border-tertiary)", fontSize: 13, color: "var(--color-text-primary)" }}>
                 <span>{item.product} × {item.quantity}</span>
-                <span>₦{parseFloat(item.subtotal || 0).toLocaleString("en-NG", { minimumFractionDigits: 2 })}</span>
+                <span>{fmt(item.subtotal)}</span>
               </div>
             ))}
-            <div style={{ display: "flex", justifyContent: "space-between", marginTop: 12, fontWeight: 500 }}>
-              <span>Total</span>
-              <span>₦{parseFloat(receipt.total_amount || 0).toLocaleString("en-NG", { minimumFractionDigits: 2 })}</span>
-            </div>
+
+            {/* Subtotal / discount / total */}
+            {receipt.discount > 0 ? (
+              <>
+                <div style={{ display: "flex", justifyContent: "space-between", marginTop: 10, fontSize: 13, color: "var(--color-text-secondary)" }}>
+                  <span>Subtotal</span>
+                  <span>{fmt(receipt.subtotal)}</span>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", marginTop: 4, fontSize: 13, color: "#3B6D11", fontWeight: 500 }}>
+                  <span>🎁 Loyalty discount</span>
+                  <span>− {fmt(receipt.discount)}</span>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", marginTop: 8, fontWeight: 600, fontSize: 14, color: "var(--color-text-primary)", borderTop: "1px solid var(--color-border-tertiary)", paddingTop: 8 }}>
+                  <span>Total paid</span>
+                  <span>{fmt(receipt.total_amount)}</span>
+                </div>
+              </>
+            ) : (
+              <div style={{ display: "flex", justifyContent: "space-between", marginTop: 12, fontWeight: 500, color: "var(--color-text-primary)" }}>
+                <span>Total</span>
+                <span>{fmt(receipt.total_amount)}</span>
+              </div>
+            )}
+
             <button onClick={() => setReceipt(null)} style={{ ...cancelBtn, width: "100%", marginTop: 16 }}>Close</button>
           </div>
         </div>
@@ -223,6 +272,6 @@ const emptyTd    = { textAlign: "center", padding: 32, color: "var(--color-text-
 const actionBtn  = (color, bg) => ({ padding: "4px 10px", borderRadius: 6, border: "none", background: bg, color, fontSize: 11, fontWeight: 500, cursor: "pointer" });
 const pageBtn    = (disabled) => ({ padding: "5px 12px", borderRadius: 6, border: "1px solid var(--color-border-tertiary)", background: "none", fontSize: 12, cursor: disabled ? "default" : "pointer", opacity: disabled ? 0.4 : 1, color: "var(--color-text-primary)" });
 const overlayStyle = { position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 999 };
-const modalStyle   = { background: "var(--color-background-primary)", borderRadius: 12, padding: 24, width: 360, maxHeight: "80vh", overflowY: "auto", boxShadow: "0 8px 32px rgba(0,0,0,0.2)" };
+const modalStyle   = { background: "var(--color-background-primary)", borderRadius: 12, padding: 24, width: 360, maxHeight: "80vh", overflowY: "auto", boxShadow: "0 8px 32px rgba(0,0,0,0.2)", border: "1px solid var(--color-border-tertiary)" };
 const closeBtn     = { background: "none", border: "none", fontSize: 20, cursor: "pointer", color: "var(--color-text-secondary)", lineHeight: 1 };
 const cancelBtn    = { padding: "9px 16px", borderRadius: 8, border: "1px solid var(--color-border-tertiary)", background: "none", fontSize: 13, cursor: "pointer", color: "var(--color-text-primary)" };
