@@ -158,8 +158,8 @@ def create_sale(
 
         # ── Apply loyalty discount to final total ─────────────────────────────
         # discount is capped at total — cannot go below zero
-        discount          = min(discount, total_amount)
-        discounted_total  = max(0.0, total_amount - discount)
+        discount          = min(float(discount), float(total_amount))
+        discounted_total  = max(0.0, float(total_amount) - float(discount))
         new_sale.total_amount = discounted_total
 
         # Store discount on the sale record for invoice retrieval
@@ -190,7 +190,7 @@ def create_sale(
             "payment_method": new_sale.payment_method,
             "status":         new_sale.status,
             "discount":       discount,
-            "subtotal_before_discount": total_amount,
+            "subtotal_before_discount": float(total_amount),
         }
         return response
 
