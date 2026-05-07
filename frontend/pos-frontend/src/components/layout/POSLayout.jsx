@@ -19,7 +19,7 @@ const NAV_ITEMS = [
   { key: "import",     label: "Import products", icon: "⬆️", roles: ["admin", "manager", "superadmin"],            flag: "bulk_import" },
   { key: "businesses", label: "Businesses",      icon: "🏢", roles: ["superadmin"],                                flag: null },
   { key: "expenses",   label: "Expenses",        icon: "💸", roles: ["admin", "manager", "superadmin"],            flag: "expense_tracking" },
-  { key: "customers",  label: "Customers",       icon: "👤", roles: ["admin", "manager", "cashier", "superadmin"], flag: null },
+  { key: "customers",  label: "Customers",       icon: "👤", roles: ["admin", "manager", "superadmin"], flag: null },
 ];
 
 const PAGE_TITLES = {

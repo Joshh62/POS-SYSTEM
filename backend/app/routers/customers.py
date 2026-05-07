@@ -289,6 +289,7 @@ def search_customers(
             "full_name":      c.full_name,
             "phone":          c.phone,
             "credit_enabled": c.credit_enabled,
+            "credit_limit":   float(c.credit_limit) if c.credit_limit else None,
             "balance":        _get_balance(db, c.customer_id) if c.credit_enabled else None,
         }
         for c in results
