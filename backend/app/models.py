@@ -95,14 +95,21 @@ class BranchInventory(Base):
 class Customer(Base):
     __tablename__ = "customers"
 
-    customer_id = Column(Integer, primary_key=True, index=True)
-    full_name   = Column(String, nullable=False)
-    phone       = Column(String, unique=True)
-    email       = Column(String)
-    address     = Column(String)
-    created_at  = Column(DateTime, default=datetime.utcnow)
+    customer_id    = Column(Integer, primary_key=True, index=True)
+    business_id    = Column(Integer, ForeignKey("businesses.business_id"), nullable=True)
+    full_name      = Column(String, nullable=False)
+    phone          = Column(String, unique=True)
+    email          = Column(String)
+    address        = Column(String)
+    credit_enabled = Column(Boolean, default=False, nullable=False)
+    credit_limit   = Column(Numeric(12, 2), nullable=True)   # null = no limit
+    credit_due_days= Column(Integer, default=30, nullable=False)
+    credit_notes   = Column(String(500), nullable=True)
+    created_at     = Column(DateTime, default=datetime.utcnow)
 
-    sales = relationship("Sale", back_populates="customer")
+    sales           = relationship("Sale", back_populates="customer")
+    ledger_entries  = relationship("CustomerLedgerEntry", back_populates="customer",
+                                   cascade="all, delete-orphan")
 
 
 # -------------------- USER --------------------
@@ -373,3 +380,24 @@ class DebtPayment(Base):
 
     debt = relationship("Debt", back_populates="payments")
     user = relationship("User")
+
+
+# -------------------- CUSTOMER LEDGER ENTRY --------------------
+class CustomerLedgerEntry(Base):
+    __tablename__ = "customer_ledger_entries"
+
+    entry_id     = Column(Integer, primary_key=True, index=True)
+    business_id  = Column(Integer, ForeignKey("businesses.business_id"), nullable=False)
+    branch_id    = Column(Integer, ForeignKey("branches.branch_id"),     nullable=False)
+    customer_id  = Column(Integer, ForeignKey("customers.customer_id"),  nullable=False)
+    user_id      = Column(Integer, ForeignKey("users.user_id"),          nullable=False)
+    entry_type   = Column(String(10), nullable=False)   # debit | credit
+    amount       = Column(Numeric(12, 2), nullable=False)
+    description  = Column(String(500), nullable=True)
+    reference_id = Column(Integer, nullable=True)       # sale_id if from checkout
+    due_date     = Column(Date, nullable=True)           # on debit entries only
+    created_at   = Column(DateTime, default=datetime.utcnow)
+
+    customer = relationship("Customer", back_populates="ledger_entries")
+    branch   = relationship("Branch")
+    user     = relationship("User")

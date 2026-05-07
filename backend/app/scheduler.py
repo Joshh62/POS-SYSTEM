@@ -1,41 +1,38 @@
 """
 scheduler.py
 ------------
-Lightweight scheduler using asyncio — no external packages needed.
-Runs the WhatsApp daily report every day at 8PM Lagos time.
+Lightweight asyncio scheduler — no external packages needed.
+
+Jobs:
+  1. Daily WhatsApp report      → 8:00 PM Lagos time (existing)
+  2. Due date customer alerts   → 8:00 AM Lagos time (new)
+  3. Monthly credit summary     → 8:00 AM on 1st of each month (new)
 """
 
 import asyncio
-from datetime import datetime
+from datetime import datetime, timedelta
 import pytz
 
 LAGOS_TZ = pytz.timezone("Africa/Lagos")
 
 
-def seconds_until_8pm() -> float:
-    """Calculate seconds until next 8PM Lagos time."""
-    now = datetime.now(LAGOS_TZ)
-    target = now.replace(hour=20, minute=0, second=0, microsecond=0)
-
-    # If 8PM already passed today, schedule for tomorrow
+def seconds_until(hour: int, minute: int = 0) -> float:
+    """Calculate seconds until next occurrence of a given hour:minute Lagos time."""
+    now    = datetime.now(LAGOS_TZ)
+    target = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
     if now >= target:
-        target = target.replace(day=target.day + 1)
-
-    delta = (target - now).total_seconds()
-    return delta
+        target += timedelta(days=1)
+    return (target - now).total_seconds()
 
 
+# ── Daily 8PM — admin WhatsApp report ────────────────────────────────────────
 async def daily_report_loop():
-    """Infinite loop that fires the WhatsApp report every day at 8PM."""
     while True:
-        wait_seconds = seconds_until_8pm()
-        hours = int(wait_seconds // 3600)
-        minutes = int((wait_seconds % 3600) // 60)
-        print(f"[Scheduler] Next WhatsApp report in {hours}h {minutes}m")
+        wait = seconds_until(20, 0)
+        h, m = int(wait // 3600), int((wait % 3600) // 60)
+        print(f"[Scheduler] Next WhatsApp report in {h}h {m}m")
+        await asyncio.sleep(wait)
 
-        await asyncio.sleep(wait_seconds)
-
-        # Run the report
         try:
             from app.database import SessionLocal
             from app.whatsapp_report import send_whatsapp_report
@@ -46,14 +43,77 @@ async def daily_report_loop():
             finally:
                 db.close()
         except Exception as e:
-            print(f"[Scheduler] Failed to send report: {e}")
+            print(f"[Scheduler] Failed to send daily report: {e}")
 
-        # Wait 60 seconds before recalculating to avoid re-firing immediately
         await asyncio.sleep(60)
 
 
+# ── Daily 8AM — customer due date alerts ─────────────────────────────────────
+async def due_date_alerts_loop():
+    """Sends WhatsApp reminders to customers whose debt is due tomorrow."""
+    while True:
+        wait = seconds_until(8, 0)
+        h, m = int(wait // 3600), int((wait % 3600) // 60)
+        print(f"[Scheduler] Next due date alerts in {h}h {m}m")
+        await asyncio.sleep(wait)
+
+        try:
+            from app.database import SessionLocal
+            from app.whatsapp_report import send_due_date_alerts
+            db = SessionLocal()
+            try:
+                send_due_date_alerts(db)
+            finally:
+                db.close()
+        except Exception as e:
+            print(f"[Scheduler] Failed to send due date alerts: {e}")
+
+        await asyncio.sleep(60)
+
+
+# ── Monthly 1st at 8AM — credit account summary to admin ─────────────────────
+async def monthly_credit_summary_loop():
+    """Sends monthly credit account balance summary to the shop owner."""
+    while True:
+        now = datetime.now(LAGOS_TZ)
+
+        # Calculate next 1st of month at 8AM Lagos
+        if now.day == 1 and now.hour < 8:
+            # Today is 1st and it's before 8AM — fire today
+            target = now.replace(hour=8, minute=0, second=0, microsecond=0)
+        else:
+            # Next month 1st at 8AM
+            if now.month == 12:
+                target = now.replace(year=now.year + 1, month=1, day=1, hour=8, minute=0, second=0, microsecond=0)
+            else:
+                target = now.replace(month=now.month + 1, day=1, hour=8, minute=0, second=0, microsecond=0)
+
+        wait = (target - now).total_seconds()
+        days = int(wait // 86400)
+        print(f"[Scheduler] Next monthly credit summary in {days} day(s)")
+        await asyncio.sleep(wait)
+
+        try:
+            from app.database import SessionLocal
+            from app.whatsapp_report import send_monthly_credit_summary
+            db = SessionLocal()
+            try:
+                send_monthly_credit_summary(db)
+                print("[Scheduler] Monthly credit summary sent successfully")
+            finally:
+                db.close()
+        except Exception as e:
+            print(f"[Scheduler] Failed to send monthly credit summary: {e}")
+
+        await asyncio.sleep(60)
+
+
+# ── Start all scheduler tasks ─────────────────────────────────────────────────
 def start_scheduler():
-    """Start the scheduler as a background asyncio task."""
     loop = asyncio.get_event_loop()
     loop.create_task(daily_report_loop())
+    loop.create_task(due_date_alerts_loop())
+    loop.create_task(monthly_credit_summary_loop())
     print("[Scheduler] Started — daily WhatsApp report at 8:00 PM Lagos time")
+    print("[Scheduler] Started — customer due date alerts at 8:00 AM Lagos time")
+    print("[Scheduler] Started — monthly credit summary on 1st of each month")

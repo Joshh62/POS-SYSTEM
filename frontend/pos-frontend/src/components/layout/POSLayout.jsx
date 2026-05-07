@@ -19,7 +19,7 @@ const NAV_ITEMS = [
   { key: "import",     label: "Import products", icon: "⬆️", roles: ["admin", "manager", "superadmin"],            flag: "bulk_import" },
   { key: "businesses", label: "Businesses",      icon: "🏢", roles: ["superadmin"],                                flag: null },
   { key: "expenses",   label: "Expenses",        icon: "💸", roles: ["admin", "manager", "superadmin"],            flag: "expense_tracking" },
-  { key: "debts",      label: "Debt tracking",   icon: "📒", roles: ["admin", "manager", "superadmin"],            flag: "debt_tracking" },
+  { key: "customers",  label: "Customers",       icon: "👤", roles: ["admin", "manager", "cashier", "superadmin"], flag: null },
 ];
 
 const PAGE_TITLES = {
@@ -28,6 +28,7 @@ const PAGE_TITLES = {
   users: "Users", import: "Import products", businesses: "Businesses",
   expenses: "Expenses",
   debts: "Debt tracking",
+  customers: "Customers",
 };
 
 // Theme dot colors — used in the picker UI
