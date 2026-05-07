@@ -10,6 +10,7 @@ from app.routers import debts
 from app.routers import businesses
 from app.routers import admin_tools
 from app.routers import ledger
+from app.routers import loyalty
 
 from app.middleware.rls_middleware import RLSMiddleware  # ✅ RLS import
 
@@ -67,6 +68,7 @@ app.include_router(admin_tools.router)
 app.include_router(expenses.router)
 app.include_router(debts.router)
 app.include_router(ledger.router)
+app.include_router(loyalty.router)
 
 
 @app.get("/health", tags=["System"])

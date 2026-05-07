@@ -19,6 +19,8 @@ class Business(Base):
     created_at  = Column(DateTime, default=datetime.utcnow)
     plan        = Column(String, default="starter", nullable=False)  # solo | starter | business | enterprise
     features = Column(JSONB, nullable=False, server_default="{}")
+    loyalty_earn_rate  = Column(Numeric(6, 2), nullable=False, default=1)
+    loyalty_redeem_rate = Column(Numeric(6, 2), nullable=False, default=5)
     
     branches = relationship("Branch", back_populates="business")
     users    = relationship("User",   back_populates="business")
@@ -400,4 +402,42 @@ class CustomerLedgerEntry(Base):
 
     customer = relationship("Customer", back_populates="ledger_entries")
     branch   = relationship("Branch")
+    user     = relationship("User")
+ 
+
+# -------------------- CUSTOMER LOYALTY --------------------
+class CustomerLoyalty(Base):
+    __tablename__ = "customer_loyalty"
+
+    loyalty_id        = Column(Integer, primary_key=True, index=True)
+    business_id       = Column(Integer, ForeignKey("businesses.business_id"), nullable=False)
+    customer_id       = Column(Integer, ForeignKey("customers.customer_id"),  nullable=False)
+    points_balance    = Column(Integer, nullable=False, default=0)
+    lifetime_earned   = Column(Integer, nullable=False, default=0)
+    lifetime_redeemed = Column(Integer, nullable=False, default=0)
+    last_activity_at  = Column(DateTime, default=datetime.utcnow)
+    created_at        = Column(DateTime, default=datetime.utcnow)
+
+    customer     = relationship("Customer")
+    transactions = relationship("LoyaltyTransaction", back_populates="loyalty",
+                                cascade="all, delete-orphan")
+
+
+# -------------------- LOYALTY TRANSACTION --------------------
+class LoyaltyTransaction(Base):
+    __tablename__ = "loyalty_transactions"
+
+    tx_id       = Column(Integer, primary_key=True, index=True)
+    loyalty_id  = Column(Integer, ForeignKey("customer_loyalty.loyalty_id"), nullable=False)
+    business_id = Column(Integer, ForeignKey("businesses.business_id"),      nullable=False)
+    customer_id = Column(Integer, ForeignKey("customers.customer_id"),       nullable=False)
+    user_id     = Column(Integer, ForeignKey("users.user_id"),               nullable=False)
+    tx_type     = Column(String(10), nullable=False)   # earn | redeem | expire
+    points      = Column(Integer, nullable=False)
+    sale_id     = Column(Integer, ForeignKey("sales.sale_id"), nullable=True)
+    description = Column(String(500), nullable=True)
+    created_at  = Column(DateTime, default=datetime.utcnow)
+
+    loyalty  = relationship("CustomerLoyalty", back_populates="transactions")
+    customer = relationship("Customer")
     user     = relationship("User")
