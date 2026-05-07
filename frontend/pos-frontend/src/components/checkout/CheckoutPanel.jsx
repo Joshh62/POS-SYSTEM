@@ -9,16 +9,16 @@ const PAYMENT_METHODS = ["cash", "card", "transfer"];
 export default function CheckoutPanel({ onClose, onSuccess }) {
   const { cartItems, totalAmount, getCartPayload, clearCart } = useCart();
 
-  const [paymentMethod,      setPaymentMethod]      = useState("cash");
-  const [loading,            setLoading]            = useState(false);
-  const [error,              setError]              = useState(null);
-  const [receipt,            setReceipt]            = useState(null);
+  const [paymentMethod,    setPaymentMethod]    = useState("cash");
+  const [loading,          setLoading]          = useState(false);
+  const [error,            setError]            = useState(null);
+  const [receipt,          setReceipt]          = useState(null);
 
   // ── Customer selection ────────────────────────────────────────────────────
-  const [customerSearch,     setCustomerSearch]     = useState("");
-  const [customerResults,    setCustomerResults]    = useState([]);
-  const [selectedCustomer,   setSelectedCustomer]   = useState(null);
-  const [searching,          setSearching]          = useState(false);
+  const [customerSearch,   setCustomerSearch]   = useState("");
+  const [customerResults,  setCustomerResults]  = useState([]);
+  const [selectedCustomer, setSelectedCustomer] = useState(null);
+  const [searching,        setSearching]        = useState(false);
 
   const user = JSON.parse(localStorage.getItem("user") || "{}");
   const activeBranchParam = getActiveBranchParam();
@@ -39,7 +39,6 @@ export default function CheckoutPanel({ onClose, onSuccess }) {
     setSelectedCustomer(c);
     setCustomerSearch("");
     setCustomerResults([]);
-    // If customer is not credit-enabled and charge to account is selected, reset
     if (!c.credit_enabled && paymentMethod === "charge_to_account") {
       setPaymentMethod("cash");
     }
@@ -59,6 +58,23 @@ export default function CheckoutPanel({ onClose, onSuccess }) {
     if (paymentMethod === "charge_to_account" && !selectedCustomer) {
       setError("Select a credit-enabled customer to charge to account.");
       return;
+    }
+
+    // ── Credit limit check — block sale BEFORE it goes through ────────────
+    if (paymentMethod === "charge_to_account" && selectedCustomer?.credit_limit) {
+      const currentBalance = selectedCustomer.balance || 0;
+      const newBalance     = currentBalance + totalAmount;
+      if (newBalance > selectedCustomer.credit_limit) {
+        const remaining = Math.max(0, selectedCustomer.credit_limit - currentBalance);
+        setError(
+          `Credit limit exceeded for ${selectedCustomer.full_name}. ` +
+          `Limit: ₦${selectedCustomer.credit_limit.toLocaleString("en-NG", { minimumFractionDigits: 2 })} · ` +
+          `Current balance: ₦${currentBalance.toLocaleString("en-NG", { minimumFractionDigits: 2 })} · ` +
+          `Remaining credit: ₦${remaining.toLocaleString("en-NG", { minimumFractionDigits: 2 })} · ` +
+          `This charge: ₦${totalAmount.toLocaleString("en-NG", { minimumFractionDigits: 2 })}`
+        );
+        return;
+      }
     }
 
     setLoading(true);
@@ -100,7 +116,6 @@ export default function CheckoutPanel({ onClose, onSuccess }) {
           });
         } catch (ledgerErr) {
           console.error("[Checkout] Failed to create ledger entry:", ledgerErr);
-          // Sale succeeded — don't block receipt, just warn
         }
       }
 
@@ -135,7 +150,6 @@ export default function CheckoutPanel({ onClose, onSuccess }) {
       <div style={overlayStyle}>
         <div style={panelStyle}>
           <h2 style={headingStyle}>Sale complete ✓</h2>
-
           <div style={{ fontSize: 13, color: "var(--color-text-secondary)", marginBottom: 12 }}>
             {receipt.offline ? (
               <span style={offlineBadge}>⏳ Saved offline — will sync when connected</span>
@@ -143,53 +157,46 @@ export default function CheckoutPanel({ onClose, onSuccess }) {
               <span>Sale #{receipt.sale_id} · {new Date(receipt.sale_date).toLocaleString()}</span>
             )}
           </div>
-
           {receipt.customer_name && (
             <div style={{ fontSize: 12, color: "var(--color-text-secondary)", marginBottom: 10 }}>
               Customer: <strong style={{ color: "var(--color-text-primary)" }}>{receipt.customer_name}</strong>
             </div>
           )}
-
           <div style={summaryBox}>
             <div style={summaryRow}>
               <span>{isCredit ? "Charged to account" : "Total paid"}</span>
               <span>₦{parseFloat(receipt.total_amount).toLocaleString("en-NG", { minimumFractionDigits: 2 })}</span>
             </div>
-            <div style={summarySub}>
-              via {isCredit ? "credit account" : receipt.payment_method}
-            </div>
+            <div style={summarySub}>via {isCredit ? "credit account" : receipt.payment_method}</div>
             {isCredit && (
               <div style={{ marginTop: 6, fontSize: 11, color: "#854F0B", background: "#FAEEDA", borderRadius: 6, padding: "4px 8px" }}>
                 ⚠️ Added to {receipt.customer_name}'s ledger balance
               </div>
             )}
           </div>
-
           <div style={{ display: "flex", gap: 8 }}>
             {!receipt.offline && (
               <a href={getInvoiceUrl(receipt.sale_id)} target="_blank" rel="noreferrer" style={secondaryBtn}>
                 Print invoice
               </a>
             )}
-            <button onClick={() => { onSuccess?.(); onClose(); }} style={primaryBtn}>
-              New sale
-            </button>
+            <button onClick={() => { onSuccess?.(); onClose(); }} style={primaryBtn}>New sale</button>
           </div>
         </div>
       </div>
     );
   }
 
-  // ── Checkout form ──────────────────────────────────────────────────────────
+  // ── Checkout form ─────────────────────────────────────────────────────────
   const allMethods = [
     ...PAYMENT_METHODS,
     ...(selectedCustomer?.credit_enabled ? ["charge_to_account"] : []),
   ];
 
-  const methodLabel = (m) => {
-    if (m === "charge_to_account") return "Charge to account";
-    return m.charAt(0).toUpperCase() + m.slice(1);
-  };
+  // Pre-compute whether this charge would exceed the limit
+  const wouldExceedLimit = paymentMethod === "charge_to_account"
+    && selectedCustomer?.credit_limit
+    && (selectedCustomer.balance || 0) + totalAmount > selectedCustomer.credit_limit;
 
   return (
     <div style={overlayStyle}>
@@ -228,8 +235,9 @@ export default function CheckoutPanel({ onClose, onSuccess }) {
                   {selectedCustomer.phone}
                   {selectedCustomer.credit_enabled && (
                     <span style={{ marginLeft: 8, background: "#E6F1FB", color: "#185FA5", padding: "1px 6px", borderRadius: 4, fontSize: 10, fontWeight: 500 }}>
-                      Credit • Balance: ₦{Math.abs(selectedCustomer.balance || 0).toLocaleString("en-NG", { minimumFractionDigits: 2 })}
+                      Credit · ₦{Math.abs(selectedCustomer.balance || 0).toLocaleString("en-NG", { minimumFractionDigits: 2 })}
                       {selectedCustomer.balance < 0 ? " (has credit)" : selectedCustomer.balance > 0 ? " owing" : " clear"}
+                      {selectedCustomer.credit_limit ? ` / limit ₦${selectedCustomer.credit_limit.toLocaleString("en-NG")}` : ""}
                     </span>
                   )}
                 </div>
@@ -242,10 +250,7 @@ export default function CheckoutPanel({ onClose, onSuccess }) {
                 style={{ ...formInput, width: "100%", boxSizing: "border-box" }}
                 placeholder="Search by name or phone..."
                 value={customerSearch}
-                onChange={e => {
-                  setCustomerSearch(e.target.value);
-                  searchCustomers(e.target.value);
-                }}
+                onChange={e => { setCustomerSearch(e.target.value); searchCustomers(e.target.value); }}
               />
               {customerResults.length > 0 && (
                 <div style={{ position: "absolute", top: "100%", left: 0, right: 0, background: "var(--color-background-primary)", border: "1px solid var(--color-border-tertiary)", borderRadius: 8, zIndex: 100, maxHeight: 200, overflowY: "auto", marginTop: 2 }}>
@@ -260,7 +265,8 @@ export default function CheckoutPanel({ onClose, onSuccess }) {
                         {c.phone && <span>{c.phone}</span>}
                         {c.credit_enabled && (
                           <span style={{ color: "#185FA5" }}>
-                            Credit account · ₦{Math.abs(c.balance || 0).toLocaleString("en-NG")} {c.balance < 0 ? "credit" : "owing"}
+                            Credit · ₦{Math.abs(c.balance || 0).toLocaleString("en-NG")} {c.balance < 0 ? "credit" : "owing"}
+                            {c.credit_limit ? ` / ₦${c.credit_limit.toLocaleString("en-NG")} limit` : ""}
                           </span>
                         )}
                       </div>
@@ -280,8 +286,7 @@ export default function CheckoutPanel({ onClose, onSuccess }) {
             {allMethods.map((method) => (
               <button key={method} onClick={() => setPaymentMethod(method)} style={{
                 flex: method === "charge_to_account" ? "1 1 100%" : 1,
-                padding: "8px 0", borderRadius: 8, cursor: "pointer",
-                fontSize: 13,
+                padding: "8px 0", borderRadius: 8, cursor: "pointer", fontSize: 13,
                 border: `1px solid ${paymentMethod === method ? "var(--color-primary)" : "var(--color-border-tertiary)"}`,
                 background: paymentMethod === method
                   ? (method === "charge_to_account" ? "rgba(133,79,11,0.1)" : "var(--color-primary-light)")
@@ -291,17 +296,29 @@ export default function CheckoutPanel({ onClose, onSuccess }) {
                   : "var(--color-text-secondary)",
                 fontWeight: paymentMethod === method ? 500 : 400,
               }}>
-                {method === "charge_to_account" ? "📒 Charge to account" : methodLabel(method)}
+                {method === "charge_to_account" ? "📒 Charge to account" : method.charAt(0).toUpperCase() + method.slice(1)}
               </button>
             ))}
           </div>
 
-          {/* Credit balance notice */}
-          {selectedCustomer?.credit_enabled && selectedCustomer?.balance && (
-            <div style={{ marginTop: 8, fontSize: 12, padding: "7px 10px", borderRadius: 7, background: selectedCustomer.balance < 0 ? "#EAF3DE" : "#FAEEDA", color: selectedCustomer.balance < 0 ? "#3B6D11" : "#854F0B" }}>
-              {selectedCustomer.balance < 0
-                ? `✅ ${selectedCustomer.full_name} has ₦${Math.abs(selectedCustomer.balance).toLocaleString("en-NG")} credit on account`
-                : `⚠️ ${selectedCustomer.full_name} owes ₦${selectedCustomer.balance.toLocaleString("en-NG")} on account`}
+          {/* Credit balance / limit warning */}
+          {selectedCustomer?.credit_enabled && (
+            <div style={{ marginTop: 8 }}>
+              {wouldExceedLimit ? (
+                <div style={{ fontSize: 12, padding: "8px 10px", borderRadius: 7, background: "#FCEBEB", color: "#A32D2D", fontWeight: 500 }}>
+                  🚫 This charge of ₦{totalAmount.toLocaleString("en-NG", { minimumFractionDigits: 2 })} would exceed{" "}
+                  {selectedCustomer.full_name}'s credit limit of ₦{selectedCustomer.credit_limit.toLocaleString("en-NG", { minimumFractionDigits: 2 })}.
+                  Remaining credit: ₦{Math.max(0, selectedCustomer.credit_limit - (selectedCustomer.balance || 0)).toLocaleString("en-NG", { minimumFractionDigits: 2 })}.
+                </div>
+              ) : selectedCustomer.balance < 0 ? (
+                <div style={{ fontSize: 12, padding: "7px 10px", borderRadius: 7, background: "#EAF3DE", color: "#3B6D11" }}>
+                  ✅ {selectedCustomer.full_name} has ₦{Math.abs(selectedCustomer.balance).toLocaleString("en-NG")} credit on account
+                </div>
+              ) : selectedCustomer.balance > 0 ? (
+                <div style={{ fontSize: 12, padding: "7px 10px", borderRadius: 7, background: "#FAEEDA", color: "#854F0B" }}>
+                  ⚠️ {selectedCustomer.full_name} owes ₦{selectedCustomer.balance.toLocaleString("en-NG")} on account
+                </div>
+              ) : null}
             </div>
           )}
         </div>
@@ -310,11 +327,16 @@ export default function CheckoutPanel({ onClose, onSuccess }) {
 
         <button
           onClick={handleSubmit}
-          disabled={loading}
-          style={{ ...primaryBtn, width: "100%", opacity: loading ? 0.7 : 1 }}
+          disabled={loading || wouldExceedLimit}
+          style={{
+            ...primaryBtn, width: "100%",
+            opacity: (loading || wouldExceedLimit) ? 0.5 : 1,
+            cursor:  (loading || wouldExceedLimit) ? "not-allowed" : "pointer",
+            background: wouldExceedLimit ? "#A32D2D" : "var(--color-primary)",
+          }}
         >
-          {loading
-            ? "Processing..."
+          {loading ? "Processing..."
+            : wouldExceedLimit ? "Credit limit exceeded — cannot charge to account"
             : paymentMethod === "charge_to_account"
               ? `Charge ₦${totalAmount.toLocaleString("en-NG", { minimumFractionDigits: 2 })} to account`
               : `Confirm — ₦${totalAmount.toLocaleString("en-NG", { minimumFractionDigits: 2 })}`}
