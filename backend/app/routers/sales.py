@@ -37,22 +37,14 @@ def write_audit(db, user_id: int, action: str, table: str, record_id: int, descr
 
 # ── Branch resolver helper ────────────────────────────────────────────────────
 def _resolve_sale_branch(current_user, requested_branch_id, db: Session) -> int:
-    """
-    Determines which branch a sale or query should use.
-    - If a branch_id is passed in the request, validate the user has access to it.
-    - Otherwise fall back to the user's assigned branch_id.
-    - Raises 403 if the user tries to use a branch they don't belong to.
-    """
     if not requested_branch_id:
         if not current_user.branch_id:
             raise HTTPException(status_code=400, detail="User has no branch assigned")
         return current_user.branch_id
 
-    # Superadmin can use any branch
     if current_user.role == SUPERADMIN_ROLE:
         return requested_branch_id
 
-    # Admin can use any branch in their business
     if current_user.role == "admin":
         valid_ids = [
             b.branch_id for b in db.query(models.Branch).filter(
@@ -63,7 +55,6 @@ def _resolve_sale_branch(current_user, requested_branch_id, db: Session) -> int:
             raise HTTPException(status_code=403, detail="Not authorized for this branch")
         return requested_branch_id
 
-    # Manager/cashier can only use their own branch
     if requested_branch_id != current_user.branch_id:
         raise HTTPException(status_code=403, detail="Not authorized for this branch")
     return requested_branch_id
@@ -71,16 +62,11 @@ def _resolve_sale_branch(current_user, requested_branch_id, db: Session) -> int:
 
 # ── Branch ids for list queries ───────────────────────────────────────────────
 def _list_branch_ids(current_user, requested_branch_id, db: Session) -> list[int]:
-    """
-    Returns a list of branch_ids to filter list queries by.
-    - Specific branch requested → [that branch] if authorized
-    - No branch requested → all branches for admin, own branch for others
-    """
     if requested_branch_id:
         return [_resolve_sale_branch(current_user, requested_branch_id, db)]
 
     if current_user.role == SUPERADMIN_ROLE:
-        return []  # no filter — see all
+        return []
 
     if current_user.role == "admin":
         return [
@@ -104,11 +90,12 @@ def create_sale(
     if not sale.items:
         raise HTTPException(status_code=400, detail="Sale must contain items")
 
-    # ✅ Use active branch from request if provided, else fall back to user's branch
-    branch_id = _resolve_sale_branch(current_user, sale.branch_id, db)
-
+    branch_id    = _resolve_sale_branch(current_user, sale.branch_id, db)
     customer_id  = sale.customer_id if sale.customer_id else None
     total_amount = 0
+
+    # Loyalty discount — validated as non-negative
+    discount = max(0.0, float(sale.discount or 0))
 
     try:
         new_sale = models.Sale(
@@ -131,7 +118,6 @@ def create_sale(
             if not product:
                 raise HTTPException(status_code=404, detail=f"Product {item.product_id} not found")
 
-            # ✅ Check inventory for the ACTIVE branch (not user's default branch)
             inventory = db.query(models.BranchInventory).filter(
                 models.BranchInventory.product_id == item.product_id,
                 models.BranchInventory.branch_id  == branch_id
@@ -170,20 +156,43 @@ def create_sale(
                 movement_date=now_lagos()
             ))
 
-        new_sale.total_amount = total_amount
+        # ── Apply loyalty discount to final total ─────────────────────────────
+        # discount is capped at total — cannot go below zero
+        discount          = min(discount, total_amount)
+        discounted_total  = max(0.0, total_amount - discount)
+        new_sale.total_amount = discounted_total
 
+        # Store discount on the sale record for invoice retrieval
+        # Uses a dynamic attribute — no schema change needed if Sale model
+        # doesn't have a discount column yet. If Sale model has discount column,
+        # this line sets it properly. Otherwise it's only used in this session.
+        if hasattr(new_sale, "discount"):
+            new_sale.discount = discount
+
+        discount_note = f" — loyalty discount ₦{discount:,.2f}" if discount > 0 else ""
         write_audit(
             db,
             user_id=current_user.user_id,
             action="SALE",
             table="sales",
             record_id=new_sale.sale_id,
-            description=f"Sale #{new_sale.sale_id} — ₦{float(total_amount):,.2f} — {', '.join(item_names)} — via {sale.payment_method}",
+            description=f"Sale #{new_sale.sale_id} — ₦{float(discounted_total):,.2f}{discount_note} — {', '.join(item_names)} — via {sale.payment_method}",
         )
 
         db.commit()
         db.refresh(new_sale)
-        return new_sale
+
+        # Return extra fields for the receipt UI
+        response = {
+            "sale_id":        new_sale.sale_id,
+            "sale_date":      new_sale.sale_date,
+            "total_amount":   float(new_sale.total_amount),
+            "payment_method": new_sale.payment_method,
+            "status":         new_sale.status,
+            "discount":       discount,
+            "subtotal_before_discount": total_amount,
+        }
+        return response
 
     except HTTPException:
         db.rollback()
@@ -228,8 +237,6 @@ def list_sales(
 ):
     query = db.query(models.Sale).order_by(models.Sale.sale_date.desc())
 
-    # ✅ Always scope by branch — uses active branch if provided, else all
-    # branches the user is authorized to see
     branch_ids = _list_branch_ids(user, branch_id, db)
     if branch_ids:
         query = query.filter(models.Sale.branch_id.in_(branch_ids))
@@ -274,6 +281,12 @@ def get_receipt(
     if not sale:
         raise HTTPException(status_code=404, detail="Sale not found")
     items = db.query(models.SaleItem).filter(models.SaleItem.sale_id == sale_id).all()
+
+    # Compute subtotal from items to derive discount if stored
+    items_total = sum(float(i.subtotal) for i in items)
+    sale_total  = float(sale.total_amount)
+    discount    = round(items_total - sale_total, 2) if items_total > sale_total else 0.0
+
     return {
         "sale_id":      sale.sale_id,
         "sale_date":    sale.sale_date,
@@ -281,12 +294,14 @@ def get_receipt(
             {
                 "product":    db.query(models.Product).filter(models.Product.product_id == i.product_id).first().product_name,
                 "quantity":   i.quantity,
-                "unit_price": i.unit_price,
-                "subtotal":   i.subtotal,
+                "unit_price": float(i.unit_price),
+                "subtotal":   float(i.subtotal),
             }
             for i in items
         ],
-        "total_amount": sale.total_amount,
+        "subtotal":     items_total,
+        "discount":     discount,
+        "total_amount": sale_total,
     }
 
 
@@ -306,6 +321,11 @@ def generate_invoice(sale_id: int, db: Session = Depends(get_db)):
     cashier      = db.query(models.User).filter(models.User.user_id == sale.user_id).first()
     customer     = db.query(models.Customer).filter(models.Customer.customer_id == sale.customer_id).first() if sale.customer_id else None
 
+    # ── Derive discount from item subtotals vs sale total ────────────────────
+    items_total  = sum(float(i.subtotal) for i in items)
+    sale_total   = float(sale.total_amount)
+    discount     = round(items_total - sale_total, 2) if items_total > sale_total else 0.0
+
     PAGE_W, PAGE_H = letter
     MARGIN = 50
     COL    = {"item": MARGIN, "qty": 340, "price": 410, "total": 500}
@@ -314,6 +334,7 @@ def generate_invoice(sale_id: int, db: Session = Depends(get_db)):
     pdf    = canvas.Canvas(buffer, pagesize=letter)
     pdf.setTitle(f"Invoice #{sale_id} — {SHOP_NAME}")
 
+    # ── Header ────────────────────────────────────────────────────────────────
     pdf.setFillColorRGB(0.094, 0.373, 0.647)
     pdf.rect(0, PAGE_H - 110, PAGE_W, 110, fill=1, stroke=0)
     pdf.setFillColorRGB(1, 1, 1)
@@ -327,6 +348,7 @@ def generate_invoice(sale_id: int, db: Session = Depends(get_db)):
     pdf.setFont("Helvetica", 9)
     pdf.drawRightString(PAGE_W - MARGIN, PAGE_H - 66, f"#{sale_id:05d}")
 
+    # ── Sale metadata ─────────────────────────────────────────────────────────
     y = PAGE_H - 130
     pdf.setFillColorRGB(0.15, 0.15, 0.15)
     pdf.setFont("Helvetica", 9)
@@ -339,6 +361,7 @@ def generate_invoice(sale_id: int, db: Session = Depends(get_db)):
     if customer:
         pdf.drawString(MARGIN + 220, y - 14, f"Customer:  {customer.full_name}")
 
+    # ── Column headers ────────────────────────────────────────────────────────
     y -= 40
     pdf.setFillColorRGB(0.94, 0.96, 0.98)
     pdf.rect(MARGIN, y - 4, PAGE_W - 2 * MARGIN, 18, fill=1, stroke=0)
@@ -349,6 +372,7 @@ def generate_invoice(sale_id: int, db: Session = Depends(get_db)):
     pdf.drawString(COL["price"], y + 2, "UNIT PRICE")
     pdf.drawString(COL["total"], y + 2, "SUBTOTAL")
 
+    # ── Line items ────────────────────────────────────────────────────────────
     y -= 20
     pdf.setFont("Helvetica", 9)
     for idx, item in enumerate(items):
@@ -364,16 +388,41 @@ def generate_invoice(sale_id: int, db: Session = Depends(get_db)):
         pdf.drawRightString(COL["total"] + 55, y + 2, f"N{float(item.subtotal):,.2f}")
         y -= 18
 
+    # ── Divider ───────────────────────────────────────────────────────────────
     y -= 6
     pdf.setStrokeColorRGB(0.094, 0.373, 0.647)
     pdf.setLineWidth(0.8)
     pdf.line(MARGIN, y, PAGE_W - MARGIN, y)
-    y -= 20
+    y -= 18
+
+    # ── Subtotal row (only show if there's a discount) ────────────────────────
+    if discount > 0:
+        pdf.setFont("Helvetica", 9)
+        pdf.setFillColorRGB(0.15, 0.15, 0.15)
+        pdf.drawRightString(COL["price"] + 55, y, "SUBTOTAL")
+        pdf.drawRightString(COL["total"] + 55, y, f"N{items_total:,.2f}")
+        y -= 16
+
+        # Loyalty discount row
+        pdf.setFillColorRGB(0.059, 0.435, 0.196)   # green
+        pdf.drawString(COL["item"], y, "Loyalty points discount")
+        pdf.drawRightString(COL["price"] + 55, y, "DISCOUNT")
+        pdf.drawRightString(COL["total"] + 55, y, f"-N{discount:,.2f}")
+        y -= 16
+
+        # Divider before total
+        pdf.setStrokeColorRGB(0.094, 0.373, 0.647)
+        pdf.setLineWidth(0.5)
+        pdf.line(MARGIN, y, PAGE_W - MARGIN, y)
+        y -= 16
+
+    # ── Total paid ────────────────────────────────────────────────────────────
     pdf.setFont("Helvetica-Bold", 11)
     pdf.setFillColorRGB(0.094, 0.373, 0.647)
     pdf.drawRightString(COL["price"] + 55, y, "TOTAL PAID")
-    pdf.drawRightString(COL["total"] + 55, y, f"N{float(sale.total_amount):,.2f}")
+    pdf.drawRightString(COL["total"] + 55, y, f"N{sale_total:,.2f}")
 
+    # ── Footer ────────────────────────────────────────────────────────────────
     y -= 50
     pdf.setFont("Helvetica", 8)
     pdf.setFillColorRGB(0.5, 0.5, 0.5)

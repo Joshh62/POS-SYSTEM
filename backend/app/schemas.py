@@ -56,10 +56,11 @@ class SaleItemResponse(BaseModel):
 # SALE
 # ---------------------------
 class SaleCreate(BaseModel):
-    customer_id:    Optional[int] = None
-    branch_id:      Optional[int] = None
+    customer_id:    Optional[int]   = None
+    branch_id:      Optional[int]   = None
     payment_method: str
     items:          List[SaleItemCreate]
+    discount:       Optional[float] = 0   # loyalty points discount in naira
 
 class SaleResponse(BaseModel):
     sale_id:      int
@@ -179,7 +180,7 @@ class BusinessCreate(BaseModel):
     address:    Optional[str] = None
     phone:      Optional[str] = None
     owner_name: Optional[str] = None
-    plan:       Optional[str] = "starter"   # solo | starter | business | enterprise
+    plan:       Optional[str] = "starter"
 
 class BusinessResponse(BaseModel):
     business_id: int
