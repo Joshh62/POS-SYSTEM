@@ -237,14 +237,15 @@ def preview_redemption(
 
     biz         = _get_business(db, user)
     redeem_rate = float(biz.loyalty_redeem_rate or 5)
-    discount    = _calc_discount(points, redeem_rate)
-    new_total   = max(0, sale_total - discount)
+    discount    = float(_calc_discount(points, redeem_rate))
+    sale_total  = float(sale_total)
+    new_total   = max(0.0, sale_total - discount)
 
     return {
         "points_to_redeem":    points,
-        "discount_amount":     discount,
-        "original_total":      sale_total,
-        "new_total":           new_total,
+        "discount_amount":     round(discount, 2),
+        "original_total":      round(sale_total, 2),
+        "new_total":           round(new_total, 2),
         "points_remaining":    loyalty.points_balance - points,
         "redeem_rate":         redeem_rate,
     }
@@ -284,7 +285,7 @@ def redeem_points(
 
     biz         = _get_business(db, user)
     redeem_rate = float(biz.loyalty_redeem_rate or 5)
-    discount    = _calc_discount(data.points, redeem_rate)
+    discount    = float(_calc_discount(data.points, redeem_rate))
 
     customer = db.query(models.Customer).filter(
         models.Customer.customer_id == data.customer_id
@@ -318,9 +319,9 @@ def redeem_points(
 
     return {
         "points_redeemed":  data.points,
-        "discount_amount":  discount,
+        "discount_amount":  round(discount, 2),
         "points_remaining": loyalty.points_balance,
-        "points_value":     _calc_discount(loyalty.points_balance, redeem_rate),
+        "points_value":     float(_calc_discount(loyalty.points_balance, redeem_rate)),
         "message":          f"Redeemed {data.points} points for ₦{discount:,.2f} discount. Remaining: {loyalty.points_balance} pts",
     }
 
@@ -438,72 +439,3 @@ def expire_stale_points_batch(
         "total_points_expired": total_pts_expired,
         "message": f"Expired {total_pts_expired} points from {expired_count} inactive accounts",
     }
-
-
-class LoyaltyNotifyRequest(BaseModel):
-    customer_id: int
-    type:        str   # earn | redeem
-    points:      Optional[int]   = None
-    balance:     Optional[int]   = None
-    value:       Optional[float] = None
-    discount:    Optional[float] = None
-    remaining:   Optional[int]   = None
-    remainingValue: Optional[float] = None
- 
- 
-@router.post("/notify")
-def send_loyalty_notification(
-    data: LoyaltyNotifyRequest,
-    db: Session = Depends(get_db),
-    user=Depends(get_current_user)
-):
-    """
-    Sends a WhatsApp message to the customer about their loyalty points.
-    Fire-and-forget — errors are silently swallowed.
-    """
-    import os
-    TWILIO_SID   = os.getenv("TWILIO_ACCOUNT_SID")
-    TWILIO_TOKEN = os.getenv("TWILIO_AUTH_TOKEN")
-    FROM_NUMBER  = os.getenv("TWILIO_WHATSAPP_FROM", "whatsapp:+14155238886")
-    SHOP_NAME    = os.getenv("SHOP_NAME", "Your Shop")
- 
-    if not TWILIO_SID or not TWILIO_TOKEN:
-        return {"message": "WhatsApp not configured"}
- 
-    customer = db.query(models.Customer).filter(
-        models.Customer.customer_id == data.customer_id
-    ).first()
- 
-    if not customer or not customer.phone:
-        return {"message": "No phone number"}
- 
-    phone = customer.phone.strip()
-    if not phone.startswith("+"):
-        phone = "+234" + phone.lstrip("0")
-    to_number = f"whatsapp:{phone}"
- 
-    if data.type == "earn":
-        body = (
-            f"Hi {customer.full_name}! 🏆\n\n"
-            f"You earned *{data.points} loyalty points* at *{SHOP_NAME}*.\n"
-            f"Total balance: *{data.balance} pts* (worth ₦{data.value:,.2f})\n\n"
-            f"Keep shopping to earn more rewards! 🎁"
-        )
-    elif data.type == "redeem":
-        body = (
-            f"Hi {customer.full_name}! 🎁\n\n"
-            f"You redeemed *{data.points} loyalty points* for a *₦{data.discount:,.2f} discount* at *{SHOP_NAME}*.\n"
-            f"Remaining balance: *{data.remaining} pts* (worth ₦{data.remainingValue:,.2f})\n\n"
-            f"Thank you for your loyalty! 🙏"
-        )
-    else:
-        return {"message": "Unknown type"}
- 
-    try:
-        from twilio.rest import Client
-        client = Client(TWILIO_SID, TWILIO_TOKEN)
-        client.messages.create(from_=FROM_NUMBER, to=to_number, body=body)
-    except Exception as e:
-        print(f"[Loyalty WhatsApp] Failed: {e}")
- 
-    return {"message": "Notification sent"}
