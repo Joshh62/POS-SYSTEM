@@ -33,9 +33,7 @@ def write_audit(db, user_id: int, action: str, table: str, record_id: int, descr
 
 # ── Business-scoped branch helper ─────────────────────────────────────────────
 def _get_business_branches(db, user) -> list:
-    """Get only branches belonging to the current user's business."""
     if user.role == SUPERADMIN_ROLE:
-        # Superadmin — get all branches (shouldn't normally add products as superadmin)
         return db.query(models.Branch).all()
     return db.query(models.Branch).filter(
         models.Branch.business_id == user.business_id
@@ -49,10 +47,9 @@ def create_product(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(require_role(["admin", "manager"]))
 ):
-    # Check barcode uniqueness within this business only
     existing = db.query(models.Product).filter(
-        models.Product.barcode      == product.barcode,
-        models.Product.business_id  == current_user.business_id,
+        models.Product.barcode     == product.barcode,
+        models.Product.business_id == current_user.business_id,
     ).first()
     if existing:
         raise HTTPException(status_code=400, detail="Barcode already exists in your product catalog")
@@ -68,7 +65,6 @@ def create_product(
     db.add(new_product)
     db.flush()
 
-    # ✅ Only create inventory for THIS business's branches — not all branches
     branches = _get_business_branches(db, current_user)
     for branch in branches:
         existing_inv = db.query(models.BranchInventory).filter(
@@ -107,11 +103,8 @@ def get_products(
     current_user: models.User = Depends(get_current_user)
 ):
     query = db.query(models.Product)
-
-    # ✅ Scope to business — superadmin sees all
     if current_user.role != SUPERADMIN_ROLE:
         query = query.filter(models.Product.business_id == current_user.business_id)
-
     if search:
         query = query.filter(models.Product.product_name.ilike(f"%{search}%"))
 
@@ -128,11 +121,8 @@ def get_product_by_barcode(
     current_user: models.User = Depends(get_current_user)
 ):
     query = db.query(models.Product).filter(models.Product.barcode == barcode)
-
-    # Scope to business
     if current_user.role != SUPERADMIN_ROLE:
         query = query.filter(models.Product.business_id == current_user.business_id)
-
     product = query.first()
     if not product:
         raise HTTPException(status_code=404, detail="Product not found")
@@ -151,11 +141,8 @@ def get_product(
     ).first()
     if not product:
         raise HTTPException(status_code=404, detail="Product not found")
-
-    # Scope check
     if current_user.role != SUPERADMIN_ROLE and product.business_id != current_user.business_id:
         raise HTTPException(status_code=403, detail="Not authorized")
-
     return product
 
 
@@ -172,8 +159,6 @@ def update_product(
     ).first()
     if not existing:
         raise HTTPException(status_code=404, detail="Product not found")
-
-    # Scope check
     if current_user.role != SUPERADMIN_ROLE and existing.business_id != current_user.business_id:
         raise HTTPException(status_code=403, detail="Not authorized")
 
@@ -217,15 +202,16 @@ def import_products(
     Import products from .xlsx or .csv file.
 
     Expected columns (header row required):
-      product_name | barcode | selling_price | category (name) | cost_price | stock_quantity
+      product_name | barcode | selling_price | category | cost_price | stock_quantity
 
-    - Products are scoped to the current user's business
-    - Inventory created only for this business's branches
-    - Duplicate barcodes within this business are skipped
-    - Per-row errors collected and returned without stopping the import
+    Behaviour:
+    - NEW product (barcode not in catalog) → create product + inventory
+    - EXISTING product (same barcode) → update stock quantity only (restock)
+    - Products scoped to current business
+    - Inventory only for this business's branches
     """
     filename = file.filename.lower()
-    imported, skipped, errors = 0, 0, []
+    imported, restocked, skipped, errors = 0, 0, 0, []
 
     def get_or_create_category(name: str) -> int | None:
         if not name:
@@ -240,7 +226,6 @@ def import_products(
             db.flush()
         return cat.category_id
 
-    # ✅ Only this business's branches
     branches = _get_business_branches(db, current_user)
 
     try:
@@ -258,7 +243,8 @@ def import_products(
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Could not read file: {e}")
 
-    imported_names = []
+    imported_names  = []
+    restocked_names = []
 
     for i, row in enumerate(rows, start=2):
         row = {str(k).strip().lower(): v for k, v in row.items()}
@@ -275,15 +261,8 @@ def import_products(
             errors.append(f"Row {i}: missing product_name"); continue
         if not barcode:
             errors.append(f"Row {i}: missing barcode"); continue
-        if not selling_price:
-            errors.append(f"Row {i}: missing selling_price"); continue
 
-        # ✅ Check barcode uniqueness within this business only
-        if db.query(models.Product).filter(
-            models.Product.barcode     == barcode,
-            models.Product.business_id == current_user.business_id,
-        ).first():
-            skipped += 1; continue
+        qty = int(float(stock_qty)) if stock_qty else 0
 
         expiry_date = None
         if expiry_raw:
@@ -295,8 +274,62 @@ def import_products(
                 else:
                     expiry_date = date.fromisoformat(str(expiry_raw).strip())
             except Exception:
-                errors.append(f"Row {i} ({product_name}): invalid expiry_date format — use YYYY-MM-DD")
+                errors.append(f"Row {i} ({product_name}): invalid expiry_date — use YYYY-MM-DD")
                 continue
+
+        # ── Check if product already exists in this business ──────────────────
+        existing_product = db.query(models.Product).filter(
+            models.Product.barcode     == barcode,
+            models.Product.business_id == current_user.business_id,
+        ).first()
+
+        if existing_product:
+            # ── RESTOCK: product exists — update stock quantity ────────────────
+            if qty > 0:
+                for branch in branches:
+                    inv = db.query(models.BranchInventory).filter(
+                        models.BranchInventory.product_id == existing_product.product_id,
+                        models.BranchInventory.branch_id  == branch.branch_id,
+                    ).first()
+                    if inv:
+                        inv.stock_quantity += qty
+                    else:
+                        db.add(models.BranchInventory(
+                            product_id=existing_product.product_id,
+                            branch_id=branch.branch_id,
+                            stock_quantity=qty,
+                            reorder_level=5,
+                        ))
+
+                    db.add(models.InventoryMovement(
+                        product_id=existing_product.product_id,
+                        branch_id=branch.branch_id,
+                        movement_type="RESTOCK",
+                        reference_id=existing_product.product_id,
+                        quantity=qty,
+                        movement_date=now_lagos(),
+                    ))
+
+                    if expiry_date:
+                        db.add(models.InventoryBatch(
+                            product_id=existing_product.product_id,
+                            branch_id=branch.branch_id,
+                            quantity=qty,
+                            expiry_date=expiry_date,
+                            received_date=date.today(),
+                            notes="Restocked via bulk upload",
+                        ))
+
+                restocked_names.append(f"{existing_product.product_name} (+{qty})")
+                restocked += 1
+            else:
+                skipped += 1   # exists but no qty to add
+            continue
+
+        # ── NEW PRODUCT: create if selling_price provided ─────────────────────
+        if not selling_price:
+            errors.append(f"Row {i}: missing selling_price for new product '{product_name}'")
+            continue
 
         try:
             category_id = get_or_create_category(category_name)
@@ -312,9 +345,6 @@ def import_products(
             db.add(product)
             db.flush()
 
-            qty = int(float(stock_qty)) if stock_qty else 0
-
-            # ✅ Only this business's branches
             for branch in branches:
                 db.add(models.BranchInventory(
                     product_id=product.product_id,
@@ -342,24 +372,35 @@ def import_products(
             db.rollback()
             continue
 
-    if imported > 0:
-        preview = ", ".join(imported_names[:5])
-        if len(imported_names) > 5:
-            preview += f" ... and {len(imported_names) - 5} more"
+    # ── Audit log ─────────────────────────────────────────────────────────────
+    if imported > 0 or restocked > 0:
+        parts = []
+        if imported > 0:
+            preview = ", ".join(imported_names[:3])
+            if len(imported_names) > 3:
+                preview += f" ... +{len(imported_names) - 3} more"
+            parts.append(f"{imported} new product(s): {preview}")
+        if restocked > 0:
+            preview = ", ".join(restocked_names[:3])
+            if len(restocked_names) > 3:
+                preview += f" ... +{len(restocked_names) - 3} more"
+            parts.append(f"{restocked} restocked: {preview}")
+
         write_audit(
             db,
             user_id=current_user.user_id,
             action="CREATE",
             table="products",
             record_id=0,
-            description=f"Bulk imported {imported} product(s) via CSV — {preview}",
+            description=f"Bulk upload — {'; '.join(parts)}",
         )
 
     db.commit()
 
     return {
-        "imported": imported,
-        "skipped":  skipped,
-        "errors":   errors,
-        "message":  f"{imported} products imported, {skipped} skipped, {len(errors)} errors"
+        "imported":  imported,
+        "restocked": restocked,
+        "skipped":   skipped,
+        "errors":    errors,
+        "message":   f"{imported} new products, {restocked} restocked, {skipped} skipped, {len(errors)} errors"
     }
