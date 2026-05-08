@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app import models, schemas
-from app.dependencies import get_current_user, require_role
+from app.dependencies import get_current_user, require_role, SUPERADMIN_ROLE
 from datetime import date, datetime
 import openpyxl
 import csv
@@ -31,17 +31,34 @@ def write_audit(db, user_id: int, action: str, table: str, record_id: int, descr
         print(f"[Audit] Failed to write log: {e}")
 
 
+# ── Business-scoped branch helper ─────────────────────────────────────────────
+def _get_business_branches(db, user) -> list:
+    """Get only branches belonging to the current user's business."""
+    if user.role == SUPERADMIN_ROLE:
+        # Superadmin — get all branches (shouldn't normally add products as superadmin)
+        return db.query(models.Branch).all()
+    return db.query(models.Branch).filter(
+        models.Branch.business_id == user.business_id
+    ).all()
+
+
 # ── CREATE ────────────────────────────────────────────────────────────────────
 @router.post("/", response_model=schemas.ProductResponse)
 def create_product(
     product: schemas.ProductCreate,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(require_role(["admin", "manager"]))  # ✅ manager allowed
+    current_user: models.User = Depends(require_role(["admin", "manager"]))
 ):
-    if db.query(models.Product).filter(models.Product.barcode == product.barcode).first():
-        raise HTTPException(status_code=400, detail="Barcode already exists")
+    # Check barcode uniqueness within this business only
+    existing = db.query(models.Product).filter(
+        models.Product.barcode      == product.barcode,
+        models.Product.business_id  == current_user.business_id,
+    ).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="Barcode already exists in your product catalog")
 
     new_product = models.Product(
+        business_id=current_user.business_id,
         product_name=product.product_name,
         barcode=product.barcode,
         category_id=product.category_id,
@@ -51,13 +68,14 @@ def create_product(
     db.add(new_product)
     db.flush()
 
-    branches = db.query(models.Branch).all()
+    # ✅ Only create inventory for THIS business's branches — not all branches
+    branches = _get_business_branches(db, current_user)
     for branch in branches:
-        existing = db.query(models.BranchInventory).filter(
+        existing_inv = db.query(models.BranchInventory).filter(
             models.BranchInventory.product_id == new_product.product_id,
             models.BranchInventory.branch_id  == branch.branch_id
         ).first()
-        if not existing:
+        if not existing_inv:
             db.add(models.BranchInventory(
                 product_id=new_product.product_id,
                 branch_id=branch.branch_id,
@@ -65,7 +83,6 @@ def create_product(
                 reorder_level=5,
             ))
 
-    # ✅ Audit log
     write_audit(
         db,
         user_id=current_user.user_id,
@@ -86,9 +103,15 @@ def get_products(
     search: str = None,
     page:   int = 1,
     limit:  int = 20,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
 ):
     query = db.query(models.Product)
+
+    # ✅ Scope to business — superadmin sees all
+    if current_user.role != SUPERADMIN_ROLE:
+        query = query.filter(models.Product.business_id == current_user.business_id)
+
     if search:
         query = query.filter(models.Product.product_name.ilike(f"%{search}%"))
 
@@ -99,8 +122,18 @@ def get_products(
 
 # ── BARCODE LOOKUP ────────────────────────────────────────────────────────────
 @router.get("/barcode/{barcode}")
-def get_product_by_barcode(barcode: str, db: Session = Depends(get_db)):
-    product = db.query(models.Product).filter(models.Product.barcode == barcode).first()
+def get_product_by_barcode(
+    barcode: str,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    query = db.query(models.Product).filter(models.Product.barcode == barcode)
+
+    # Scope to business
+    if current_user.role != SUPERADMIN_ROLE:
+        query = query.filter(models.Product.business_id == current_user.business_id)
+
+    product = query.first()
     if not product:
         raise HTTPException(status_code=404, detail="Product not found")
     return product
@@ -108,10 +141,21 @@ def get_product_by_barcode(barcode: str, db: Session = Depends(get_db)):
 
 # ── GET ONE ───────────────────────────────────────────────────────────────────
 @router.get("/{product_id}", response_model=schemas.ProductResponse)
-def get_product(product_id: int, db: Session = Depends(get_db)):
-    product = db.query(models.Product).filter(models.Product.product_id == product_id).first()
+def get_product(
+    product_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    product = db.query(models.Product).filter(
+        models.Product.product_id == product_id
+    ).first()
     if not product:
         raise HTTPException(status_code=404, detail="Product not found")
+
+    # Scope check
+    if current_user.role != SUPERADMIN_ROLE and product.business_id != current_user.business_id:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
     return product
 
 
@@ -121,13 +165,18 @@ def update_product(
     product_id: int,
     product: schemas.ProductCreate,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(require_role(["admin", "manager"]))  # ✅ manager allowed
+    current_user: models.User = Depends(require_role(["admin", "manager"]))
 ):
-    existing = db.query(models.Product).filter(models.Product.product_id == product_id).first()
+    existing = db.query(models.Product).filter(
+        models.Product.product_id == product_id
+    ).first()
     if not existing:
         raise HTTPException(status_code=404, detail="Product not found")
 
-    # Track what changed for the audit description
+    # Scope check
+    if current_user.role != SUPERADMIN_ROLE and existing.business_id != current_user.business_id:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
     changes = []
     if existing.product_name != product.product_name:
         changes.append(f"name: '{existing.product_name}' → '{product.product_name}'")
@@ -142,7 +191,6 @@ def update_product(
     existing.cost_price    = product.cost_price
     existing.selling_price = product.selling_price
 
-    # ✅ Audit log
     change_str = ", ".join(changes) if changes else "no price/name changes"
     write_audit(
         db,
@@ -163,7 +211,7 @@ def update_product(
 def import_products(
     file: UploadFile = File(...),
     db:   Session    = Depends(get_db),
-    current_user: models.User = Depends(require_role(["admin", "manager"]))  # ✅ manager allowed
+    current_user: models.User = Depends(require_role(["admin", "manager"]))
 ):
     """
     Import products from .xlsx or .csv file.
@@ -171,10 +219,10 @@ def import_products(
     Expected columns (header row required):
       product_name | barcode | selling_price | category (name) | cost_price | stock_quantity
 
-    - category column: matched by name, created if not found
-    - Duplicate barcodes are skipped (not errored)
-    - Per-row errors are collected and returned — they don't stop the import
-    - Stock is added to ALL branches for this business
+    - Products are scoped to the current user's business
+    - Inventory created only for this business's branches
+    - Duplicate barcodes within this business are skipped
+    - Per-row errors collected and returned without stopping the import
     """
     filename = file.filename.lower()
     imported, skipped, errors = 0, 0, []
@@ -192,7 +240,8 @@ def import_products(
             db.flush()
         return cat.category_id
 
-    branches = db.query(models.Branch).all()
+    # ✅ Only this business's branches
+    branches = _get_business_branches(db, current_user)
 
     try:
         if filename.endswith(".csv"):
@@ -229,7 +278,11 @@ def import_products(
         if not selling_price:
             errors.append(f"Row {i}: missing selling_price"); continue
 
-        if db.query(models.Product).filter(models.Product.barcode == barcode).first():
+        # ✅ Check barcode uniqueness within this business only
+        if db.query(models.Product).filter(
+            models.Product.barcode     == barcode,
+            models.Product.business_id == current_user.business_id,
+        ).first():
             skipped += 1; continue
 
         expiry_date = None
@@ -249,6 +302,7 @@ def import_products(
             category_id = get_or_create_category(category_name)
 
             product = models.Product(
+                business_id=current_user.business_id,
                 product_name=product_name,
                 barcode=barcode,
                 category_id=category_id,
@@ -260,6 +314,7 @@ def import_products(
 
             qty = int(float(stock_qty)) if stock_qty else 0
 
+            # ✅ Only this business's branches
             for branch in branches:
                 db.add(models.BranchInventory(
                     product_id=product.product_id,
@@ -287,7 +342,6 @@ def import_products(
             db.rollback()
             continue
 
-    # ✅ Single audit log entry for the whole import
     if imported > 0:
         preview = ", ".join(imported_names[:5])
         if len(imported_names) > 5:
