@@ -9,31 +9,35 @@ import OfflineIndicator from "../OfflineIndicator";
 const SHOP_NAME = import.meta.env.VITE_SHOP_NAME || "ProfitTrack POS";
 
 const NAV_ITEMS = [
-  { key: "pos",        label: "POS",             icon: "🛒", roles: ["admin", "manager", "cashier", "superadmin"], flag: null },
-  { key: "dashboard",  label: "Dashboard",       icon: "📊", roles: ["admin", "manager", "superadmin"],            flag: null },
-  { key: "sales",      label: "Sales history",   icon: "🧾", roles: ["admin", "manager", "cashier", "superadmin"], flag: null },
-  { key: "products",   label: "Products",        icon: "📦", roles: ["admin", "manager", "superadmin"],            flag: null },
-  { key: "inventory",  label: "Inventory",       icon: "🏭", roles: ["admin", "manager", "superadmin"],            flag: "inventory" },
-  { key: "reports",    label: "Reports",         icon: "📈", roles: ["admin", "manager", "superadmin"],            flag: "reports" },
-  { key: "users",      label: "Users",           icon: "👥", roles: ["admin", "superadmin"],                       flag: null },
-  { key: "import",     label: "Import products", icon: "⬆️", roles: ["admin", "manager", "superadmin"],            flag: "bulk_import" },
-  { key: "suppliers",  label: "Suppliers",       icon: "🚚", roles: ["admin", "manager", "superadmin"] },
-  { key: "businesses", label: "Businesses",      icon: "🏢", roles: ["superadmin"],                                flag: null },
-  { key: "expenses",   label: "Expenses",        icon: "💸", roles: ["admin", "manager", "superadmin"],            flag: "expense_tracking" },
-  { key: "customers",  label: "Customers",       icon: "👤", roles: ["admin", "manager", "superadmin"], flag: null },
+  { key: "pos",        label: "POS",           icon: "🛒", roles: ["admin", "manager", "cashier", "superadmin"], flag: null },
+  { key: "dashboard",  label: "Dashboard",     icon: "📊", roles: ["admin", "manager", "superadmin"],            flag: null },
+  { key: "sales",      label: "Sales history", icon: "🧾", roles: ["admin", "manager", "cashier", "superadmin"], flag: null },
+  { key: "products",   label: "Products",      icon: "📦", roles: ["admin", "manager", "superadmin"],            flag: null },
+  { key: "inventory",  label: "Inventory",     icon: "🏭", roles: ["admin", "manager", "superadmin"],            flag: "inventory" },
+  { key: "reports",    label: "Reports",       icon: "📈", roles: ["admin", "manager", "superadmin"],            flag: "reports" },
+  { key: "analytics",  label: "Analytics",     icon: "🔬", roles: ["admin", "superadmin"],                       flag: null },
+  { key: "users",      label: "Users",         icon: "👥", roles: ["admin", "superadmin"],                       flag: null },
+  { key: "suppliers",  label: "Suppliers",     icon: "🚚", roles: ["admin", "manager", "superadmin"],            flag: null },
+  { key: "businesses", label: "Businesses",    icon: "🏢", roles: ["superadmin"],                                flag: null },
+  { key: "expenses",   label: "Expenses",      icon: "💸", roles: ["admin", "manager", "superadmin"],            flag: "expense_tracking" },
+  { key: "customers",  label: "Customers",     icon: "👤", roles: ["admin", "manager", "superadmin"],            flag: null },
 ];
 
 const PAGE_TITLES = {
-  pos: "Point of sale", dashboard: "Dashboard", sales: "Sales history",
-  products: "Products", inventory: "Inventory", reports: "Reports",
-  users: "Users", import: "Import products", businesses: "Businesses",
-  expenses: "Expenses",
-  debts: "Debt tracking",
-  customers: "Customers",
-  suppliers: "Suppliers",
+  pos:        "Point of sale",
+  dashboard:  "Dashboard",
+  sales:      "Sales history",
+  products:   "Products",
+  inventory:  "Inventory",
+  reports:    "Reports",
+  analytics:  "Analytics",
+  users:      "Users",
+  businesses: "Businesses",
+  expenses:   "Expenses",
+  customers:  "Customers",
+  suppliers:  "Suppliers",
 };
 
-// Theme dot colors — used in the picker UI
 const THEME_DOTS = {
   a1: { dark: "#d4a34f", light: "#c8a050", label: "Navy Gold" },
   a2: { dark: "#e8903a", light: "#b8640a", label: "Amber"     },
@@ -60,10 +64,9 @@ export default function POSLayout({ children, activePage, onNavigate, onLogout, 
     && branches.length > 1
     && isEnabled("multi_branch");
 
-  // ── Modals ────────────────────────────────────────────────────────────────
   const [showSignOut,   setShowSignOut]   = useState(false);
   const [showChangePwd, setShowChangePwd] = useState(false);
-  const [pwdForm,  setPwdForm]  = useState({ current: "", newPwd: "", confirm: "" });
+  const [pwdForm,    setPwdForm]    = useState({ current: "", newPwd: "", confirm: "" });
   const [pwdLoading, setPwdLoading] = useState(false);
   const [pwdError,   setPwdError]   = useState(null);
   const [pwdSuccess, setPwdSuccess] = useState(null);
@@ -88,7 +91,6 @@ export default function POSLayout({ children, activePage, onNavigate, onLogout, 
     } finally { setPwdLoading(false); }
   };
 
-  // ── Derived sidebar accent colors from active theme ───────────────────────
   const accent = THEME_DOTS[theme][mode];
 
   return (
@@ -141,33 +143,23 @@ export default function POSLayout({ children, activePage, onNavigate, onLogout, 
           })}
         </nav>
 
-        {/* ── Theme controls ── */}
+        {/* Theme controls */}
         <div style={{ padding: collapsed ? "8px 0" : "8px 12px", borderTop: "1px solid var(--color-border-tertiary)" }}>
-
-          {/* Theme dot picker */}
           <div style={{ display: "flex", alignItems: "center", justifyContent: collapsed ? "center" : "space-between", marginBottom: 8 }}>
-            {!collapsed && <span style={{ fontSize: 10, color: "var(--color-text-tertiary)", textTransform: "uppercase", letterSpacing: "0.06em" }}>Theme</span>}
+            {!collapsed && <span style={{ fontSize: 10, color: "var(--color-text-tertiary)", textTransform: "uppercase", letterSpacing: "0.06em" }}>THEME</span>}
             <div style={{ display: "flex", gap: 5 }}>
               {Object.entries(THEME_DOTS).map(([t, colors]) => (
-                <button
-                  key={t}
-                  title={colors.label}
-                  onClick={() => setTheme(t)}
-                  style={{
-                    width: 14, height: 14, borderRadius: "50%", border: "none",
-                    background: colors[mode],
-                    cursor: "pointer", padding: 0,
-                    outline: theme === t ? `2px solid ${colors[mode]}` : "none",
-                    outlineOffset: 2,
-                    transform: theme === t ? "scale(1.25)" : "scale(1)",
-                    transition: "all 0.15s",
-                  }}
-                />
+                <button key={t} title={colors.label} onClick={() => setTheme(t)} style={{
+                  width: 14, height: 14, borderRadius: "50%", border: "none",
+                  background: colors[mode], cursor: "pointer", padding: 0,
+                  outline: theme === t ? `2px solid ${colors[mode]}` : "none",
+                  outlineOffset: 2,
+                  transform: theme === t ? "scale(1.25)" : "scale(1)",
+                  transition: "all 0.15s",
+                }} />
               ))}
             </div>
           </div>
-
-          {/* Light/dark toggle */}
           <button onClick={toggleMode} style={{
             display: "flex", alignItems: "center",
             justifyContent: collapsed ? "center" : "space-between",
@@ -202,8 +194,6 @@ export default function POSLayout({ children, activePage, onNavigate, onLogout, 
 
       {/* ── Main area ── */}
       <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
-
-        {/* Topbar */}
         <div style={{ height: 52, display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 20px", background: "var(--color-background-primary)", borderBottom: "1px solid var(--color-border-tertiary)", gap: 12 }}>
           <span style={{ fontSize: 15, fontWeight: 500, color: "var(--color-text-primary)", flexShrink: 0 }}>{PAGE_TITLES[activePage] || ""}</span>
 
@@ -226,7 +216,6 @@ export default function POSLayout({ children, activePage, onNavigate, onLogout, 
             <span style={{ fontSize: 12, color: "var(--color-text-tertiary)" }}>{user.username} · {role}</span>
           </div>
         </div>
-
         <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>{children}</div>
       </div>
 
@@ -281,7 +270,6 @@ export default function POSLayout({ children, activePage, onNavigate, onLogout, 
         </div>
       )}
       <OfflineIndicator />
-      
     </div>
   );
 }
@@ -291,7 +279,6 @@ function Field({ label, children }) {
     <div>
       <label style={{ display: "block", fontSize: 12, fontWeight: 500, color: "var(--color-text-secondary)", marginBottom: 5 }}>{label}</label>
       {children}
-
     </div>
   );
 }

@@ -184,3 +184,14 @@ export const recordDebtPayment = async (id, data)    => (await api.post(`/debts/
 export const getDebtPayments   = async (id)          => (await api.get(`/debts/${id}/payments`)).data;
 export const writeOffDebt      = async (id)          => (await api.patch(`/debts/${id}/write-off`)).data;
 export const searchDebtCustomers = async (q)         => (await api.get("/debts/customers/search", { params: { q } })).data;
+
+
+// ── ANALYTICS ────────────────────────────────────────────────────────────────
+export const getAnalyticsOverview   = async (params = {}) => (await api.get("/analytics/overview",         { params })).data;
+export const getRevenueTrend        = async (params = {}) => (await api.get("/analytics/revenue-trend",    { params })).data;
+export const getPeakTimes           = async (params = {}) => (await api.get("/analytics/peak-times",       { params })).data;
+export const getProductAnalytics    = async (params = {}) => (await api.get("/analytics/products",         { params })).data;
+export const getPaymentBreakdown    = async (params = {}) => (await api.get("/analytics/payment-methods",  { params })).data;
+export const getCustomerAnalytics   = async (params = {}) => (await api.get("/analytics/customers",        { params })).data;
+export const getInventoryHealth     = async (params = {}) => (await api.get("/analytics/inventory-health", { params })).data;
+export const getCashierPerformance  = async (params = {}) => (await api.get("/analytics/cashiers",         { params })).data;
