@@ -43,12 +43,14 @@ class Product(Base):
 
     product_id    = Column(Integer, primary_key=True, index=True)
     business_id   = Column(Integer, ForeignKey("businesses.business_id"), nullable=True)
+    supplier_id   = Column(Integer, ForeignKey("suppliers.supplier_id"), nullable=True)
     product_name  = Column(String, nullable=False)
     barcode       = Column(String, unique=True, index=True)
     category_id   = Column(Integer, ForeignKey("categories.category_id"))
     cost_price    = Column(Numeric(12, 2))
     selling_price = Column(Numeric(12, 2))
     created_at    = Column(DateTime, default=datetime.utcnow)
+    supplier      = relationship("Supplier", back_populates="products")
 
     category   = relationship("Category", back_populates="products")
     movements  = relationship("InventoryMovement", back_populates="product")
@@ -201,6 +203,7 @@ class Supplier(Base):
     __tablename__ = "suppliers"
 
     supplier_id    = Column(Integer, primary_key=True, index=True)
+    business_id    = Column(Integer, ForeignKey("businesses.business_id"), nullable=True)
     supplier_name  = Column(String, nullable=False)
     contact_person = Column(String)
     phone          = Column(String)
@@ -209,7 +212,7 @@ class Supplier(Base):
     created_at     = Column(DateTime, default=datetime.utcnow)
 
     purchase_orders = relationship("PurchaseOrder", back_populates="supplier")
-
+    products        = relationship("Product", back_populates="supplier")
 
 # -------------------- PURCHASE ORDER --------------------
 class PurchaseOrder(Base):

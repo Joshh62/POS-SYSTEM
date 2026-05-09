@@ -25,6 +25,7 @@ class ProductCreate(BaseModel):
     cost_price:     float
     selling_price:  float
     stock_quantity: int = 0
+    supplier_id:    Optional[int] = None
 
 class ProductResponse(BaseModel):
     product_id:    int
