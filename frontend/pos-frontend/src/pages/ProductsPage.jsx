@@ -14,6 +14,8 @@ const EMPTY_FORM = {
   cost_price: "", selling_price: "", supplier_id: "",
 };
 
+const TABS = ["Products", "Import"];
+
 function generateBarcode() {
   const timestamp = Date.now().toString().slice(-8);
   const random    = Math.floor(Math.random() * 10000).toString().padStart(4, "0");
@@ -62,6 +64,7 @@ function printBarcodeLabel(barcode, productName, quantity = 1) {
 }
 
 export default function ProductsPage() {
+  const [activeTab,   setActiveTab]   = useState("Products");
   const [products,    setProducts]    = useState([]);
   const [categories,  setCategories]  = useState([]);
   const [suppliers,   setSuppliers]   = useState([]);
@@ -83,6 +86,14 @@ export default function ProductsPage() {
   const [barcodeModal, setBarcodeModal] = useState(null);
   const [scanMsg,      setScanMsg]      = useState(null);
 
+  // ── Import state ──────────────────────────────────────────────────────────
+  const [importFile,     setImportFile]     = useState(null);
+  const [importDragging, setImportDragging] = useState(false);
+  const [importLoading,  setImportLoading]  = useState(false);
+  const [importResult,   setImportResult]   = useState(null);
+  const [importError,    setImportError]    = useState(null);
+  const importInputRef = useRef();
+
   const LIMIT = 20;
 
   const categoryMap = useMemo(() => {
@@ -90,6 +101,7 @@ export default function ProductsPage() {
   }, [categories]);
 
   useBarcodeScanner(async (barcode) => {
+    if (activeTab !== "Products") return;
     try {
       const product = await getProductByBarcode(barcode);
       if (product) openEdit(product);
@@ -170,71 +182,272 @@ export default function ProductsPage() {
     style: inputStyle,
   });
 
+  // ── Import handlers ───────────────────────────────────────────────────────
+  const handleImportFile = (f) => {
+    if (!f) return;
+    const name = f.name.toLowerCase();
+    if (!name.endsWith(".csv") && !name.endsWith(".xlsx") && !name.endsWith(".xls")) {
+      setImportError("Only .csv or .xlsx files are supported.");
+      return;
+    }
+    setImportFile(f); setImportError(null); setImportResult(null);
+  };
+
+  const handleImport = async () => {
+    if (!importFile) return;
+    setImportLoading(true); setImportError(null); setImportResult(null);
+    try {
+      const formData = new FormData();
+      formData.append("file", importFile);
+      const res = await api.post("/products/import", formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+      setImportResult(res.data);
+      setImportFile(null);
+      fetchData();
+    } catch (err) {
+      setImportError(err.response?.data?.detail || "Import failed. Check your file and try again.");
+    } finally { setImportLoading(false); }
+  };
+
+  const downloadTemplate = async () => {
+    try {
+      const res = await api.get("/products/import/template", { responseType: "blob" });
+      const url = URL.createObjectURL(new Blob([res.data], { type: "text/csv" }));
+      const a   = document.createElement("a");
+      a.href = url; a.download = "profittrack_import_template.csv"; a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      // Fallback: generate client-side
+      const rows = [
+        "product_name,barcode,selling_price,cost_price,stock_quantity,category,supplier,expiry_date",
+        '"Indomie Noodles (Chicken)",8712345678901,250,180,100,Food & Beverages,Dangote Suppliers,',
+        '"Men Polo Shirt - Black",PT1234567890,4500,2800,20,Clothing,,',
+        '"Paracetamol 500mg",6001234567890,150,80,50,Pharmaceuticals,Lagos Pharma Dist,2026-12-31',
+      ].join("\n");
+      const url = URL.createObjectURL(new Blob([rows], { type: "text/csv" }));
+      const a   = document.createElement("a");
+      a.href = url; a.download = "profittrack_import_template.csv"; a.click();
+      URL.revokeObjectURL(url);
+    }
+  };
+
   const totalPages = Math.max(1, Math.ceil(total / LIMIT));
 
   return (
-    <div style={{ padding: "16px 24px", overflowY: "auto", height: "100%" }}>
+    <div style={{ padding: "16px 24px", overflowY: "auto", height: "100%", boxSizing: "border-box" }}>
 
-      <div style={{ display: "flex", gap: 10, marginBottom: 16 }}>
-        <input type="text" placeholder="Search products..." value={searchInput}
-          onChange={e => setSearchInput(e.target.value)}
-          style={{ ...inputStyle, flex: 1, marginTop: 0 }} />
-        <button onClick={openCreate} style={primaryBtn}>+ Add product</button>
+      {/* Tabs */}
+      <div style={{ display: "flex", gap: 4, marginBottom: 20, borderBottom: "1px solid var(--color-border-tertiary)" }}>
+        {TABS.map(tab => (
+          <button key={tab} onClick={() => setActiveTab(tab)} style={{
+            padding: "8px 14px", border: "none", background: "none", fontSize: 13, cursor: "pointer",
+            fontWeight: activeTab === tab ? 500 : 400,
+            color: activeTab === tab ? "var(--color-primary)" : "var(--color-text-secondary)",
+            borderBottom: activeTab === tab ? "2px solid var(--color-primary)" : "2px solid transparent",
+            marginBottom: -1,
+          }}>
+            {tab}
+          </button>
+        ))}
+        {activeTab === "Products" && (
+          <button onClick={openCreate} style={{ ...primaryBtn, marginLeft: "auto" }}>+ Add product</button>
+        )}
       </div>
 
-      {scanMsg && (
-        <div style={{ padding: "8px 14px", borderRadius: 8, marginBottom: 12, fontSize: 13, fontWeight: 500, background: scanMsg.type === "success" ? "#EAF3DE" : "#FCEBEB", color: scanMsg.type === "success" ? "#3B6D11" : "#A32D2D" }}>
-          {scanMsg.message}
-        </div>
+      {/* ── Products tab ── */}
+      {activeTab === "Products" && (
+        <>
+          <div style={{ marginBottom: 16 }}>
+            <input type="text" placeholder="Search products..."
+              value={searchInput} onChange={e => setSearchInput(e.target.value)}
+              style={{ ...inputStyle, width: "100%", boxSizing: "border-box", marginTop: 0 }} />
+          </div>
+
+          {scanMsg && (
+            <div style={{ padding: "8px 14px", borderRadius: 8, marginBottom: 12, fontSize: 13, fontWeight: 500, background: scanMsg.type === "success" ? "#EAF3DE" : "#FCEBEB", color: scanMsg.type === "success" ? "#3B6D11" : "#A32D2D" }}>
+              {scanMsg.message}
+            </div>
+          )}
+
+          {error && <div style={errorBox}>{error}</div>}
+
+          <div style={tableWrap}>
+            <table style={{ width: "100%", borderCollapse: "collapse" }}>
+              <thead>
+                <tr style={{ borderBottom: "1px solid var(--color-border-tertiary)" }}>
+                  <th style={thStyle}>Product</th>
+                  <th style={thStyle}>Barcode</th>
+                  <th style={thStyle}>Category</th>
+                  <th style={thStyle}>Supplier</th>
+                  <th style={thStyle}>Cost</th>
+                  <th style={thStyle}>Price</th>
+                  <th style={thStyle}></th>
+                </tr>
+              </thead>
+              <tbody>
+                {loading ? (
+                  <tr><td colSpan={7} style={emptyTd}>Loading...</td></tr>
+                ) : products.length === 0 ? (
+                  <tr><td colSpan={7} style={emptyTd}>No products found.</td></tr>
+                ) : products.map(p => (
+                  <tr key={p.product_id} style={{ borderBottom: "1px solid var(--color-border-tertiary)" }}>
+                    <td style={tdStyle}>{p.product_name}</td>
+                    <td style={{ ...tdStyle, color: "var(--color-text-secondary)", fontFamily: "monospace", fontSize: 12 }}>{p.barcode}</td>
+                    <td style={tdStyle}>{categoryMap[p.category_id] || "—"}</td>
+                    <td style={{ ...tdStyle, fontSize: 12, color: "var(--color-text-secondary)" }}>{p.supplier?.supplier_name || "—"}</td>
+                    <td style={tdStyle}>₦{parseFloat(p.cost_price || 0).toLocaleString("en-NG")}</td>
+                    <td style={{ ...tdStyle, fontWeight: 500 }}>₦{parseFloat(p.selling_price || 0).toLocaleString("en-NG")}</td>
+                    <td style={{ ...tdStyle, textAlign: "right" }}>
+                      <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
+                        <button onClick={() => setBarcodeModal({ barcode: p.barcode, product_name: p.product_name })} style={barcodeBtn} title="Print barcode label">🏷️</button>
+                        <button onClick={() => openEdit(p)} style={editBtn}>Edit</button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {totalPages > 1 && (
+            <div style={{ display: "flex", justifyContent: "center", gap: 8, marginTop: 14 }}>
+              <button onClick={() => setPage(p => Math.max(1,p-1))} style={pageBtn(page===1)} disabled={page===1}>← Prev</button>
+              <span style={{ fontSize: 12, color: "var(--color-text-secondary)", alignSelf: "center" }}>{page} / {totalPages}</span>
+              <button onClick={() => setPage(p => Math.min(totalPages,p+1))} style={pageBtn(page===totalPages)} disabled={page===totalPages}>Next →</button>
+            </div>
+          )}
+        </>
       )}
 
-      {error && <div style={errorBox}>{error}</div>}
+      {/* ── Import tab ── */}
+      {activeTab === "Import" && (
+        <div style={{ maxWidth: 640 }}>
 
-      <div style={tableWrap}>
-        <table style={{ width: "100%", borderCollapse: "collapse" }}>
-          <thead>
-            <tr style={{ borderBottom: "1px solid var(--color-border-tertiary)" }}>
-              <th style={thStyle}>Product</th>
-              <th style={thStyle}>Barcode</th>
-              <th style={thStyle}>Category</th>
-              <th style={thStyle}>Supplier</th>
-              <th style={thStyle}>Cost</th>
-              <th style={thStyle}>Price</th>
-              <th style={thStyle}></th>
-            </tr>
-          </thead>
-          <tbody>
-            {loading ? (
-              <tr><td colSpan={7} style={emptyTd}>Loading...</td></tr>
-            ) : products.length === 0 ? (
-              <tr><td colSpan={7} style={emptyTd}>No products found.</td></tr>
-            ) : products.map(p => (
-              <tr key={p.product_id} style={{ borderBottom: "1px solid var(--color-border-tertiary)" }}>
-                <td style={tdStyle}>{p.product_name}</td>
-                <td style={{ ...tdStyle, color: "var(--color-text-secondary)", fontFamily: "monospace", fontSize: 12 }}>{p.barcode}</td>
-                <td style={tdStyle}>{categoryMap[p.category_id] || "—"}</td>
-                <td style={{ ...tdStyle, fontSize: 12, color: "var(--color-text-secondary)" }}>
-                  {p.supplier?.supplier_name || "—"}
-                </td>
-                <td style={tdStyle}>₦{parseFloat(p.cost_price || 0).toLocaleString("en-NG")}</td>
-                <td style={{ ...tdStyle, fontWeight: 500 }}>₦{parseFloat(p.selling_price || 0).toLocaleString("en-NG")}</td>
-                <td style={{ ...tdStyle, textAlign: "right" }}>
-                  <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
-                    <button onClick={() => setBarcodeModal({ barcode: p.barcode, product_name: p.product_name })} style={barcodeBtn} title="Print barcode label">🏷️</button>
-                    <button onClick={() => openEdit(p)} style={editBtn}>Edit</button>
+          {/* Instructions card */}
+          <div style={infoCard}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: "var(--color-text-primary)", marginBottom: 10 }}>
+              📥 How to bulk import products
+            </div>
+            <ol style={{ margin: 0, paddingLeft: 18, fontSize: 13, color: "var(--color-text-secondary)", lineHeight: 2.2 }}>
+              <li>Download the template — it has the correct columns with example rows</li>
+              <li>Fill in your products. <strong style={{ color: "var(--color-text-primary)" }}>product_name</strong>, <strong style={{ color: "var(--color-text-primary)" }}>barcode</strong>, and <strong style={{ color: "var(--color-text-primary)" }}>selling_price</strong> are required for new products</li>
+              <li>For <strong style={{ color: "var(--color-text-primary)" }}>supplier</strong> — type the exact supplier name as it appears in your Suppliers page. Unmatched names are ignored (product still imports)</li>
+              <li>For <strong style={{ color: "var(--color-text-primary)" }}>expiry_date</strong> — use YYYY-MM-DD format (e.g. 2026-12-31). Leave blank for products with no expiry</li>
+              <li>If a barcode already exists in your catalog, the row <strong style={{ color: "var(--color-text-primary)" }}>restocks</strong> that product — prices are not changed</li>
+              <li>Save as <strong style={{ color: "var(--color-text-primary)" }}>.csv</strong> or <strong style={{ color: "var(--color-text-primary)" }}>.xlsx</strong> and upload</li>
+            </ol>
+
+            {/* Column reference */}
+            <div style={{ marginTop: 14, display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+              <span style={requiredBadge}>product_name *</span>
+              <span style={requiredBadge}>barcode *</span>
+              <span style={requiredBadge}>selling_price * (new only)</span>
+              <span style={optionalBadge}>cost_price</span>
+              <span style={optionalBadge}>stock_quantity</span>
+              <span style={optionalBadge}>category</span>
+              <span style={optionalBadge}>supplier</span>
+              <span style={optionalBadge}>expiry_date</span>
+            </div>
+
+            <button onClick={downloadTemplate} style={{ ...outlineBtn, marginTop: 14 }}>
+              ⬇ Download template (.csv)
+            </button>
+          </div>
+
+          {/* Drop zone */}
+          <div
+            onDragOver={e => { e.preventDefault(); setImportDragging(true); }}
+            onDragLeave={() => setImportDragging(false)}
+            onDrop={e => { e.preventDefault(); setImportDragging(false); handleImportFile(e.dataTransfer.files[0]); }}
+            onClick={() => importInputRef.current?.click()}
+            style={{
+              border: `2px dashed ${importDragging ? "var(--color-primary)" : "var(--color-border-tertiary)"}`,
+              borderRadius: 12, padding: "40px 24px", textAlign: "center", cursor: "pointer",
+              background: importDragging ? "rgba(24,95,165,0.04)" : "var(--color-background-primary)",
+              transition: "all 0.2s", marginBottom: 16,
+            }}
+          >
+            <input ref={importInputRef} type="file" accept=".csv,.xlsx,.xls"
+              style={{ display: "none" }} onChange={e => handleImportFile(e.target.files[0])} />
+            <div style={{ fontSize: 32, marginBottom: 10 }}>📂</div>
+            {importFile ? (
+              <>
+                <div style={{ fontSize: 14, fontWeight: 500, color: "var(--color-text-primary)" }}>{importFile.name}</div>
+                <div style={{ fontSize: 12, color: "var(--color-text-secondary)", marginTop: 4 }}>
+                  {(importFile.size / 1024).toFixed(1)} KB · Click to change file
+                </div>
+              </>
+            ) : (
+              <>
+                <div style={{ fontSize: 14, fontWeight: 500, color: "var(--color-text-primary)" }}>
+                  Drop your file here or click to browse
+                </div>
+                <div style={{ fontSize: 12, color: "var(--color-text-secondary)", marginTop: 4 }}>
+                  .csv or .xlsx files supported
+                </div>
+              </>
+            )}
+          </div>
+
+          {importError && <div style={errorBox}>{importError}</div>}
+
+          {importFile && !importResult && (
+            <button onClick={handleImport} disabled={importLoading}
+              style={{ ...primaryBtn, width: "100%", padding: "11px 0", opacity: importLoading ? 0.7 : 1 }}>
+              {importLoading ? "Importing products..." : `Import from ${importFile.name}`}
+            </button>
+          )}
+
+          {/* Import result */}
+          {importResult && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+
+              {/* Summary KPIs */}
+              <div style={{ background: "#EAF3DE", border: "1px solid rgba(59,109,17,0.3)", borderRadius: 12, padding: "16px 18px" }}>
+                <div style={{ fontSize: 14, fontWeight: 600, color: "#3B6D11", marginBottom: 12 }}>✅ Import complete</div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 10 }}>
+                  <ResultKPI label="New products" value={importResult.imported}  color="#3B6D11" />
+                  <ResultKPI label="Restocked"    value={importResult.restocked} color="#185FA5" />
+                  <ResultKPI label="Skipped"      value={importResult.skipped}   color="#854F0B" />
+                  <ResultKPI label="Errors"        value={importResult.errors?.length || 0} color="#A32D2D" />
+                </div>
+              </div>
+
+              {/* Warnings — supplier mismatches etc */}
+              {importResult.warnings?.length > 0 && (
+                <div style={{ background: "#FAEEDA", border: "1px solid rgba(133,79,11,0.3)", borderRadius: 10, padding: "12px 16px" }}>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: "#854F0B", marginBottom: 8 }}>
+                    ⚠️ {importResult.warnings.length} warning{importResult.warnings.length !== 1 ? "s" : ""} — products were imported but check these:
                   </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                    {importResult.warnings.map((w, i) => (
+                      <div key={i} style={{ fontSize: 12, color: "#854F0B", lineHeight: 1.5 }}>• {w}</div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
-      {totalPages > 1 && (
-        <div style={{ display: "flex", justifyContent: "center", gap: 8, marginTop: 14 }}>
-          <button onClick={() => setPage(p => Math.max(1,p-1))} style={pageBtn(page===1)} disabled={page===1}>← Prev</button>
-          <span style={{ fontSize: 12, color: "var(--color-text-secondary)", alignSelf: "center" }}>{page} / {totalPages}</span>
-          <button onClick={() => setPage(p => Math.min(totalPages,p+1))} style={pageBtn(page===totalPages)} disabled={page===totalPages}>Next →</button>
+              {/* Errors — rows that failed */}
+              {importResult.errors?.length > 0 && (
+                <div style={{ background: "#FCEBEB", border: "1px solid rgba(163,45,45,0.3)", borderRadius: 10, padding: "12px 16px" }}>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: "#A32D2D", marginBottom: 8 }}>
+                    ❌ {importResult.errors.length} row{importResult.errors.length !== 1 ? "s" : ""} failed — fix these in your file and re-import:
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                    {importResult.errors.map((e, i) => (
+                      <div key={i} style={{ fontSize: 12, color: "#A32D2D", lineHeight: 1.5 }}>• {e}</div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <button onClick={() => { setImportResult(null); setImportFile(null); }}
+                style={{ ...primaryBtn, padding: "10px 0" }}>
+                Import another file
+              </button>
+            </div>
+          )}
         </div>
       )}
 
@@ -247,11 +460,10 @@ export default function ProductsPage() {
               <button onClick={() => setShowForm(false)} style={closeBtn}>×</button>
             </div>
 
-            {!editing && <div style={hintBanner}>After adding, go to <strong style={{ color: "#e8ecf2" }}>Inventory → Restock</strong> to add stock.</div>}
+            {!editing && <div style={hintBanner}>After adding, go to <strong style={{ color: "#e8ecf2" }}>Inventory → Receive stock</strong> to add stock.</div>}
             {formError && <div style={errorBox}>{formError}</div>}
 
             <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-
               <div>
                 <label style={labelStyle}>Product name <span style={starStyle}>*</span></label>
                 <input placeholder="e.g. Indomie Noodles" {...field("product_name")} />
@@ -366,21 +578,34 @@ export default function ProductsPage() {
   );
 }
 
-const inputStyle  = { display: "block", width: "100%", padding: "9px 11px", borderRadius: 7, border: "1.5px solid #3a4255", fontSize: 13, background: "#1e2535", color: "#e8ecf2", boxSizing: "border-box", marginTop: 5, outline: "none", fontFamily: "inherit" };
-const labelStyle  = { fontSize: 12, fontWeight: 500, color: "#c0c7d4", display: "block" };
-const starStyle   = { color: "#E24B4A", marginLeft: 2 };
-const hintBanner  = { background: "#1a2438", border: "1px solid #2a3247", borderRadius: 8, padding: "9px 12px", fontSize: 12, color: "#8a93a6", marginBottom: 16, lineHeight: 1.5 };
-const primaryBtn  = { padding: "9px 18px", borderRadius: 8, border: "none", background: "#185FA5", color: "#fff", fontSize: 13, fontWeight: 500, cursor: "pointer", whiteSpace: "nowrap" };
-const cancelBtn   = { padding: "9px 18px", borderRadius: 8, border: "1px solid #3a4255", background: "none", color: "#c0c7d4", fontSize: 13, cursor: "pointer" };
-const editBtn     = { padding: "4px 12px", borderRadius: 6, border: "none", background: "#E6F1FB", color: "#185FA5", fontSize: 11, fontWeight: 500, cursor: "pointer" };
-const barcodeBtn  = { padding: "4px 8px", borderRadius: 6, border: "none", background: "#FAEEDA", color: "#854F0B", fontSize: 12, cursor: "pointer" };
-const pageBtn     = (d) => ({ padding: "5px 12px", borderRadius: 6, border: "1px solid var(--color-border-tertiary)", background: "none", fontSize: 12, cursor: d?"default":"pointer", opacity: d?0.4:1, color: "var(--color-text-primary)" });
-const errorBox    = { background: "#FCEBEB", color: "#A32D2D", borderRadius: 8, padding: "9px 13px", fontSize: 13, marginBottom: 14 };
-const tableWrap   = { background: "var(--color-background-primary)", border: "1px solid var(--color-border-tertiary)", borderRadius: 12, overflow: "hidden" };
-const thStyle     = { padding: "9px 14px", textAlign: "left", fontSize: 11, fontWeight: 500, color: "var(--color-text-secondary)", textTransform: "uppercase", letterSpacing: "0.05em" };
-const tdStyle     = { padding: "11px 14px", fontSize: 13, color: "var(--color-text-primary)" };
-const emptyTd     = { textAlign: "center", padding: 32, color: "var(--color-text-tertiary)", fontSize: 13 };
+function ResultKPI({ label, value, color }) {
+  return (
+    <div style={{ textAlign: "center", background: "rgba(255,255,255,0.4)", borderRadius: 8, padding: "10px 8px" }}>
+      <div style={{ fontSize: 24, fontWeight: 700, color }}>{value}</div>
+      <div style={{ fontSize: 11, color: "#3B6D11", marginTop: 2 }}>{label}</div>
+    </div>
+  );
+}
+
+const inputStyle   = { display: "block", width: "100%", padding: "9px 11px", borderRadius: 7, border: "1.5px solid #3a4255", fontSize: 13, background: "#1e2535", color: "#e8ecf2", boxSizing: "border-box", marginTop: 5, outline: "none", fontFamily: "inherit" };
+const labelStyle   = { fontSize: 12, fontWeight: 500, color: "#c0c7d4", display: "block" };
+const starStyle    = { color: "#E24B4A", marginLeft: 2 };
+const hintBanner   = { background: "#1a2438", border: "1px solid #2a3247", borderRadius: 8, padding: "9px 12px", fontSize: 12, color: "#8a93a6", marginBottom: 16, lineHeight: 1.5 };
+const primaryBtn   = { padding: "9px 18px", borderRadius: 8, border: "none", background: "#185FA5", color: "#fff", fontSize: 13, fontWeight: 500, cursor: "pointer", whiteSpace: "nowrap" };
+const cancelBtn    = { padding: "9px 18px", borderRadius: 8, border: "1px solid #3a4255", background: "none", color: "#c0c7d4", fontSize: 13, cursor: "pointer" };
+const outlineBtn   = { padding: "7px 14px", borderRadius: 8, border: "1px solid var(--color-border-tertiary)", background: "none", fontSize: 12, cursor: "pointer", color: "var(--color-text-secondary)" };
+const editBtn      = { padding: "4px 12px", borderRadius: 6, border: "none", background: "#E6F1FB", color: "#185FA5", fontSize: 11, fontWeight: 500, cursor: "pointer" };
+const barcodeBtn   = { padding: "4px 8px", borderRadius: 6, border: "none", background: "#FAEEDA", color: "#854F0B", fontSize: 12, cursor: "pointer" };
+const pageBtn      = (d) => ({ padding: "5px 12px", borderRadius: 6, border: "1px solid var(--color-border-tertiary)", background: "none", fontSize: 12, cursor: d?"default":"pointer", opacity: d?0.4:1, color: "var(--color-text-primary)" });
+const errorBox     = { background: "#FCEBEB", color: "#A32D2D", borderRadius: 8, padding: "9px 13px", fontSize: 13, marginBottom: 14 };
+const infoCard     = { background: "var(--color-background-primary)", border: "1px solid var(--color-border-tertiary)", borderRadius: 12, padding: "16px 18px", marginBottom: 16 };
+const requiredBadge = { fontSize: 11, fontWeight: 500, padding: "3px 10px", borderRadius: 8, background: "#E6F1FB", color: "#185FA5" };
+const optionalBadge = { fontSize: 11, fontWeight: 500, padding: "3px 10px", borderRadius: 8, background: "var(--color-background-secondary)", color: "var(--color-text-secondary)" };
+const tableWrap    = { background: "var(--color-background-primary)", border: "1px solid var(--color-border-tertiary)", borderRadius: 12, overflow: "hidden" };
+const thStyle      = { padding: "9px 14px", textAlign: "left", fontSize: 11, fontWeight: 500, color: "var(--color-text-secondary)", textTransform: "uppercase", letterSpacing: "0.05em" };
+const tdStyle      = { padding: "11px 14px", fontSize: 13, color: "var(--color-text-primary)" };
+const emptyTd      = { textAlign: "center", padding: 32, color: "var(--color-text-tertiary)", fontSize: 13 };
 const overlayStyle = { position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 999 };
-const modalStyle  = { background: "#151b28", borderRadius: 14, padding: 24, width: "100%", maxWidth: 440, maxHeight: "90vh", overflowY: "auto", boxShadow: "0 8px 40px rgba(0,0,0,0.5)", border: "1px solid #2a3247" };
-const modalTitle  = { fontSize: 16, fontWeight: 600, margin: 0, color: "#e8ecf2" };
-const closeBtn    = { background: "none", border: "none", fontSize: 22, cursor: "pointer", color: "#8a93a6", lineHeight: 1, padding: 0 };
+const modalStyle   = { background: "#151b28", borderRadius: 14, padding: 24, width: "100%", maxWidth: 440, maxHeight: "90vh", overflowY: "auto", boxShadow: "0 8px 40px rgba(0,0,0,0.5)", border: "1px solid #2a3247" };
+const modalTitle   = { fontSize: 16, fontWeight: 600, margin: 0, color: "#e8ecf2" };
+const closeBtn     = { background: "none", border: "none", fontSize: 22, cursor: "pointer", color: "#8a93a6", lineHeight: 1, padding: 0 };

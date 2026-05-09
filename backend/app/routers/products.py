@@ -36,7 +36,6 @@ def _get_business_branches(db, user):
 
 
 def _product_dict(p, db):
-    """Return product as dict with supplier name included."""
     supplier = None
     if p.supplier_id:
         s = db.query(models.Supplier).filter(
@@ -72,7 +71,6 @@ def create_product(
     if existing:
         raise HTTPException(status_code=400, detail="Barcode already exists in your product catalog")
 
-    # Validate supplier belongs to this business
     supplier_id = getattr(product, "supplier_id", None)
     if supplier_id:
         supplier = db.query(models.Supplier).filter(
@@ -209,7 +207,7 @@ def update_product(
         ).first()
         if not supplier:
             raise HTTPException(status_code=404, detail="Supplier not found")
-        changes.append(f"supplier changed")
+        changes.append("supplier changed")
 
     existing.product_name  = product.product_name
     existing.barcode       = product.barcode
@@ -218,15 +216,39 @@ def update_product(
     existing.selling_price = product.selling_price
     existing.supplier_id   = supplier_id
 
-    change_str = ", ".join(changes) if changes else "no changes"
     write_audit(
         db, current_user.user_id, "UPDATE", "products", product_id,
-        f"Updated product '{existing.product_name}' (#{product_id}) — {change_str}",
+        f"Updated '{existing.product_name}' (#{product_id}) — {', '.join(changes) if changes else 'no changes'}",
     )
 
     db.commit()
     db.refresh(existing)
     return _product_dict(existing, db)
+
+
+# ── IMPORT TEMPLATE DOWNLOAD ──────────────────────────────────────────────────
+@router.get("/import/template")
+def download_import_template(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(require_role(["admin", "manager"]))
+):
+    """
+    Returns a CSV template pre-populated with column headers and example rows.
+    """
+    from fastapi.responses import StreamingResponse
+
+    rows = [
+        "product_name,barcode,selling_price,cost_price,stock_quantity,category,supplier,expiry_date",
+        '"Indomie Noodles (Chicken)",8712345678901,250,180,100,Food & Beverages,Dangote Suppliers,',
+        '"Men Polo Shirt - Black",PT1234567890,4500,2800,20,Clothing,,',
+        '"Paracetamol 500mg",6001234567890,150,80,50,Pharmaceuticals,Lagos Pharma Dist,2026-12-31',
+    ]
+    content = "\n".join(rows)
+    return StreamingResponse(
+        io.StringIO(content),
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=profittrack_import_template.csv"}
+    )
 
 
 # ── IMPORT (xlsx or csv) ──────────────────────────────────────────────────────
@@ -238,13 +260,25 @@ def import_products(
 ):
     """
     Import/restock products from .xlsx or .csv file.
-    NEW product → create + inventory
-    EXISTING product (same barcode) → restock stock quantity
+
+    Columns (header row required):
+      product_name* | barcode* | selling_price* (new only) | cost_price |
+      stock_quantity | category | supplier | expiry_date
+
+    Rules:
+    - NEW product (barcode not found)     → create product + inventory
+    - EXISTING product (barcode matches)  → restock quantity only
+    - Prices ignored for existing products (must be updated via Products page)
+    - Supplier matched by name (case-insensitive) — if no match, product imported without supplier link
+    - Unrecognised supplier names reported in warnings
     """
     filename = file.filename.lower()
-    imported, restocked, skipped, errors = 0, 0, 0, []
+    imported, restocked, skipped = 0, 0, 0
+    errors   = []   # blocking row errors (row not processed)
+    warnings = []   # non-blocking notices (row processed but something to note)
 
-    def get_or_create_category(name):
+    # ── Helper: get or create category ───────────────────────────────────────
+    def get_or_create_category(name: str):
         if not name: return None
         name = str(name).strip()
         cat = db.query(models.Category).filter(
@@ -255,61 +289,110 @@ def import_products(
             db.add(cat); db.flush()
         return cat.category_id
 
+    # ── Helper: match supplier by name (this business only) ──────────────────
+    def match_supplier(name: str):
+        """
+        Returns supplier_id if found, None if not.
+        Never creates a new supplier — unmatched names are reported as warnings.
+        """
+        if not name: return None
+        name = str(name).strip()
+        supplier = db.query(models.Supplier).filter(
+            models.Supplier.supplier_name.ilike(name),
+            models.Supplier.business_id == current_user.business_id,
+        ).first()
+        return supplier.supplier_id if supplier else None
+
     branches = _get_business_branches(db, current_user)
 
+    # ── Parse file ────────────────────────────────────────────────────────────
     try:
         if filename.endswith(".csv"):
             content = file.file.read().decode("utf-8-sig")
             reader  = csv.DictReader(io.StringIO(content))
             rows    = list(reader)
-        else:
+        elif filename.endswith((".xlsx", ".xls")):
             wb   = openpyxl.load_workbook(file.file, data_only=True)
             ws   = wb.active
             hdrs = [str(c.value).strip().lower() if c.value else "" for c in next(ws.iter_rows(min_row=1, max_row=1))]
             rows = []
             for r in ws.iter_rows(min_row=2, values_only=True):
                 rows.append(dict(zip(hdrs, r)))
+        else:
+            raise HTTPException(status_code=400, detail="Only .csv or .xlsx files are supported")
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Could not read file: {e}")
+
+    if not rows:
+        raise HTTPException(status_code=400, detail="File is empty or has no data rows")
 
     imported_names  = []
     restocked_names = []
 
     for i, row in enumerate(rows, start=2):
+        # Normalise keys
         row = {str(k).strip().lower(): v for k, v in row.items()}
 
+        # ── Extract fields ────────────────────────────────────────────────────
         product_name  = str(row.get("product_name") or "").strip()
         barcode       = str(row.get("barcode")       or "").strip()
         selling_price = row.get("selling_price")
         cost_price    = row.get("cost_price")
         stock_qty     = row.get("stock_quantity") or row.get("stock") or 0
         category_name = str(row.get("category")   or "").strip()
+        supplier_name = str(row.get("supplier")    or "").strip()
         expiry_raw    = row.get("expiry_date")
 
-        if not product_name: errors.append(f"Row {i}: missing product_name"); continue
-        if not barcode:      errors.append(f"Row {i}: missing barcode"); continue
+        # ── Required field validation ─────────────────────────────────────────
+        if not product_name:
+            errors.append(f"Row {i}: missing product_name — row skipped"); continue
+        if not barcode:
+            errors.append(f"Row {i} ({product_name}): missing barcode — row skipped"); continue
 
-        qty = int(float(stock_qty)) if stock_qty else 0
-
-        expiry_date = None
-        if expiry_raw:
+        qty = 0
+        if stock_qty:
             try:
+                qty = int(float(str(stock_qty)))
+                if qty < 0:
+                    errors.append(f"Row {i} ({product_name}): quantity cannot be negative — row skipped"); continue
+            except ValueError:
+                errors.append(f"Row {i} ({product_name}): invalid quantity '{stock_qty}' — row skipped"); continue
+
+        # ── Parse expiry date ─────────────────────────────────────────────────
+        expiry_date = None
+        if expiry_raw and str(expiry_raw).strip():
+            try:
+                raw = str(expiry_raw).strip()
                 if isinstance(expiry_raw, str):
-                    expiry_date = date.fromisoformat(str(expiry_raw).strip())
+                    expiry_date = date.fromisoformat(raw)
                 elif hasattr(expiry_raw, "date"):
                     expiry_date = expiry_raw.date()
                 else:
-                    expiry_date = date.fromisoformat(str(expiry_raw).strip())
+                    expiry_date = date.fromisoformat(raw)
             except Exception:
-                errors.append(f"Row {i} ({product_name}): invalid expiry_date — use YYYY-MM-DD")
+                errors.append(f"Row {i} ({product_name}): invalid expiry_date '{expiry_raw}' — use YYYY-MM-DD — row skipped")
                 continue
 
+        # ── Supplier matching (warn but don't block) ──────────────────────────
+        supplier_id = None
+        if supplier_name:
+            supplier_id = match_supplier(supplier_name)
+            if supplier_id is None:
+                warnings.append(
+                    f"Row {i} ({product_name}): supplier '{supplier_name}' not found in your supplier list — "
+                    f"product imported without supplier link. Add the supplier in the Suppliers page and edit the product to link it."
+                )
+
+        # ── Check if product exists in this business ──────────────────────────
         existing_product = db.query(models.Product).filter(
             models.Product.barcode     == barcode,
             models.Product.business_id == current_user.business_id,
         ).first()
 
         if existing_product:
+            # ── RESTOCK: product exists ───────────────────────────────────────
             if qty > 0:
                 for branch in branches:
                     inv = db.query(models.BranchInventory).filter(
@@ -322,57 +405,108 @@ def import_products(
                         db.add(models.BranchInventory(
                             product_id=existing_product.product_id,
                             branch_id=branch.branch_id,
-                            stock_quantity=qty, reorder_level=5,
+                            stock_quantity=qty,
+                            reorder_level=5,
                         ))
+
                     db.add(models.InventoryMovement(
-                        product_id=existing_product.product_id, branch_id=branch.branch_id,
-                        movement_type="RESTOCK", reference_id=existing_product.product_id,
-                        quantity=qty, movement_date=now_lagos(),
+                        product_id=existing_product.product_id,
+                        branch_id=branch.branch_id,
+                        movement_type="RESTOCK",
+                        reference_id=existing_product.product_id,
+                        quantity=qty,
+                        movement_date=now_lagos(),
                     ))
+
                     if expiry_date:
                         db.add(models.InventoryBatch(
-                            product_id=existing_product.product_id, branch_id=branch.branch_id,
-                            quantity=qty, expiry_date=expiry_date,
-                            received_date=date.today(), notes="Restocked via bulk upload",
+                            product_id=existing_product.product_id,
+                            branch_id=branch.branch_id,
+                            quantity=qty,
+                            expiry_date=expiry_date,
+                            received_date=date.today(),
+                            notes="Restocked via bulk upload",
                         ))
+
+                # Update supplier link if not already set and we found a match
+                if supplier_id and not existing_product.supplier_id:
+                    existing_product.supplier_id = supplier_id
+
                 restocked_names.append(f"{existing_product.product_name} (+{qty})")
                 restocked += 1
+
             else:
+                # Product exists but qty is 0 — nothing to do
                 skipped += 1
             continue
 
-        if not selling_price:
-            errors.append(f"Row {i}: missing selling_price for new product '{product_name}'")
+        # ── NEW PRODUCT ───────────────────────────────────────────────────────
+        # selling_price required for new products
+        if not selling_price or str(selling_price).strip() == "":
+            errors.append(
+                f"Row {i} ({product_name}): missing selling_price — "
+                f"required for new products — row skipped"
+            )
             continue
 
         try:
+            selling_price_f = float(str(selling_price).strip())
+            if selling_price_f <= 0:
+                errors.append(f"Row {i} ({product_name}): selling_price must be greater than 0 — row skipped")
+                continue
+        except ValueError:
+            errors.append(f"Row {i} ({product_name}): invalid selling_price '{selling_price}' — row skipped")
+            continue
+
+        cost_price_f = 0.0
+        if cost_price and str(cost_price).strip():
+            try:
+                cost_price_f = float(str(cost_price).strip())
+            except ValueError:
+                warnings.append(f"Row {i} ({product_name}): invalid cost_price '{cost_price}' — set to 0")
+
+        try:
             category_id = get_or_create_category(category_name)
+
             product = models.Product(
                 business_id=current_user.business_id,
-                product_name=product_name, barcode=barcode,
+                product_name=product_name,
+                barcode=barcode,
                 category_id=category_id,
-                cost_price=float(cost_price) if cost_price else 0.0,
-                selling_price=float(selling_price),
+                cost_price=cost_price_f,
+                selling_price=selling_price_f,
+                supplier_id=supplier_id,
             )
-            db.add(product); db.flush()
+            db.add(product)
+            db.flush()
 
             for branch in branches:
                 db.add(models.BranchInventory(
-                    product_id=product.product_id, branch_id=branch.branch_id,
-                    stock_quantity=qty, reorder_level=5, expiry_alert_days=90,
+                    product_id=product.product_id,
+                    branch_id=branch.branch_id,
+                    stock_quantity=qty,
+                    reorder_level=5,
+                    expiry_alert_days=90,
                 ))
                 if qty > 0 or expiry_date:
                     db.add(models.InventoryBatch(
-                        product_id=product.product_id, branch_id=branch.branch_id,
-                        quantity=qty, expiry_date=expiry_date,
-                        received_date=date.today(), notes="Imported via bulk upload",
+                        product_id=product.product_id,
+                        branch_id=branch.branch_id,
+                        quantity=qty,
+                        expiry_date=expiry_date,
+                        received_date=date.today(),
+                        notes="Imported via bulk upload",
                     ))
+
             imported_names.append(product_name)
             imported += 1
-        except Exception as e:
-            errors.append(f"Row {i} ({product_name}): {str(e)}")
-            db.rollback(); continue
 
+        except Exception as e:
+            errors.append(f"Row {i} ({product_name}): unexpected error — {str(e)} — row skipped")
+            db.rollback()
+            continue
+
+    # ── Audit log ─────────────────────────────────────────────────────────────
     if imported > 0 or restocked > 0:
         parts = []
         if imported > 0:
@@ -387,8 +521,12 @@ def import_products(
                     f"Bulk upload — {'; '.join(parts)}")
 
     db.commit()
+
     return {
-        "imported": imported, "restocked": restocked,
-        "skipped":  skipped,  "errors":    errors,
-        "message":  f"{imported} new products, {restocked} restocked, {skipped} skipped, {len(errors)} errors",
+        "imported":  imported,
+        "restocked": restocked,
+        "skipped":   skipped,
+        "errors":    errors,
+        "warnings":  warnings,
+        "message":   f"{imported} new products, {restocked} restocked, {skipped} skipped",
     }
