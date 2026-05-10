@@ -29,7 +29,8 @@ class Business(Base):
     paystack_customer_code     = Column(String(100), nullable=True)
     paystack_subscription_code = Column(String(100), nullable=True)
     current_period_end         = Column(DateTime, nullable=True)
-
+    pending_plan               = Column(String(20),  nullable=True)
+    pending_billing            = Column(String(10),  nullable=True)
     
     branches = relationship("Branch", back_populates="business")
     users    = relationship("User",   back_populates="business")
