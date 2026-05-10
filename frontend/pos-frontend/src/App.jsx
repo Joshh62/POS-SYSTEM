@@ -1,38 +1,34 @@
 import { useState, useEffect } from "react";
-import { CartProvider }  from "./context/CartContext";
+import { CartProvider }   from "./context/CartContext";
 import { BranchProvider } from "./context/BranchContext";
-import POSLayout         from "./components/layout/POSLayout";
-import SplashScreen      from "./components/SplashScreen";
+import POSLayout          from "./components/layout/POSLayout";
+import SplashScreen       from "./components/SplashScreen";
 
-import LandingPage       from "./pages/LandingPage";
-import LoginPage         from "./pages/LoginPage";
-import POS               from "./pages/POS";
-import DashboardPage     from "./pages/DashboardPage";
-import InventoryPage     from "./pages/InventoryPage";
-import UsersPage         from "./pages/UsersPage";
-import ProductsPage      from "./pages/ProductsPage";
-import SalesPage         from "./pages/SalesPage";
-import ReportsPage       from "./pages/ReportsPage";
-import BusinessesPage    from "./pages/BusinessesPage";
-import ProductImportPage from "./pages/ProductImportPage";
-import ExpensesPage      from "./pages/ExpensesPage";
-import CustomersPage     from "./pages/CustomersPage";
-import SuppliersPage     from "./pages/SuppliersPage";
-import AnalyticsPage     from "./pages/AnalyticsPage";
+import LandingPage          from "./pages/LandingPage";
+import LoginPage            from "./pages/LoginPage";
+import POS                  from "./pages/POS";
+import DashboardPage        from "./pages/DashboardPage";
+import InventoryPage        from "./pages/InventoryPage";
+import UsersPage            from "./pages/UsersPage";
+import ProductsPage         from "./pages/ProductsPage";
+import SalesPage            from "./pages/SalesPage";
+import ReportsPage          from "./pages/ReportsPage";
+import BusinessesPage       from "./pages/BusinessesPage";
+import ProductImportPage    from "./pages/ProductImportPage";
+import ExpensesPage         from "./pages/ExpensesPage";
+import CustomersPage        from "./pages/CustomersPage";
+import SuppliersPage        from "./pages/SuppliersPage";
+import AnalyticsPage        from "./pages/AnalyticsPage";
 import BusinessSettingsPage from "./pages/BusinessSettingsPage";
-import PricingPage       from "./pages/PricingPage";
+import PricingPage          from "./pages/PricingPage";
 
-import TrialBanner       from "./components/TrialBanner";
-import SignupPage        from "./pages/SignupPage";
+import TrialBanner    from "./components/TrialBanner";
+import SupportButton  from "./components/SupportButton";
 
 export default function App() {
-  // Show splash for a brief moment on every cold load so the theme
-  // and auth state have time to resolve before anything renders.
   const [booting, setBooting] = useState(true);
 
   useEffect(() => {
-    // 1.2s is enough for theme CSS to apply and auth to be read from
-    // localStorage — prevents a flash of unstyled/wrong content.
     const t = setTimeout(() => setBooting(false), 1200);
     return () => clearTimeout(t);
   }, []);
@@ -45,7 +41,7 @@ export default function App() {
   });
 
   const [activePage, setActivePage] = useState("pos");
-  const [lastScan, setLastScan]     = useState(null);
+  const [lastScan,   setLastScan]   = useState(null);
 
   const handleLogin = () => {
     setIsLoggedIn(true);
@@ -61,9 +57,7 @@ export default function App() {
     setView("login");
   };
 
-  // Show splash while booting
-  if (booting) return <SplashScreen />;
-
+  if (booting)          return <SplashScreen />;
   if (view === "landing") return <LandingPage onStart={() => setView("login")} />;
   if (!isLoggedIn)        return <LoginPage onLogin={handleLogin} />;
 
@@ -83,7 +77,6 @@ export default function App() {
       case "analytics":  return <AnalyticsPage />;
       case "settings":   return <BusinessSettingsPage />;
       case "billing":    return <PricingPage />;
-
       default:           return <POS onScanResult={setLastScan} />;
     }
   };
@@ -100,6 +93,9 @@ export default function App() {
           <TrialBanner onUpgrade={() => setActivePage("billing")} />
           {renderPage()}
         </POSLayout>
+
+        {/* Floating support button — visible on all pages inside the app */}
+        <SupportButton onNavigate={setActivePage} />
       </CartProvider>
     </BranchProvider>
   );
