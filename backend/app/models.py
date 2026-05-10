@@ -18,9 +18,12 @@ class Business(Base):
     is_active   = Column(Boolean, default=True)
     created_at  = Column(DateTime, default=datetime.utcnow)
     plan        = Column(String, default="starter", nullable=False)  # solo | starter | business | enterprise
-    features = Column(JSONB, nullable=False, server_default="{}")
-    loyalty_earn_rate  = Column(Numeric(6, 2), nullable=False, default=1)
+    features    = Column(JSONB, nullable=False, server_default="{}")
+    loyalty_earn_rate   = Column(Numeric(6, 2), nullable=False, default=1)
     loyalty_redeem_rate = Column(Numeric(6, 2), nullable=False, default=5)
+    logo_url    = Column(String(500), nullable=True)
+    brand_color = Column(String(7),   nullable=True, default="#185FA5")
+    email       = Column(String(200), nullable=True)
     
     branches = relationship("Branch", back_populates="business")
     users    = relationship("User",   back_populates="business")

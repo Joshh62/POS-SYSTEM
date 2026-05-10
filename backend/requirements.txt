@@ -12,3 +12,4 @@ python-dotenv
 pytz
 twilio
 alembic
+cloudinary>=1.36.0

@@ -5,9 +5,11 @@ from datetime import datetime, date
 import pytz
 import io
 import os
+import urllib.request
 
 from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
+from io import BytesIO as BytesIO_logo
 
 from app import models, schemas
 from app.database import get_db
@@ -301,43 +303,99 @@ def get_receipt(
 # ------------------------------------
 @router.get("/{sale_id}/invoice")
 def generate_invoice(sale_id: int, db: Session = Depends(get_db)):
+    import urllib.request
+    from reportlab.lib.utils import ImageReader
+ 
     sale = db.query(models.Sale).filter(models.Sale.sale_id == sale_id).first()
     if not sale:
         raise HTTPException(status_code=404, detail="Sale not found")
-
-    items        = db.query(models.SaleItem).filter(models.SaleItem.sale_id == sale_id).all()
-    SHOP_NAME    = os.getenv("SHOP_NAME",    "WEAR HAUS")
-    SHOP_ADDRESS = os.getenv("SHOP_ADDRESS", "9 Kashim Ibrahim Road, Narayi Highcost, Kaduna")
-    SHOP_PHONE   = os.getenv("SHOP_PHONE",   "08154586355")
-    cashier      = db.query(models.User).filter(models.User.user_id == sale.user_id).first()
-    customer     = db.query(models.Customer).filter(models.Customer.customer_id == sale.customer_id).first() if sale.customer_id else None
-
-    discount   = float(sale.discount) if sale.discount else 0.0
-    sale_total = float(sale.total_amount)
+ 
+    items    = db.query(models.SaleItem).filter(models.SaleItem.sale_id == sale_id).all()
+    cashier  = db.query(models.User).filter(models.User.user_id == sale.user_id).first()
+    customer = db.query(models.Customer).filter(models.Customer.customer_id == sale.customer_id).first() if sale.customer_id else None
+ 
+    # ── Load business branding ────────────────────────────────────────────────
+    biz = None
+    if cashier and cashier.business_id:
+        biz = db.query(models.Business).filter(
+            models.Business.business_id == cashier.business_id
+        ).first()
+ 
+    # Use business record if available, fall back to env vars
+    SHOP_NAME    = (biz.name    if biz and biz.name    else None) or os.getenv("SHOP_NAME",    "ProfitTrack POS")
+    SHOP_ADDRESS = (biz.address if biz and biz.address else None) or os.getenv("SHOP_ADDRESS", "")
+    SHOP_PHONE   = (biz.phone   if biz and biz.phone   else None) or os.getenv("SHOP_PHONE",   "")
+    LOGO_URL     = biz.logo_url    if biz and biz.logo_url    else None
+    BRAND_COLOR  = biz.brand_color if biz and biz.brand_color else "#185FA5"
+ 
+    # Parse brand color hex → RGB (0–1 range for ReportLab)
+    def hex_to_rgb(hex_color):
+        h = hex_color.lstrip("#")
+        if len(h) == 3:
+            h = "".join(c*2 for c in h)
+        try:
+            return tuple(int(h[i:i+2], 16) / 255 for i in (0, 2, 4))
+        except Exception:
+            return (0.094, 0.373, 0.647)  # default blue
+ 
+    br, bg, bb = hex_to_rgb(BRAND_COLOR)
+ 
+    # Derive discount from sale record
+    discount    = float(sale.discount) if sale.discount else 0.0
+    sale_total  = float(sale.total_amount)
     items_total = round(sale_total + discount, 2)
-
+ 
     PAGE_W, PAGE_H = letter
     MARGIN = 50
     COL    = {"item": MARGIN, "qty": 340, "price": 410, "total": 500}
-
+ 
     buffer = io.BytesIO()
     pdf    = canvas.Canvas(buffer, pagesize=letter)
     pdf.setTitle(f"Invoice #{sale_id} — {SHOP_NAME}")
-
-    # ── Header ────────────────────────────────────────────────────────────────
-    pdf.setFillColorRGB(0.094, 0.373, 0.647)
+ 
+    # ── Header background ─────────────────────────────────────────────────────
+    pdf.setFillColorRGB(br, bg, bb)
     pdf.rect(0, PAGE_H - 110, PAGE_W, 110, fill=1, stroke=0)
     pdf.setFillColorRGB(1, 1, 1)
-    pdf.setFont("Helvetica-Bold", 22)
-    pdf.drawString(MARGIN, PAGE_H - 48, SHOP_NAME.upper())
-    pdf.setFont("Helvetica", 9)
-    pdf.drawString(MARGIN, PAGE_H - 64, SHOP_ADDRESS)
-    pdf.drawString(MARGIN, PAGE_H - 78, f"Tel: {SHOP_PHONE}")
+ 
+    # ── Logo or shop name ─────────────────────────────────────────────────────
+    logo_loaded = False
+    if LOGO_URL:
+        try:
+            with urllib.request.urlopen(LOGO_URL, timeout=5) as response:
+                logo_data = response.read()
+            logo_img = ImageReader(io.BytesIO(logo_data))
+            # Draw logo — max 60px tall, left-aligned in header
+            pdf.drawImage(logo_img, MARGIN, PAGE_H - 90, width=60, height=60,
+                          preserveAspectRatio=True, mask="auto")
+            # Shop name next to logo
+            pdf.setFont("Helvetica-Bold", 16)
+            pdf.drawString(MARGIN + 70, PAGE_H - 48, SHOP_NAME.upper())
+            pdf.setFont("Helvetica", 9)
+            if SHOP_ADDRESS:
+                pdf.drawString(MARGIN + 70, PAGE_H - 64, SHOP_ADDRESS)
+            if SHOP_PHONE:
+                pdf.drawString(MARGIN + 70, PAGE_H - 78, f"Tel: {SHOP_PHONE}")
+            logo_loaded = True
+        except Exception:
+            pass  # Fall through to text-only header
+ 
+    if not logo_loaded:
+        pdf.setFont("Helvetica-Bold", 22)
+        pdf.drawString(MARGIN, PAGE_H - 48, SHOP_NAME.upper())
+        pdf.setFont("Helvetica", 9)
+        if SHOP_ADDRESS:
+            pdf.drawString(MARGIN, PAGE_H - 64, SHOP_ADDRESS)
+        if SHOP_PHONE:
+            pdf.drawString(MARGIN, PAGE_H - 78, f"Tel: {SHOP_PHONE}")
+ 
+    # Receipt label top-right
+    pdf.setFillColorRGB(1, 1, 1)
     pdf.setFont("Helvetica-Bold", 14)
     pdf.drawRightString(PAGE_W - MARGIN, PAGE_H - 50, "RECEIPT")
     pdf.setFont("Helvetica", 9)
     pdf.drawRightString(PAGE_W - MARGIN, PAGE_H - 66, f"#{sale_id:05d}")
-
+ 
     # ── Sale metadata ─────────────────────────────────────────────────────────
     y = PAGE_H - 130
     pdf.setFillColorRGB(0.15, 0.15, 0.15)
@@ -350,18 +408,18 @@ def generate_invoice(sale_id: int, db: Session = Depends(get_db)):
     pdf.drawString(MARGIN + 220, y,      f"Payment:   {payment}")
     if customer:
         pdf.drawString(MARGIN + 220, y - 14, f"Customer:  {customer.full_name}")
-
+ 
     # ── Column headers ────────────────────────────────────────────────────────
     y -= 40
     pdf.setFillColorRGB(0.94, 0.96, 0.98)
     pdf.rect(MARGIN, y - 4, PAGE_W - 2 * MARGIN, 18, fill=1, stroke=0)
-    pdf.setFillColorRGB(0.094, 0.373, 0.647)
+    pdf.setFillColorRGB(br, bg, bb)
     pdf.setFont("Helvetica-Bold", 9)
     pdf.drawString(COL["item"],  y + 2, "ITEM")
     pdf.drawString(COL["qty"],   y + 2, "QTY")
     pdf.drawString(COL["price"], y + 2, "UNIT PRICE")
     pdf.drawString(COL["total"], y + 2, "SUBTOTAL")
-
+ 
     # ── Line items ────────────────────────────────────────────────────────────
     y -= 20
     pdf.setFont("Helvetica", 9)
@@ -377,50 +435,50 @@ def generate_invoice(sale_id: int, db: Session = Depends(get_db)):
         pdf.drawRightString(COL["price"] + 55, y + 2, f"N{float(item.unit_price):,.2f}")
         pdf.drawRightString(COL["total"] + 55, y + 2, f"N{float(item.subtotal):,.2f}")
         y -= 18
-
+ 
     # ── Divider ───────────────────────────────────────────────────────────────
     y -= 6
-    pdf.setStrokeColorRGB(0.094, 0.373, 0.647)
+    pdf.setStrokeColorRGB(br, bg, bb)
     pdf.setLineWidth(0.8)
     pdf.line(MARGIN, y, PAGE_W - MARGIN, y)
     y -= 18
-
-    # ── Discount rows (only when discount > 0) ────────────────────────────────
+ 
+    # ── Discount rows ─────────────────────────────────────────────────────────
     if discount > 0:
         pdf.setFont("Helvetica", 9)
         pdf.setFillColorRGB(0.15, 0.15, 0.15)
         pdf.drawRightString(COL["price"] + 55, y, "SUBTOTAL")
         pdf.drawRightString(COL["total"] + 55, y, f"N{items_total:,.2f}")
         y -= 16
-
         pdf.setFillColorRGB(0.059, 0.435, 0.196)
         pdf.drawString(COL["item"], y, "Loyalty points discount")
         pdf.drawRightString(COL["price"] + 55, y, "DISCOUNT")
         pdf.drawRightString(COL["total"] + 55, y, f"-N{discount:,.2f}")
         y -= 16
-
-        pdf.setStrokeColorRGB(0.094, 0.373, 0.647)
+        pdf.setStrokeColorRGB(br, bg, bb)
         pdf.setLineWidth(0.5)
         pdf.line(MARGIN, y, PAGE_W - MARGIN, y)
         y -= 16
-
+ 
     # ── Total paid ────────────────────────────────────────────────────────────
     pdf.setFont("Helvetica-Bold", 11)
-    pdf.setFillColorRGB(0.094, 0.373, 0.647)
+    pdf.setFillColorRGB(br, bg, bb)
     pdf.drawRightString(COL["price"] + 55, y, "TOTAL PAID")
     pdf.drawRightString(COL["total"] + 55, y, f"N{sale_total:,.2f}")
-
+ 
     # ── Footer ────────────────────────────────────────────────────────────────
     y -= 50
     pdf.setFont("Helvetica", 8)
     pdf.setFillColorRGB(0.5, 0.5, 0.5)
     pdf.drawCentredString(PAGE_W / 2, y, f"Thank you for shopping at {SHOP_NAME}!")
-    pdf.drawCentredString(PAGE_W / 2, y - 12, f"{SHOP_ADDRESS}  |  {SHOP_PHONE}")
-    pdf.setFillColorRGB(0.094, 0.373, 0.647)
+    if SHOP_ADDRESS or SHOP_PHONE:
+        footer_line = "  |  ".join(filter(None, [SHOP_ADDRESS, SHOP_PHONE]))
+        pdf.drawCentredString(PAGE_W / 2, y - 12, footer_line)
+    pdf.setFillColorRGB(br, bg, bb)
     pdf.rect(0, 0, PAGE_W, 8, fill=1, stroke=0)
     pdf.save()
     buffer.seek(0)
-
+ 
     return StreamingResponse(buffer, media_type="application/pdf",
         headers={"Content-Disposition": f"inline; filename=invoice_{sale_id}.pdf"})
 

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import Optional, Dict
@@ -10,6 +10,10 @@ from app.dependencies import require_role, SUPERADMIN_ROLE
 from app.auth import hash_password
 from app.utils.plans import PLAN_LIMITS
 from app.utils.features import DEFAULT_FEATURES, FEATURE_LABELS, get_features
+
+import cloudinary
+import cloudinary.uploader
+import os
 
 router = APIRouter(prefix="/businesses", tags=["Businesses"])
 
@@ -45,6 +49,23 @@ class PlanUpdate(BaseModel):
 
 class FeatureUpdate(BaseModel):
     features: Dict[str, bool]   # partial update — only send changed flags
+
+class BrandingUpdate(BaseModel):
+    name:        Optional[str] = None
+    address:     Optional[str] = None
+    phone:       Optional[str] = None
+    email:       Optional[str] = None
+    owner_name:  Optional[str] = None
+    brand_color: Optional[str] = None   # hex color e.g. "#185FA5"
+ 
+ 
+def _configure_cloudinary():
+    cloudinary.config(
+        cloud_name = os.getenv("CLOUDINARY_CLOUD_NAME"),
+        api_key    = os.getenv("CLOUDINARY_API_KEY"),
+        api_secret = os.getenv("CLOUDINARY_API_SECRET"),
+        secure     = True,
+    )
 
 
 # ── List businesses ───────────────────────────────────────────────────────────
@@ -315,3 +336,179 @@ def create_business_admin(
     db.commit()
     db.refresh(admin)
     return {"message": "Admin created", "user_id": admin.user_id, "username": admin.username}
+
+
+# ── GET my business branding ──────────────────────────────────────────────────
+@router.get("/my/branding")
+def get_my_branding(
+    db: Session = Depends(get_db),
+    user=Depends(require_role(["admin", "manager", "cashier"]))
+):
+    """Returns branding info for the current user's business. Used to render
+    the invoice, receipts, and WhatsApp messages with correct shop details."""
+    biz = db.query(models.Business).filter(
+        models.Business.business_id == user.business_id
+    ).first()
+    if not biz:
+        raise HTTPException(status_code=404, detail="Business not found")
+ 
+    return {
+        "business_id": biz.business_id,
+        "name":        biz.name,
+        "address":     biz.address,
+        "phone":       biz.phone,
+        "email":       biz.email,
+        "owner_name":  biz.owner_name,
+        "logo_url":    biz.logo_url,
+        "brand_color": biz.brand_color or "#185FA5",
+        "plan":        biz.plan,
+    }
+ 
+ 
+# ── UPDATE branding settings ──────────────────────────────────────────────────
+@router.patch("/my/branding")
+def update_my_branding(
+    data: BrandingUpdate,
+    db: Session = Depends(get_db),
+    user=Depends(require_role(["admin"]))
+):
+    """Admin updates business name, address, phone, email, brand color."""
+    biz = db.query(models.Business).filter(
+        models.Business.business_id == user.business_id
+    ).first()
+    if not biz:
+        raise HTTPException(status_code=404, detail="Business not found")
+ 
+    if data.name        is not None: biz.name        = data.name.strip()
+    if data.address     is not None: biz.address     = data.address.strip()
+    if data.phone       is not None: biz.phone       = data.phone.strip()
+    if data.email       is not None: biz.email       = data.email.strip()
+    if data.owner_name  is not None: biz.owner_name  = data.owner_name.strip()
+    if data.brand_color is not None:
+        # Validate hex color
+        color = data.brand_color.strip()
+        if not (color.startswith("#") and len(color) in (4, 7)):
+            raise HTTPException(status_code=400, detail="brand_color must be a valid hex color e.g. #185FA5")
+        biz.brand_color = color
+ 
+    db.add(models.AuditLog(
+        user_id=user.user_id,
+        action="UPDATE",
+        table_name="businesses",
+        record_id=biz.business_id,
+        description=f"Branding settings updated for '{biz.name}'",
+    ))
+ 
+    db.commit()
+    db.refresh(biz)
+ 
+    return {
+        "business_id": biz.business_id,
+        "name":        biz.name,
+        "address":     biz.address,
+        "phone":       biz.phone,
+        "email":       biz.email,
+        "owner_name":  biz.owner_name,
+        "logo_url":    biz.logo_url,
+        "brand_color": biz.brand_color or "#185FA5",
+    }
+ 
+ 
+# ── UPLOAD logo ───────────────────────────────────────────────────────────────
+@router.post("/my/logo")
+async def upload_logo(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    user=Depends(require_role(["admin"]))
+):
+    """
+    Upload a business logo to Cloudinary.
+    Accepts: JPG, PNG, WebP, SVG
+    Max size: 2MB
+    Returns the Cloudinary URL stored on the business record.
+    """
+    # Validate file type
+    allowed = {"image/jpeg", "image/png", "image/webp", "image/svg+xml"}
+    if file.content_type not in allowed:
+        raise HTTPException(
+            status_code=400,
+            detail="Only JPG, PNG, WebP, or SVG files are accepted"
+        )
+ 
+    # Validate file size (2MB max)
+    contents = await file.read()
+    if len(contents) > 2 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="Logo must be under 2MB")
+ 
+    biz = db.query(models.Business).filter(
+        models.Business.business_id == user.business_id
+    ).first()
+    if not biz:
+        raise HTTPException(status_code=404, detail="Business not found")
+ 
+    # Configure and upload to Cloudinary
+    _configure_cloudinary()
+    try:
+        # Delete old logo if exists
+        if biz.logo_url and "cloudinary" in biz.logo_url:
+            # Extract public_id from URL
+            try:
+                public_id = biz.logo_url.split("/")[-1].split(".")[0]
+                folder_id = f"profittrack/{user.business_id}"
+                cloudinary.uploader.destroy(f"{folder_id}/{public_id}")
+            except Exception:
+                pass  # Don't fail if old logo deletion fails
+ 
+        result = cloudinary.uploader.upload(
+            contents,
+            folder=f"profittrack/{user.business_id}",
+            public_id="logo",
+            overwrite=True,
+            resource_type="image",
+            transformation=[
+                {"width": 400, "height": 400, "crop": "limit"},  # max 400x400
+                {"quality": "auto"},
+                {"fetch_format": "auto"},
+            ],
+        )
+        logo_url = result["secure_url"]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Logo upload failed: {str(e)}")
+ 
+    biz.logo_url = logo_url
+ 
+    db.add(models.AuditLog(
+        user_id=user.user_id,
+        action="UPDATE",
+        table_name="businesses",
+        record_id=biz.business_id,
+        description=f"Logo updated for '{biz.name}'",
+    ))
+ 
+    db.commit()
+    return {"logo_url": logo_url, "message": "Logo uploaded successfully"}
+ 
+ 
+# ── DELETE logo ───────────────────────────────────────────────────────────────
+@router.delete("/my/logo")
+def delete_logo(
+    db: Session = Depends(get_db),
+    user=Depends(require_role(["admin"]))
+):
+    biz = db.query(models.Business).filter(
+        models.Business.business_id == user.business_id
+    ).first()
+    if not biz:
+        raise HTTPException(status_code=404, detail="Business not found")
+ 
+    if biz.logo_url and "cloudinary" in biz.logo_url:
+        _configure_cloudinary()
+        try:
+            folder_id = f"profittrack/{user.business_id}"
+            cloudinary.uploader.destroy(f"{folder_id}/logo")
+        except Exception:
+            pass
+ 
+    biz.logo_url = None
+    db.commit()
+    return {"message": "Logo removed"}
