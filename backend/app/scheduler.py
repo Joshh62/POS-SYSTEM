@@ -4,10 +4,20 @@ scheduler.py
 Lightweight asyncio scheduler — no external packages needed.
 
 Jobs:
-  1. Daily WhatsApp report      → 8:00 PM Lagos time
-  2. Due date customer alerts   → 8:00 AM Lagos time
+  1. Daily WhatsApp report      → 8:00 PM Lagos time  (all qualifying businesses)
+  2. Due date customer alerts   → 8:00 AM Lagos time  (all active businesses)
   3. Monthly credit summary     → 8:00 AM on 1st of each month
   4. Monthly loyalty expiry     → 9:00 AM on 1st of each month
+
+Multi-business:
+  All jobs loop through qualifying businesses automatically.
+  New businesses that register are included at the next scheduled run.
+  No manual configuration needed per business.
+
+WhatsApp report eligibility:
+  - subscription_status IN ('trial', 'active', 'past_due')
+  - Trial businesses always receive reports (all plans)
+  - Paid businesses require Business or Enterprise plan
 """
 
 import asyncio
@@ -26,7 +36,7 @@ def seconds_until(hour: int, minute: int = 0) -> float:
     return (target - now).total_seconds()
 
 
-# ── Daily 8PM — admin WhatsApp report ────────────────────────────────────────
+# ── Daily 8PM — WhatsApp report for all qualifying businesses ─────────────────
 async def daily_report_loop():
     while True:
         wait = seconds_until(20, 0)
@@ -40,18 +50,17 @@ async def daily_report_loop():
             db = SessionLocal()
             try:
                 send_whatsapp_report(db)
-                print("[Scheduler] Daily WhatsApp report sent successfully")
             finally:
                 db.close()
         except Exception as e:
-            print(f"[Scheduler] Failed to send daily report: {e}")
+            print(f"[Scheduler] Daily report loop error: {e}")
 
         await asyncio.sleep(60)
 
 
-# ── Daily 8AM — customer due date alerts ─────────────────────────────────────
+# ── Daily 8AM — customer due date alerts for all businesses ───────────────────
 async def due_date_alerts_loop():
-    """Sends WhatsApp reminders to customers whose debt is due tomorrow."""
+    """Sends WhatsApp reminders to credit customers due tomorrow — all businesses."""
     while True:
         wait = seconds_until(8, 0)
         h, m = int(wait // 3600), int((wait % 3600) // 60)
@@ -67,14 +76,14 @@ async def due_date_alerts_loop():
             finally:
                 db.close()
         except Exception as e:
-            print(f"[Scheduler] Failed to send due date alerts: {e}")
+            print(f"[Scheduler] Due date alerts loop error: {e}")
 
         await asyncio.sleep(60)
 
 
-# ── Monthly 1st at 8AM — credit account summary to admin ─────────────────────
+# ── Monthly 1st at 8AM — credit account summary for all businesses ────────────
 async def monthly_credit_summary_loop():
-    """Sends monthly credit account balance summary to the shop owner."""
+    """Sends monthly credit balance summary to each business admin."""
     while True:
         now = datetime.now(LAGOS_TZ)
 
@@ -97,11 +106,10 @@ async def monthly_credit_summary_loop():
             db = SessionLocal()
             try:
                 send_monthly_credit_summary(db)
-                print("[Scheduler] Monthly credit summary sent successfully")
             finally:
                 db.close()
         except Exception as e:
-            print(f"[Scheduler] Failed to send monthly credit summary: {e}")
+            print(f"[Scheduler] Monthly credit summary loop error: {e}")
 
         await asyncio.sleep(60)
 
@@ -109,12 +117,9 @@ async def monthly_credit_summary_loop():
 # ── Monthly 1st at 9AM — loyalty points expiry ───────────────────────────────
 async def monthly_points_expiry_loop():
     """
-    Expire loyalty points for customers inactive for 6+ months.
+    Expires loyalty points for customers inactive for 6+ months.
     Runs on the 1st of each month at 9AM Lagos time.
-
-    FIX: Uses a real admin user per business instead of hardcoded user_id=1.
-    If no active admin is found for a business, that business's expiry is skipped
-    safely rather than crashing or creating orphaned audit records.
+    Loops through all businesses — uses a real admin user per business.
     """
     while True:
         now = datetime.now(LAGOS_TZ)
@@ -135,10 +140,11 @@ async def monthly_points_expiry_loop():
         try:
             from app.database import SessionLocal
             from app import models
+            from datetime import datetime as dt
 
             db = SessionLocal()
             try:
-                cutoff = datetime.utcnow() - timedelta(days=180)
+                cutoff = dt.utcnow() - timedelta(days=180)
 
                 stale = db.query(models.CustomerLoyalty).filter(
                     models.CustomerLoyalty.points_balance   > 0,
@@ -150,7 +156,6 @@ async def monthly_points_expiry_loop():
                 skipped_accounts = 0
 
                 for loyalty in stale:
-                    # ── Find a real active admin for this business ────────────
                     system_user = db.query(models.User).filter(
                         models.User.business_id == loyalty.business_id,
                         models.User.role.in_(["admin", "superadmin"]),
@@ -158,20 +163,19 @@ async def monthly_points_expiry_loop():
                     ).first()
 
                     if not system_user:
-                        # No valid admin found — skip this business safely
                         print(f"[Scheduler] Loyalty expiry: no active admin for business {loyalty.business_id} — skipping")
                         skipped_accounts += 1
                         continue
 
                     pts = loyalty.points_balance
                     loyalty.points_balance   = 0
-                    loyalty.last_activity_at = datetime.utcnow()
+                    loyalty.last_activity_at = dt.utcnow()
 
                     db.add(models.LoyaltyTransaction(
                         loyalty_id  = loyalty.loyalty_id,
                         business_id = loyalty.business_id,
                         customer_id = loyalty.customer_id,
-                        user_id     = system_user.user_id,   # ✅ real user, not hardcoded
+                        user_id     = system_user.user_id,
                         tx_type     = "expire",
                         points      = -pts,
                         description = "Points expired after 6 months of inactivity (scheduled)",
@@ -182,16 +186,16 @@ async def monthly_points_expiry_loop():
 
                 db.commit()
                 print(
-                    f"[Scheduler] Loyalty expiry complete — "
-                    f"{expired_pts} points expired from {expired_accounts} accounts"
-                    + (f", {skipped_accounts} skipped (no admin)" if skipped_accounts else "")
+                    f"[Scheduler] Loyalty expiry — "
+                    f"{expired_pts} pts from {expired_accounts} accounts"
+                    + (f", {skipped_accounts} skipped" if skipped_accounts else "")
                 )
 
             finally:
                 db.close()
 
         except Exception as e:
-            print(f"[Scheduler] Loyalty expiry failed: {e}")
+            print(f"[Scheduler] Loyalty expiry loop error: {e}")
 
         await asyncio.sleep(60)
 
