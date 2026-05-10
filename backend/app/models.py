@@ -24,10 +24,15 @@ class Business(Base):
     logo_url    = Column(String(500), nullable=True)
     brand_color = Column(String(7),   nullable=True, default="#185FA5")
     email       = Column(String(200), nullable=True)
+    trial_ends_at              = Column(DateTime, nullable=True)
+    subscription_status        = Column(String(20), nullable=False, default="active")
+    paystack_customer_code     = Column(String(100), nullable=True)
+    paystack_subscription_code = Column(String(100), nullable=True)
+    current_period_end         = Column(DateTime, nullable=True)
+
     
     branches = relationship("Branch", back_populates="business")
     users    = relationship("User",   back_populates="business")
-
 
 # -------------------- CATEGORY --------------------
 class Category(Base):

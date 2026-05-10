@@ -1,8 +1,8 @@
 import { useState, useEffect } from "react";
-import { CartProvider }   from "./context/CartContext";
+import { CartProvider }  from "./context/CartContext";
 import { BranchProvider } from "./context/BranchContext";
-import POSLayout from "./components/layout/POSLayout";
-import SplashScreen from "./components/SplashScreen";
+import POSLayout         from "./components/layout/POSLayout";
+import SplashScreen      from "./components/SplashScreen";
 
 import LandingPage       from "./pages/LandingPage";
 import LoginPage         from "./pages/LoginPage";
@@ -21,6 +21,8 @@ import SuppliersPage     from "./pages/SuppliersPage";
 import AnalyticsPage     from "./pages/AnalyticsPage";
 import BusinessSettingsPage from "./pages/BusinessSettingsPage";
 
+import TrialBanner       from "./components/TrialBanner";
+import SignupPage        from "./pages/SignupPage";
 
 export default function App() {
   // Show splash for a brief moment on every cold load so the theme
@@ -79,6 +81,7 @@ export default function App() {
       case "suppliers":  return <SuppliersPage />;
       case "analytics":  return <AnalyticsPage />;
       case "settings":   return <BusinessSettingsPage />;
+      case "billing":    return <PricingPage />;
 
       default:           return <POS onScanResult={setLastScan} />;
     }
@@ -93,6 +96,7 @@ export default function App() {
           onLogout={handleLogout}
           lastScan={lastScan}
         >
+          <TrialBanner onUpgrade={() => setActivePage("billing")} />
           {renderPage()}
         </POSLayout>
       </CartProvider>

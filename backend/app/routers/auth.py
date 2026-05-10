@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func
 from typing import Optional
 from pydantic import BaseModel
+from datetime import datetime
 
 from app import models, schemas
 from app.database import get_db
@@ -15,11 +16,33 @@ router = APIRouter(prefix="/auth", tags=["Authentication"])
 
 
 def _count_business_users(db: Session, business_id: int) -> int:
-    """Count all active users in a business including admin/owner."""
     return db.query(func.count(User.user_id)).filter(
         User.business_id == business_id,
         User.is_active   == True,
     ).scalar() or 0
+
+
+def _get_subscription_info(biz: Business) -> dict:
+    """Returns subscription/trial status for a business."""
+    if not biz:
+        return {"subscription_status": "active", "trial_active": False, "trial_days_left": 0}
+
+    now          = datetime.utcnow()
+    status       = biz.subscription_status or "active"
+    trial_active = status == "trial" and biz.trial_ends_at and biz.trial_ends_at > now
+
+    # Auto-expire trial
+    if status == "trial" and biz.trial_ends_at and biz.trial_ends_at <= now:
+        status = "expired"
+
+    trial_days_left = max(0, (biz.trial_ends_at - now).days) if trial_active and biz.trial_ends_at else 0
+
+    return {
+        "subscription_status": status,
+        "trial_active":        trial_active,
+        "trial_days_left":     trial_days_left,
+        "trial_ends_at":       biz.trial_ends_at.isoformat() if biz.trial_ends_at else None,
+    }
 
 
 # ── List users ────────────────────────────────────────────────────────────────
@@ -54,7 +77,6 @@ def plan_info(
 
     plan   = business.plan if business else "starter"
     limits = get_plan_limits(plan)
-
     used_users = _count_business_users(db, current_user.business_id)
 
     return {
@@ -65,7 +87,7 @@ def plan_info(
     }
 
 
-# ── Register ──────────────────────────────────────────────────────────────────
+# ── Register (existing — admin adds staff) ────────────────────────────────────
 @router.post("/register")
 def register(
     user: schemas.UserCreate,
@@ -136,6 +158,21 @@ def login(
     if user.role != SUPERADMIN_ROLE and not user.branch_id:
         raise HTTPException(status_code=400, detail="User has no branch assigned")
 
+    # Get subscription info for non-superadmin
+    subscription_info = {}
+    if user.role != SUPERADMIN_ROLE and user.business_id:
+        biz = db.query(Business).filter(
+            Business.business_id == user.business_id
+        ).first()
+        subscription_info = _get_subscription_info(biz)
+
+        # Block login if subscription fully expired (not just trial)
+        if subscription_info["subscription_status"] == "expired":
+            raise HTTPException(
+                status_code=403,
+                detail="Your subscription has expired. Please renew at profittrack.ng"
+            )
+
     access_token = create_access_token({
         "sub":         user.username,
         "user_id":     user.user_id,
@@ -154,7 +191,8 @@ def login(
             "role":        user.role,
             "branch_id":   user.branch_id,
             "business_id": user.business_id,
-        }
+        },
+        **subscription_info,    # trial_active, trial_days_left, subscription_status
     }
 
 
@@ -170,22 +208,15 @@ def change_password(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user)
 ):
-    """
-    Allows any logged-in user to change their own password.
-    Requires the current password to be verified first.
-    """
     if len(data.new_password) < 6:
         raise HTTPException(status_code=400, detail="New password must be at least 6 characters")
-
     if data.current_password == data.new_password:
         raise HTTPException(status_code=400, detail="New password must be different from current password")
-
     if not verify_password(data.current_password, current_user.password_hash):
         raise HTTPException(status_code=401, detail="Current password is incorrect")
 
     current_user.password_hash = hash_password(data.new_password)
     db.commit()
-
     return {"message": "Password changed successfully"}
 
 
@@ -199,10 +230,8 @@ def deactivate_user(
     user = db.query(User).filter(User.user_id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-
     if current_user.role != SUPERADMIN_ROLE and user.business_id != current_user.business_id:
         raise HTTPException(status_code=403, detail="Not authorized")
-
     user.is_active = False
     db.commit()
     return {"message": "User deactivated"}
@@ -217,10 +246,8 @@ def activate_user(
     user = db.query(User).filter(User.user_id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-
     if current_user.role != SUPERADMIN_ROLE and user.business_id != current_user.business_id:
         raise HTTPException(status_code=403, detail="Not authorized")
-
     user.is_active = True
     db.commit()
     return {"message": "User activated"}
