@@ -20,6 +20,7 @@ import CustomersPage     from "./pages/CustomersPage";
 import SuppliersPage     from "./pages/SuppliersPage";
 import AnalyticsPage     from "./pages/AnalyticsPage";
 import BusinessSettingsPage from "./pages/BusinessSettingsPage";
+import PricingPage       from "./pages/PricingPage";
 
 import TrialBanner       from "./components/TrialBanner";
 import SignupPage        from "./pages/SignupPage";
