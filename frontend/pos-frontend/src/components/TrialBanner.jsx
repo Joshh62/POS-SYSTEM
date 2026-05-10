@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import api from "../../api/api";
+import api from "../api/api";
 
 export default function TrialBanner({ onUpgrade }) {
   const [info,       setInfo]       = useState(null);
