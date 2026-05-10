@@ -130,9 +130,9 @@ export default function PricingPage() {
             setSuccessMsg(
               `🎉 Payment successful! Your ${verifyRes.data.plan} plan is now active.`
             );
-            // Auto-refresh after 3 seconds
+            // Refresh subscription status and reload after 3 seconds
             setTimeout(() => {
-              window.location.reload();
+              window.location.href = window.location.href;
             }, 3000);
           } catch (err) {
             setError("Payment received but verification failed. Please contact support.");

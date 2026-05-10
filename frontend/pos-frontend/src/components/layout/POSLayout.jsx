@@ -20,8 +20,9 @@ const NAV_ITEMS = [
   { key: "suppliers",  label: "Suppliers",     icon: "🚚", roles: ["admin", "manager", "superadmin"],            flag: null },
   { key: "businesses", label: "Businesses",    icon: "🏢", roles: ["superadmin"],                                flag: null },
   { key: "expenses",   label: "Expenses",      icon: "💸", roles: ["admin", "manager", "superadmin"],            flag: "expense_tracking" },
-  { key: "customers",  label: "Customers",     icon: "👤", roles: ["admin", "manager", "superadmin"],            flag: null },
-  { key: "settings",   label: "Branding & Settings", icon: "⚙️", roles: ["admin"],                               flag: null },
+  { key: "customers",  label: "Customers",           icon: "👤", roles: ["admin", "manager", "superadmin"],            flag: null },
+  { key: "settings",   label: "Branding & Settings", icon: "⚙️",  roles: ["admin"],                                     flag: null },
+  { key: "billing",    label: "Plan & Billing",      icon: "💳", roles: ["admin"],                                     flag: null },
 ];
 
 const PAGE_TITLES = {
@@ -38,6 +39,7 @@ const PAGE_TITLES = {
   customers:  "Customers",
   suppliers:  "Suppliers",
   settings:   "Branding & Settings",
+  billing:    "Plan & Billing",
 };
 
 const THEME_DOTS = {

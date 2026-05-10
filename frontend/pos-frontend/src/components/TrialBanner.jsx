@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import api from "../api/api";
+import api from "../../api/api";
 
 export default function TrialBanner({ onUpgrade }) {
   const [info,       setInfo]       = useState(null);
@@ -13,6 +13,10 @@ export default function TrialBanner({ onUpgrade }) {
       } catch { /* silent */ }
     };
     fetch();
+    // Re-fetch when user returns to tab after payment
+    const onFocus = () => fetch();
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
   }, []);
 
   if (!info)      return null;
