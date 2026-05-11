@@ -109,12 +109,12 @@ export default function SupportButton() {
                   </div>
                 </a>
 
-                <a href="mailto:profittrackng@gmail.com"
+                <a href="mailto:support@profittrack.ng"
                   style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 14px", borderRadius: 10, background: "var(--color-background-secondary)", border: "1px solid var(--color-border-tertiary)", textDecoration: "none" }}>
                   <span style={{ fontSize: 22 }}>📧</span>
                   <div>
                     <div style={{ fontSize: 13, fontWeight: 600, color: "var(--color-text-primary)" }}>Email support</div>
-                    <div style={{ fontSize: 11, color: "var(--color-text-tertiary)" }}>profittrackng@gmail.com</div>
+                    <div style={{ fontSize: 11, color: "var(--color-text-tertiary)" }}>support@profittrack.ng</div>
                   </div>
                 </a>
 
