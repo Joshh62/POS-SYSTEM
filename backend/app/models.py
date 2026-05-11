@@ -31,6 +31,7 @@ class Business(Base):
     current_period_end         = Column(DateTime, nullable=True)
     pending_plan               = Column(String(20),  nullable=True)
     pending_billing            = Column(String(10),  nullable=True)
+    deletion_requested_at      = Column(DateTime, nullable=True)
     
     branches = relationship("Branch", back_populates="business")
     users    = relationship("User",   back_populates="business")
