@@ -5,25 +5,26 @@ const AMBER = "#C8820A";
 /**
  * PWAInstallBanner
  * ─────────────────
- * Handles PWA install across all platforms:
+ * Works with registerSW.js which captures beforeinstallprompt early
+ * into window.__pwaInstallPrompt before React mounts.
  *
- * Android Chrome  → captures beforeinstallprompt, shows "Install app" button
- * iOS Safari      → detects iOS, shows "Add to Home Screen" step-by-step guide
- * Desktop Chrome  → shows install button using beforeinstallprompt
- * Already installed → hides itself (display-mode: standalone)
- *
- * Usage: <PWAInstallBanner />  — drop anywhere on the landing page
+ * Platform handling:
+ * - Android Chrome  → native install button via stored prompt
+ * - iOS Safari      → manual "Add to Home Screen" guide
+ * - Desktop Chrome  → native install button
+ * - Already installed (standalone mode) → hidden
  */
 export default function PWAInstallBanner({ inline = false }) {
-  const [installPrompt, setInstallPrompt] = useState(null);
+  const [installPrompt, setInstallPrompt] = useState(() => window.__pwaInstallPrompt || null);
   const [isIOS,         setIsIOS]         = useState(false);
   const [isInstalled,   setIsInstalled]   = useState(false);
+  const [justInstalled, setJustInstalled] = useState(false);
   const [showIOSGuide,  setShowIOSGuide]  = useState(false);
-  const [installed,     setInstalled]     = useState(false); // just installed
 
   useEffect(() => {
     // Already running as installed PWA
-    if (window.matchMedia("(display-mode: standalone)").matches) {
+    if (window.matchMedia("(display-mode: standalone)").matches ||
+        window.navigator.standalone === true) {
       setIsInstalled(true);
       return;
     }
@@ -33,82 +34,96 @@ export default function PWAInstallBanner({ inline = false }) {
     const ios = /iphone|ipad|ipod/i.test(ua) && !window.MSStream;
     setIsIOS(ios);
 
-    // Android / Desktop Chrome — capture install prompt
-    const handler = (e) => {
-      e.preventDefault();
-      setInstallPrompt(e);
+    // Pick up prompt if already captured before we mounted
+    if (window.__pwaInstallPrompt) {
+      setInstallPrompt(window.__pwaInstallPrompt);
+    }
+
+    // Also listen for late capture (prompt arrived after component mounted)
+    const onReady = (e) => {
+      setInstallPrompt(e.detail);
     };
-    window.addEventListener("beforeinstallprompt", handler);
-
-    // Listen for successful install
-    window.addEventListener("appinstalled", () => {
-      setInstalled(true);
+    const onInstalled = () => {
+      setJustInstalled(true);
       setInstallPrompt(null);
-    });
+      window.__pwaInstallPrompt = null;
+    };
 
-    return () => window.removeEventListener("beforeinstallprompt", handler);
+    window.addEventListener("pwa-install-ready", onReady);
+    window.addEventListener("pwa-installed",     onInstalled);
+    window.addEventListener("appinstalled",      onInstalled);
+
+    return () => {
+      window.removeEventListener("pwa-install-ready", onReady);
+      window.removeEventListener("pwa-installed",     onInstalled);
+      window.removeEventListener("appinstalled",      onInstalled);
+    };
   }, []);
 
   const handleInstall = async () => {
     if (!installPrompt) return;
     installPrompt.prompt();
     const { outcome } = await installPrompt.userChoice;
-    if (outcome === "accepted") setInstalled(true);
-    setInstallPrompt(null);
+    if (outcome === "accepted") {
+      setJustInstalled(true);
+      setInstallPrompt(null);
+      window.__pwaInstallPrompt = null;
+    }
   };
 
-  // Already installed — show nothing
+  // Already running as PWA — show nothing
   if (isInstalled) return null;
 
-  // Just installed successfully
-  if (installed) {
+  // Just installed
+  if (justInstalled) {
     return (
-      <div style={installed ? successStyle : null}>
-        <span style={{ fontSize: 20 }}>🎉</span>
-        <span style={{ fontSize: 14, fontWeight: 600 }}>ProfitTrack installed! Open it from your home screen.</span>
+      <div style={{ ...wrapStyle(inline), display: "flex", alignItems: "center", gap: 12 }}>
+        <span style={{ fontSize: 22 }}>🎉</span>
+        <span style={{ fontSize: 14, fontWeight: 600, color: "#fff" }}>
+          ProfitTrack installed! Open it from your home screen.
+        </span>
       </div>
     );
   }
 
-  // ── iOS Safari — manual instructions ────────────────────────────────────
+  // ── iOS Safari ────────────────────────────────────────────────────────────
   if (isIOS) {
     return (
-      <div style={inline ? inlineWrap : bannerWrap}>
+      <div style={wrapStyle(inline)}>
         <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-          <div style={{ fontSize: 28 }}>📱</div>
-          <div style={{ flex: 1, minWidth: 200 }}>
+          <div style={{ fontSize: 26 }}>📱</div>
+          <div style={{ flex: 1, minWidth: 180 }}>
             <div style={{ fontSize: 14, fontWeight: 700, color: "#fff", marginBottom: 2 }}>
               Install ProfitTrack on your iPhone
             </div>
-            <div style={{ fontSize: 12, color: "rgba(255,255,255,0.65)" }}>
+            <div style={{ fontSize: 12, color: "rgba(255,255,255,0.55)" }}>
               Works like a native app — no App Store needed
             </div>
           </div>
-          <button onClick={() => setShowIOSGuide(g => !g)}
-            style={{ padding: "8px 16px", borderRadius: 8, border: "none", background: AMBER, color: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" }}>
+          <button onClick={() => setShowIOSGuide(g => !g)} style={installBtn}>
             {showIOSGuide ? "Hide guide" : "How to install →"}
           </button>
         </div>
 
         {showIOSGuide && (
-          <div style={{ marginTop: 16, background: "rgba(255,255,255,0.08)", borderRadius: 10, padding: "14px 16px" }}>
-            <div style={{ fontSize: 12, color: "rgba(255,255,255,0.5)", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 12 }}>
+          <div style={{ marginTop: 14, background: "rgba(255,255,255,0.07)", borderRadius: 10, padding: "14px 16px" }}>
+            <div style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 12 }}>
               3 steps to install
             </div>
             {[
-              { n: "1", icon: "⬆️", text: 'Tap the Share button at the bottom of your Safari browser (the box with an arrow pointing up)' },
-              { n: "2", icon: "➕", text: 'Scroll down and tap "Add to Home Screen"' },
-              { n: "3", icon: "✅", text: 'Tap "Add" in the top right — ProfitTrack appears on your home screen' },
+              { n:"1", icon:"⬆️", text:'Tap the Share button at the bottom of Safari (the square with an arrow pointing up)' },
+              { n:"2", icon:"➕", text:'Scroll down and tap "Add to Home Screen"' },
+              { n:"3", icon:"✅", text:'Tap "Add" in the top right corner — ProfitTrack appears on your home screen' },
             ].map(s => (
-              <div key={s.n} style={{ display: "flex", alignItems: "flex-start", gap: 12, marginBottom: 10 }}>
-                <div style={{ width: 26, height: 26, borderRadius: "50%", background: AMBER, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 11, fontWeight: 700, color: "#fff" }}>{s.n}</div>
-                <div style={{ fontSize: 13, color: "rgba(255,255,255,0.8)", lineHeight: 1.6 }}>
-                  <span style={{ marginRight: 6 }}>{s.icon}</span>{s.text}
+              <div key={s.n} style={{ display: "flex", alignItems: "flex-start", gap: 10, marginBottom: 10 }}>
+                <div style={{ width: 24, height: 24, borderRadius: "50%", background: AMBER, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 11, fontWeight: 700, color: "#fff" }}>{s.n}</div>
+                <div style={{ fontSize: 13, color: "rgba(255,255,255,0.75)", lineHeight: 1.6 }}>
+                  <span style={{ marginRight: 5 }}>{s.icon}</span>{s.text}
                 </div>
               </div>
             ))}
-            <div style={{ fontSize: 11, color: "rgba(255,255,255,0.35)", marginTop: 8 }}>
-              Only works in Safari. If you're in Chrome on iPhone, open this page in Safari first.
+            <div style={{ fontSize: 11, color: "rgba(255,255,255,0.3)", marginTop: 8, lineHeight: 1.5 }}>
+              ⚠️ Only works in Safari. If you're using Chrome on iPhone, open profittrack.ng in Safari first.
             </div>
           </div>
         )}
@@ -116,22 +131,21 @@ export default function PWAInstallBanner({ inline = false }) {
     );
   }
 
-  // ── Android / Desktop Chrome — native install prompt ────────────────────
+  // ── Android / Desktop Chrome — native prompt available ────────────────────
   if (installPrompt) {
     return (
-      <div style={inline ? inlineWrap : bannerWrap}>
+      <div style={wrapStyle(inline)}>
         <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-          <div style={{ fontSize: 28 }}>📲</div>
-          <div style={{ flex: 1, minWidth: 200 }}>
+          <div style={{ fontSize: 26 }}>📲</div>
+          <div style={{ flex: 1, minWidth: 180 }}>
             <div style={{ fontSize: 14, fontWeight: 700, color: "#fff", marginBottom: 2 }}>
               Install ProfitTrack on your device
             </div>
-            <div style={{ fontSize: 12, color: "rgba(255,255,255,0.65)" }}>
-              Works offline · No App Store · Home screen icon
+            <div style={{ fontSize: 12, color: "rgba(255,255,255,0.55)" }}>
+              Works offline · Home screen icon · No App Store
             </div>
           </div>
-          <button onClick={handleInstall}
-            style={{ padding: "10px 20px", borderRadius: 8, border: "none", background: AMBER, color: "#fff", fontSize: 14, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap", boxShadow: "0 4px 14px rgba(200,130,10,0.4)" }}>
+          <button onClick={handleInstall} style={{ ...installBtn, boxShadow: "0 4px 14px rgba(200,130,10,0.35)" }}>
             ⬇ Install app
           </button>
         </div>
@@ -139,43 +153,44 @@ export default function PWAInstallBanner({ inline = false }) {
     );
   }
 
-  // No prompt available yet (desktop non-Chrome, etc.) — show generic guide
-  if (inline) {
-    return (
-      <div style={inlineWrap}>
-        <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-          <div style={{ fontSize: 28 }}>💻</div>
-          <div style={{ flex: 1, minWidth: 200 }}>
-            <div style={{ fontSize: 14, fontWeight: 700, color: "#fff", marginBottom: 2 }}>Install ProfitTrack</div>
-            <div style={{ fontSize: 12, color: "rgba(255,255,255,0.65)" }}>
-              On Chrome: tap the install icon (⬇) in the address bar · On iPhone: tap Share → Add to Home Screen
+  // ── Fallback — no prompt yet, show manual guide ───────────────────────────
+  // This shows when Chrome hasn't fired the prompt yet (first visit, or
+  // criteria not yet met). Give manual instructions.
+  return (
+    <div style={wrapStyle(inline)}>
+      <div style={{ display: "flex", alignItems: "flex-start", gap: 12, flexWrap: "wrap" }}>
+        <div style={{ fontSize: 26, flexShrink: 0 }}>📲</div>
+        <div style={{ flex: 1, minWidth: 180 }}>
+          <div style={{ fontSize: 14, fontWeight: 700, color: "#fff", marginBottom: 6 }}>
+            Install ProfitTrack on your device
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            <div style={{ fontSize: 12, color: "rgba(255,255,255,0.6)", lineHeight: 1.5 }}>
+              <strong style={{ color: "rgba(255,255,255,0.85)" }}>Android Chrome:</strong> Tap the menu (⋮) in the top right → tap <em>"Add to Home screen"</em> or <em>"Install app"</em>
+            </div>
+            <div style={{ fontSize: 12, color: "rgba(255,255,255,0.6)", lineHeight: 1.5 }}>
+              <strong style={{ color: "rgba(255,255,255,0.85)" }}>iPhone Safari:</strong> Tap the Share button (⬆) → tap <em>"Add to Home Screen"</em> → tap <em>"Add"</em>
+            </div>
+            <div style={{ fontSize: 12, color: "rgba(255,255,255,0.6)", lineHeight: 1.5 }}>
+              <strong style={{ color: "rgba(255,255,255,0.85)" }}>Desktop Chrome:</strong> Look for the install icon (⊕) in the address bar
             </div>
           </div>
         </div>
       </div>
-    );
-  }
-
-  return null;
+    </div>
+  );
 }
 
-const bannerWrap = {
-  background: "#1a1a1a",
-  border: `1px solid rgba(200,130,10,0.3)`,
+const wrapStyle = (inline) => ({
+  background: "rgba(255,255,255,0.06)",
+  border: "1px solid rgba(200,130,10,0.28)",
   borderRadius: 14,
-  padding: "16px 20px",
-  marginBottom: 16,
-};
+  padding: "16px 18px",
+  ...(inline ? {} : { marginBottom: 16 }),
+});
 
-const inlineWrap = {
-  background: "#1a1a1a",
-  border: `1px solid rgba(200,130,10,0.3)`,
-  borderRadius: 14,
-  padding: "16px 20px",
-};
-
-const successStyle = {
-  display: "flex", alignItems: "center", gap: 10,
-  background: "#EAF3DE", borderRadius: 10,
-  padding: "12px 16px", fontSize: 14, color: "#3B6D11",
+const installBtn = {
+  padding: "9px 18px", borderRadius: 8, border: "none",
+  background: AMBER, color: "#fff", fontSize: 13,
+  fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap",
 };

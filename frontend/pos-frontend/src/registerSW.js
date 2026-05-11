@@ -1,10 +1,31 @@
 /**
  * registerSW.js
  * Register the service worker and handle updates.
- * Import this in main.jsx
+ * Also captures the beforeinstallprompt event early — before React renders —
+ * so the PWA install banner can use it even if it mounts after the event fires.
  */
 import { registerSyncListener } from "./utils/offlineQueue";
-import { createSale } from "./api/api";
+import { createSale }           from "./api/api";
+
+// ── Capture install prompt IMMEDIATELY — before React mounts ─────────────────
+// beforeinstallprompt fires very early. If we wait for a component to mount,
+// we miss it. Store it globally so PWAInstallBanner can pick it up anytime.
+window.__pwaInstallPrompt = null;
+
+window.addEventListener("beforeinstallprompt", (e) => {
+  e.preventDefault();
+  window.__pwaInstallPrompt = e;
+  // Also dispatch a custom event so mounted components know it arrived late
+  window.dispatchEvent(new CustomEvent("pwa-install-ready", { detail: e }));
+  console.log("[PWA] Install prompt captured");
+});
+
+window.addEventListener("appinstalled", () => {
+  window.__pwaInstallPrompt = null;
+  window.dispatchEvent(new CustomEvent("pwa-installed"));
+  console.log("[PWA] App installed successfully");
+});
+
 
 export function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) {
@@ -28,7 +49,6 @@ export function registerServiceWorker() {
         const newWorker = reg.installing;
         newWorker?.addEventListener("statechange", () => {
           if (newWorker.state === "installed" && navigator.serviceWorker.controller) {
-            // New version available — dispatch event for UI to show reload prompt
             window.dispatchEvent(new CustomEvent("sw-update-available"));
           }
         });
