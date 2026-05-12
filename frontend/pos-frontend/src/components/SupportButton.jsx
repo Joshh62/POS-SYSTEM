@@ -1,6 +1,6 @@
 import { useState } from "react";
 
-const WHATSAPP = "https://wa.me/2348154586355";
+const WHATSAPP = "https://wa.me/2349012984122";
 const AMBER    = "#C8820A";
 
 const IN_SCOPE = [
@@ -105,7 +105,7 @@ export default function SupportButton() {
                   <span style={{ fontSize: 22 }}>💬</span>
                   <div>
                     <div style={{ fontSize: 13, fontWeight: 700, color: "#fff" }}>Chat on WhatsApp</div>
-                    <div style={{ fontSize: 11, color: "rgba(255,255,255,0.8)" }}>+234 815 458 6355 · Fastest response</div>
+                    <div style={{ fontSize: 11, color: "rgba(255,255,255,0.8)" }}>+234 901 298 4122 · Fastest response</div>
                   </div>
                 </a>
 

@@ -471,7 +471,7 @@ export default function LandingPage({ onStart }) {
             {q:"What hardware do I need?",a:"Any device with a browser. For a full POS setup, a USB barcode scanner (₦10,000–₦25,000) and a thermal receipt printer add significant efficiency. Hardware is optional."},
             {q:"Is my business data safe?",a:"Yes. All data is encrypted in transit (TLS 1.2+) and at rest (AES-256). Each business's data is completely isolated. We are NDPR-compliant with full audit logs of every action."},
             {q:"What is your refund policy?",a:"No refunds after payment. The 14-day free trial exists for evaluation. In exceptional circumstances within 48 hours of payment, contact us and we'll review."},
-            {q:"How do I get support?",a:"WhatsApp is fastest — +234 815 458 6355, Mon–Sat 9AM–6PM Lagos time. Email: support@profittrack.ng."},
+            {q:"How do I get support?",a:"WhatsApp is fastest — +234 901 298 4122, Mon–Sat 9AM–6PM Lagos time. Email: support@profittrack.ng."},
           ].map((item,i) => <FAQItem key={i} {...item} />)}
         </div>
       </section>
@@ -483,7 +483,7 @@ export default function LandingPage({ onStart }) {
         <p style={{ color: "rgba(255,255,255,0.45)", fontSize: 14, marginBottom: 30 }}>14 days free. No credit card. Setup in 5 minutes.</p>
         <div style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap" }}>
           <button onClick={() => setShowSignup(true)} style={{ ...btnAmber, fontSize: 14, padding: "13px 28px" }}>Start free trial today →</button>
-          <a href={WHATSAPP_URL} target="_blank" rel="noreferrer" style={{ padding: "13px 24px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.12)", background: "transparent", color: "#fff", fontSize: 14, textDecoration: "none", display: "inline-block", fontFamily: "Georgia,serif" }}>📱 WhatsApp: 08154586355</a>
+          <a href={WHATSAPP_URL} target="_blank" rel="noreferrer" style={{ padding: "13px 24px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.12)", background: "transparent", color: "#fff", fontSize: 14, textDecoration: "none", display: "inline-block", fontFamily: "Georgia,serif" }}>📱 WhatsApp: 09012984122</a>
         </div>
       </section>
 
@@ -497,7 +497,7 @@ export default function LandingPage({ onStart }) {
               </div>
               <p style={{ fontSize: 12, color: "rgba(255,255,255,0.3)", lineHeight: 1.8, maxWidth: 240 }}>Point-of-sale and business management for Nigerian retail.</p>
               <div style={{ marginTop: 12, fontSize: 12, color: "rgba(255,255,255,0.3)", lineHeight: 2 }}>
-                📧 support@profittrack.ng<br />📱 +234 815 458 6355<br />🌐 profittrack.ng
+                📧 support@profittrack.ng<br />📱 +234 901 298 4122<br />🌐 profittrack.ng
               </div>
             </div>
             <div>

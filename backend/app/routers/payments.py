@@ -320,4 +320,4 @@ def _send_payment_failed_whatsapp(biz, admin):
         body=f"⚠️ ProfitTrack Payment Failed\n\nHi {admin.full_name}, your ProfitTrack subscription "
              f"payment for *{biz.name}* has failed.\n\nPlease update your payment method at "
              f"*profittrack.ng* within 3 days to avoid service interruption.\n\n"
-             f"Need help? Reply to this message or call 08154586355.")
+             f"Need help? Reply to this message or call 09012984122.")
