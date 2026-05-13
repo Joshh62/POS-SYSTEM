@@ -84,3 +84,7 @@ def trigger_whatsapp_report(db: Session = Depends(get_db)):
     from app.whatsapp_report import send_whatsapp_report
     sid = send_whatsapp_report(db)
     return {"message": "Report sent", "sid": sid}
+
+@app.get("/")
+def root():
+    return {"service": "ProfitTrack API", "status": "ok"}
