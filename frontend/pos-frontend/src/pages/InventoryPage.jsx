@@ -327,7 +327,8 @@ export default function InventoryPage() {
           {loading && <div style={centreMsg}>Loading inventory...</div>}
           {!loading && !error && (
             <div style={tableWrapper}>
-              <table style={{ width: "100%", borderCollapse: "collapse" }}>
+              <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
+              <table style={{ width: "100%", minWidth: 760, borderCollapse: "collapse" }}>
                 <thead>
                   <tr style={{ borderBottom: "1px solid var(--color-border-tertiary)" }}>
                     {["Product", "Barcode", "Branch", "Stock", "Reorder level", "Alert (days)", "Status", ""].map(h => (
@@ -366,6 +367,7 @@ export default function InventoryPage() {
                   })}
                 </tbody>
               </table>
+              </div>
             </div>
           )}
         </>
@@ -386,7 +388,7 @@ export default function InventoryPage() {
               >
                 <option value="">— Select branch —</option>
                 {branches.map(b => (
-                  <option key={b.branch_id} value={b.branch_id}>{b.branch_name}</option>
+                  <option key={b.branch_id} value={b.branch_id}>{b.branch_name || b.name || `Branch ${b.branch_id}`}</option>
                 ))}
               </select>
             </div>
@@ -524,7 +526,8 @@ export default function InventoryPage() {
                 Received this session
               </div>
               <div style={tableWrapper}>
-                <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
+                <table style={{ width: "100%", minWidth: 560, borderCollapse: "collapse" }}>
                   <thead>
                     <tr style={{ borderBottom: "1px solid var(--color-border-tertiary)" }}>
                       <th style={thStyle}>Product</th>
@@ -546,6 +549,7 @@ export default function InventoryPage() {
                     ))}
                   </tbody>
                 </table>
+                </div>
               </div>
             </div>
           )}
@@ -807,7 +811,8 @@ export default function InventoryPage() {
 function ExpiryTable({ rows }) {
   return (
     <div style={tableWrapper}>
-      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+      <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
+      <table style={{ width: "100%", minWidth: 500, borderCollapse: "collapse", fontSize: 12 }}>
         <thead>
           <tr style={{ borderBottom: "1px solid var(--color-border-tertiary)" }}>
             {["Product", "Branch", "Qty", "Expiry date", "Status"].map(h => (
@@ -834,6 +839,7 @@ function ExpiryTable({ rows }) {
           })}
         </tbody>
       </table>
+      </div> 
     </div>
   );
 }

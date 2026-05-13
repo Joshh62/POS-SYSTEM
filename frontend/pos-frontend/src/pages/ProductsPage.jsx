@@ -299,7 +299,8 @@ export default function ProductsPage() {
           {error && <div style={errorBox}>{error}</div>}
 
           <div style={tableWrap}>
-            <table style={{ width: "100%", borderCollapse: "collapse" }}>
+            <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
+            <table style={{ width: "100%", minWidth: 680, borderCollapse: "collapse" }}>
               <thead>
                 <tr style={{ borderBottom: "1px solid var(--color-border-tertiary)" }}>
                   <th style={thStyle}>Product</th>
@@ -334,6 +335,7 @@ export default function ProductsPage() {
                 ))}
               </tbody>
             </table>
+            </div>
           </div>
 
           {totalPages > 1 && (

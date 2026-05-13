@@ -42,14 +42,12 @@ export default function UsersPage() {
   const currentUser  = JSON.parse(localStorage.getItem("user") || "{}");
   const businessName = currentUser.business_name || "";
 
-  // New user form — no branch pre-selected, admin must choose
   const EMPTY_FORM = { full_name: "", username: "", password: "", role: "cashier", branch_id: "" };
   const [form,        setForm]        = useState(EMPTY_FORM);
   const [formLoading, setFormLoading] = useState(false);
   const [formError,   setFormError]   = useState(null);
   const [formSuccess, setFormSuccess] = useState(null);
 
-  // Build branch name lookup map
   const branchMap = {};
   branches.forEach(b => { branchMap[b.branch_id] = b.branch_name || b.name || `Branch ${b.branch_id}`; });
 
@@ -67,7 +65,6 @@ export default function UsersPage() {
       const res = await api.get(`/businesses/${currentUser.business_id}/branches`);
       setBranches(Array.isArray(res.data) ? res.data : []);
     } catch {
-      // Try my/branches fallback
       try {
         const res2 = await api.get("/businesses/my/branches");
         setBranches(Array.isArray(res2.data) ? res2.data : []);
@@ -152,9 +149,7 @@ export default function UsersPage() {
 
   const buildWhatsAppLink = () => {
     const next = upgradeInfo?.next?.label || "a higher plan";
-    const msg  = encodeURIComponent(
-      `Hi, I'd like to upgrade my ProfitTrack POS plan to ${next}.\n\nBusiness: ${businessName || "my business"}`
-    );
+    const msg  = encodeURIComponent(`Hi, I'd like to upgrade my ProfitTrack POS plan to ${next}.\n\nBusiness: ${businessName || "my business"}`);
     return `https://wa.me/${WHATSAPP_NUMBER}?text=${msg}`;
   };
 
@@ -162,7 +157,7 @@ export default function UsersPage() {
     <div style={{ padding: "16px 24px", overflowY: "auto", height: "100%", boxSizing: "border-box" }}>
 
       {/* Header */}
-      <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 12, marginBottom: 16 }}>
+      <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 12, marginBottom: 16, flexWrap: "wrap" }}>
         {planInfo && maxUsers !== -1 && (
           <span style={{ fontSize: 12, padding: "4px 10px", borderRadius: 20, fontWeight: 500, background: atLimit ? "#FCEBEB" : "#EAF3DE", color: atLimit ? "#A32D2D" : "#3B6D11" }}>
             {planLabel} plan · {usedUsers}/{maxUsers} staff
@@ -183,41 +178,44 @@ export default function UsersPage() {
       {error && <div style={errorBox}>{error}</div>}
 
       {loading ? <div style={emptyMsg}>Loading users...</div> : (
+        /* ── scroll wrapper so Deactivate column is always reachable on mobile ── */
         <div style={tableWrap}>
-          <table style={{ width: "100%", borderCollapse: "collapse" }}>
-            <thead>
-              <tr style={{ borderBottom: "1px solid var(--color-border-tertiary)" }}>
-                {["Name", "Username", "Role", "Branch", "Status", ""].map(h => (
-                  <th key={h} style={thStyle}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {users.length === 0 ? (
-                <tr><td colSpan={6} style={{ textAlign: "center", padding: 32, color: "var(--color-text-tertiary)", fontSize: 13 }}>No users found.</td></tr>
-              ) : users.map(user => (
-                <tr key={user.user_id} style={{ borderBottom: "1px solid var(--color-border-tertiary)" }}>
-                  <td style={tdStyle}>{user.full_name}</td>
-                  <td style={{ ...tdStyle, color: "var(--color-text-secondary)" }}>{user.username}</td>
-                  <td style={tdStyle}><span style={roleBadge(user.role)}>{user.role}</span></td>
-                  <td style={{ ...tdStyle, fontSize: 12, color: "var(--color-text-secondary)" }}>
-                    {user.branch_id ? (branchMap[user.branch_id] || `Branch ${user.branch_id}`) : "—"}
-                  </td>
-                  <td style={tdStyle}>
-                    <span style={{ fontSize: 11, fontWeight: 500, padding: "3px 9px", borderRadius: 10, background: user.is_active ? "#EAF3DE" : "#FCEBEB", color: user.is_active ? "#3B6D11" : "#A32D2D" }}>
-                      {user.is_active ? "Active" : "Inactive"}
-                    </span>
-                  </td>
-                  <td style={{ ...tdStyle, textAlign: "right" }}>
-                    {user.is_active
-                      ? <button onClick={() => handleDeactivate(user.user_id, user.username)} style={dangerBtn}>Deactivate</button>
-                      : <button onClick={() => handleActivate(user.user_id, user.username)} style={activateBtn}>Reactivate</button>
-                    }
-                  </td>
+          <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
+            <table style={{ width: "100%", minWidth: 600, borderCollapse: "collapse" }}>
+              <thead>
+                <tr style={{ borderBottom: "1px solid var(--color-border-tertiary)" }}>
+                  {["Name", "Username", "Role", "Branch", "Status", ""].map(h => (
+                    <th key={h} style={thStyle}>{h}</th>
+                  ))}
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {users.length === 0 ? (
+                  <tr><td colSpan={6} style={{ textAlign: "center", padding: 32, color: "var(--color-text-tertiary)", fontSize: 13 }}>No users found.</td></tr>
+                ) : users.map(user => (
+                  <tr key={user.user_id} style={{ borderBottom: "1px solid var(--color-border-tertiary)" }}>
+                    <td style={tdStyle}>{user.full_name}</td>
+                    <td style={{ ...tdStyle, color: "var(--color-text-secondary)" }}>{user.username}</td>
+                    <td style={tdStyle}><span style={roleBadge(user.role)}>{user.role}</span></td>
+                    <td style={{ ...tdStyle, fontSize: 12, color: "var(--color-text-secondary)", whiteSpace: "nowrap" }}>
+                      {user.branch_id ? (branchMap[user.branch_id] || `Branch ${user.branch_id}`) : "—"}
+                    </td>
+                    <td style={tdStyle}>
+                      <span style={{ fontSize: 11, fontWeight: 500, padding: "3px 9px", borderRadius: 10, background: user.is_active ? "#EAF3DE" : "#FCEBEB", color: user.is_active ? "#3B6D11" : "#A32D2D" }}>
+                        {user.is_active ? "Active" : "Inactive"}
+                      </span>
+                    </td>
+                    <td style={{ ...tdStyle, textAlign: "right" }}>
+                      {user.is_active
+                        ? <button onClick={() => handleDeactivate(user.user_id, user.username)} style={dangerBtn}>Deactivate</button>
+                        : <button onClick={() => handleActivate(user.user_id, user.username)} style={activateBtn}>Reactivate</button>
+                      }
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 
@@ -357,17 +355,17 @@ const inputStyle   = { display: "block", width: "100%", padding: "9px 11px", bor
 const primaryBtn   = { padding: "8px 16px", borderRadius: 8, border: "none", background: "var(--color-primary)", color: "#fff", fontSize: 13, fontWeight: 500, cursor: "pointer" };
 const outlineBtn   = { padding: "8px 14px", borderRadius: 8, border: "1px solid var(--color-border-tertiary)", background: "none", fontSize: 12, fontWeight: 500, cursor: "pointer", color: "var(--color-text-secondary)" };
 const upgradeBtn   = { padding: "8px 16px", borderRadius: 8, border: "none", background: "#854F0B", color: "#fff", fontSize: 13, fontWeight: 500, cursor: "pointer" };
-const dangerBtn    = { padding: "5px 12px", borderRadius: 7, border: "1px solid #A32D2D", background: "none", color: "#A32D2D", fontSize: 12, cursor: "pointer" };
-const activateBtn  = { padding: "5px 12px", borderRadius: 7, border: "1px solid #3B6D11", background: "none", color: "#3B6D11", fontSize: 12, cursor: "pointer" };
+const dangerBtn    = { padding: "5px 12px", borderRadius: 7, border: "1px solid #A32D2D", background: "none", color: "#A32D2D", fontSize: 12, cursor: "pointer", whiteSpace: "nowrap" };
+const activateBtn  = { padding: "5px 12px", borderRadius: 7, border: "1px solid #3B6D11", background: "none", color: "#3B6D11", fontSize: 12, cursor: "pointer", whiteSpace: "nowrap" };
 const actionBtn    = { width: "100%", padding: "11px 0", borderRadius: 10, border: "none", fontSize: 14, fontWeight: 500 };
 const errorBox     = { background: "var(--error-bg)", color: "var(--error-text)", borderRadius: 8, padding: "9px 13px", fontSize: 13, marginBottom: 4 };
 const successBox   = { background: "var(--success-bg)", color: "var(--success-text)", borderRadius: 8, padding: "10px 14px", fontSize: 13, marginBottom: 14 };
 const tableWrap    = { background: "var(--color-background-primary)", border: "1px solid var(--color-border-tertiary)", borderRadius: 12, overflow: "hidden" };
-const thStyle      = { padding: "9px 14px", textAlign: "left", fontSize: 11, fontWeight: 500, color: "var(--color-text-secondary)", textTransform: "uppercase", letterSpacing: "0.05em" };
+const thStyle      = { padding: "9px 14px", textAlign: "left", fontSize: 11, fontWeight: 500, color: "var(--color-text-secondary)", textTransform: "uppercase", letterSpacing: "0.05em", whiteSpace: "nowrap" };
 const tdStyle      = { padding: "11px 14px", fontSize: 13, color: "var(--color-text-primary)" };
 const emptyMsg     = { textAlign: "center", padding: 32, color: "var(--color-text-tertiary)", fontSize: 13 };
 const overlayStyle = { position: "fixed", inset: 0, background: "rgba(0,0,0,0.65)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 9999 };
-const modalStyle   = { background: "var(--color-background-primary)", borderRadius: 14, padding: 24, width: "100%", maxWidth: 420, maxHeight: "85vh", overflowY: "auto", boxShadow: "var(--shadow)", border: "1px solid var(--color-border-tertiary)" };
+const modalStyle   = { background: "var(--color-background-primary)", borderRadius: 14, padding: 24, width: "calc(100% - 32px)", maxWidth: 420, maxHeight: "85vh", overflowY: "auto", boxShadow: "var(--shadow)", border: "1px solid var(--color-border-tertiary)" };
 const modalTitle   = { fontSize: 16, fontWeight: 600, color: "var(--color-text-primary)", margin: 0 };
 const closeBtn     = { background: "none", border: "none", fontSize: 22, color: "var(--color-text-tertiary)", cursor: "pointer", padding: 0, lineHeight: 1 };
 const roleBadge    = (role) => ({ fontSize: 11, fontWeight: 500, padding: "3px 9px", borderRadius: 10, textTransform: "capitalize", background: role === "admin" ? "#EEEDFE" : role === "manager" ? "#E1F5EE" : "#F1EFE8", color: role === "admin" ? "#3C3489" : role === "manager" ? "#0F6E56" : "#5F5E5A" });

@@ -123,7 +123,8 @@ export default function ReportsPage() {
           {hasNewProfitShape && expenseBreakdown.length > 0 && (
             <div style={tableWrap}>
               <div style={sectionTitle}>Expenses by category</div>
-              <table style={{ width: "100%", borderCollapse: "collapse" }}>
+              <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
+              <table style={{ width: "100%", minWidth: 360, borderCollapse: "collapse" }}>
                 <tbody>
                   {expenseBreakdown.map((e, i) => (
                     <tr key={i} style={{ borderBottom: "1px solid var(--color-border-tertiary)" }}>
@@ -137,6 +138,7 @@ export default function ReportsPage() {
                   </tr>
                 </tbody>
               </table>
+              </div>
             </div>
           )}
           <div style={tableWrap}>
@@ -173,7 +175,8 @@ export default function ReportsPage() {
             <span style={{ fontSize: 22, fontWeight: 500, color: "var(--color-primary)" }}>{fmt(stockTotal)}</span>
           </div>
           <div style={tableWrap}>
-            <table style={{ width: "100%", borderCollapse: "collapse" }}>
+            <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
+            <table style={{ width: "100%", minWidth: 480, borderCollapse: "collapse" }}>
               <thead>
                 <tr style={{ borderBottom: "1px solid var(--color-border-tertiary)" }}>
                   <th style={th}>Product</th>
@@ -197,6 +200,7 @@ export default function ReportsPage() {
                 ))}
               </tbody>
             </table>
+            </div>
           </div>
         </>
       )}
@@ -290,7 +294,8 @@ export default function ReportsPage() {
 
           <div style={tableWrap}>
             <div style={sectionTitle}>Credit accounts — outstanding balances</div>
-            <table style={{ width: "100%", borderCollapse: "collapse" }}>
+            <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
+            <table style={{ width: "100%", minWidth: 780, borderCollapse: "collapse" }}>
               <thead>
                 <tr style={{ borderBottom: "1px solid var(--color-border-tertiary)" }}>
                   <th style={th}>Customer</th>
@@ -334,6 +339,7 @@ export default function ReportsPage() {
                 ))}
               </tbody>
             </table>
+            </div>
           </div>
         </div>
       )}
@@ -341,7 +347,8 @@ export default function ReportsPage() {
       {/* ── Audit log ── */}
       {!loading && activeTab === "Audit log" && isAdmin && data && (
         <div style={tableWrap}>
-          <table style={{ width: "100%", borderCollapse: "collapse" }}>
+          <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
+          <table style={{ width: "100%", minWidth: 680, borderCollapse: "collapse" }}>
             <thead>
               <tr style={{ borderBottom: "1px solid var(--color-border-tertiary)" }}>
                 <th style={th}>Time</th>
@@ -376,6 +383,7 @@ export default function ReportsPage() {
               ))}
             </tbody>
           </table>
+          </div>
         </div>
       )}
     </div>

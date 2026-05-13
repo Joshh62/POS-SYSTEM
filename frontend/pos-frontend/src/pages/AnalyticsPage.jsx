@@ -55,7 +55,8 @@ function DataTable({ columns, rows, emptyText = "No data" }) {
   }
   return (
     <div style={{ background: "var(--color-background-primary)", border: "1px solid var(--color-border-tertiary)", borderRadius: 12, overflow: "hidden" }}>
-      <table style={{ width: "100%", borderCollapse: "collapse" }}>
+      <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
+      <table style={{ width: "100%", minWidth: 620, borderCollapse: "collapse" }}>
         <thead>
           <tr style={{ borderBottom: "1px solid var(--color-border-tertiary)" }}>
             {columns.map(c => (
@@ -77,6 +78,7 @@ function DataTable({ columns, rows, emptyText = "No data" }) {
           ))}
         </tbody>
       </table>
+      </div>
     </div>
   );
 }

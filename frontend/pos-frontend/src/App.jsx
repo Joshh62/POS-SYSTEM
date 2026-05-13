@@ -23,7 +23,6 @@ import BusinessSettingsPage from "./pages/BusinessSettingsPage";
 import PricingPage          from "./pages/PricingPage";
 
 import TrialBanner    from "./components/TrialBanner";
-import SupportButton  from "./components/SupportButton";
 
 export default function App() {
   const [booting, setBooting] = useState(true);
@@ -93,9 +92,6 @@ export default function App() {
           <TrialBanner onUpgrade={() => setActivePage("billing")} />
           {renderPage()}
         </POSLayout>
-
-        {/* Floating support button — visible on all pages inside the app */}
-        <SupportButton onNavigate={setActivePage} />
       </CartProvider>
     </BranchProvider>
   );
