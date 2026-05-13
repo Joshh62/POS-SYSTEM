@@ -71,6 +71,7 @@ class BrandingUpdate(BaseModel):
     email:       Optional[str] = None
     owner_name:  Optional[str] = None
     brand_color: Optional[str] = None
+    report_hour: Optional[int] = None   # 0-23, Lagos time. Default 20 (8PM)
 
 class BranchUpdate(BaseModel):
     name:     Optional[str] = None
@@ -507,6 +508,7 @@ def get_my_branding(db: Session = Depends(get_db),
         "address": biz.address, "phone": biz.phone, "email": biz.email,
         "owner_name": biz.owner_name, "logo_url": biz.logo_url,
         "brand_color": biz.brand_color or "#185FA5", "plan": biz.plan,
+        "report_hour": getattr(biz, "report_hour", 20),
     }
 
 
@@ -528,6 +530,11 @@ def update_my_branding(data: BrandingUpdate, db: Session = Depends(get_db),
         if not (color.startswith("#") and len(color) in (4, 7)):
             raise HTTPException(status_code=400, detail="brand_color must be a valid hex color e.g. #185FA5")
         biz.brand_color = color
+    if data.report_hour is not None:
+        if not (0 <= data.report_hour <= 23):
+            raise HTTPException(status_code=400, detail="report_hour must be between 0 and 23")
+        if hasattr(biz, "report_hour"):
+            biz.report_hour = data.report_hour
 
     db.add(models.AuditLog(user_id=user.user_id, action="UPDATE",
         table_name="businesses", record_id=biz.business_id,

@@ -212,22 +212,48 @@ export default function ProductsPage() {
 
   const downloadTemplate = async () => {
     try {
+      // Try backend first — if it serves the styled xlsx, use it
       const res = await api.get("/products/import/template", { responseType: "blob" });
-      const url = URL.createObjectURL(new Blob([res.data], { type: "text/csv" }));
-      const a   = document.createElement("a");
-      a.href = url; a.download = "profittrack_import_template.csv"; a.click();
+      const contentType = res.headers?.["content-type"] || "";
+      const isXlsx = contentType.includes("spreadsheet") || contentType.includes("xlsx");
+      const url  = URL.createObjectURL(new Blob([res.data], { type: contentType }));
+      const a    = document.createElement("a");
+      a.href     = url;
+      a.download = isXlsx ? "profittrack_import_template.xlsx" : "profittrack_import_template.csv";
+      a.click();
       URL.revokeObjectURL(url);
     } catch {
-      // Fallback: generate client-side
+      // Fallback: generate a clean CSV client-side
+      // Sample expiry one year from today
+      const nextYear  = new Date();
+      nextYear.setFullYear(nextYear.getFullYear() + 1);
+      const expiryStr = nextYear.toISOString().split("T")[0]; // YYYY-MM-DD format
+ 
       const rows = [
+        // Header row — columns in order
         "product_name,barcode,selling_price,cost_price,stock_quantity,category,supplier,expiry_date",
-        '"Indomie Noodles (Chicken)",8712345678901,250,180,100,Food & Beverages,Dangote Suppliers,',
-        '"Men Polo Shirt - Black",PT1234567890,4500,2800,20,Clothing,,',
-        '"Paracetamol 500mg",6001234567890,150,80,50,Pharmaceuticals,Lagos Pharma Dist,2026-12-31',
+ 
+        // Example 1 — food product with manufacturer barcode + expiry date
+        `"Indomie Noodles Chicken 70g",8712345678901,250,180,100,"Food & Beverages","Dangote Distributors",${expiryStr}`,
+ 
+        // Example 2 — pharmaceutical with barcode + expiry
+        `"Paracetamol 500mg Tablet",6001234567890,150,80,50,"Pharmaceuticals","Lagos Pharma Ltd",${expiryStr}`,
+ 
+        // Example 3 — clothing with generated PT barcode, no expiry
+        `"Men Slim Fit Polo - Black XL",PT20261234,4500,2800,20,"Clothing",,`,
+ 
+        // Example 4 — accessory, no barcode (leave blank = auto-generate), no expiry
+        `"Ladies Leather Handbag - Brown",,12500,7000,10,"Accessories",,`,
+ 
+        // Blank row — user adds their products here
+        `"Your product name here","barcode or leave blank",0,0,0,"Category","Supplier name","YYYY-MM-DD or leave blank"`,
       ].join("\n");
-      const url = URL.createObjectURL(new Blob([rows], { type: "text/csv" }));
+ 
+      const url = URL.createObjectURL(new Blob([rows], { type: "text/csv;charset=utf-8;" }));
       const a   = document.createElement("a");
-      a.href = url; a.download = "profittrack_import_template.csv"; a.click();
+      a.href     = url;
+      a.download = "profittrack_import_template.csv";
+      a.click();
       URL.revokeObjectURL(url);
     }
   };

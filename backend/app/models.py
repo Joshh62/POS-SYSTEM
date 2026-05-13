@@ -32,6 +32,7 @@ class Business(Base):
     pending_plan               = Column(String(20),  nullable=True)
     pending_billing            = Column(String(10),  nullable=True)
     deletion_requested_at      = Column(DateTime, nullable=True)
+    report_hour                = Column(Integer, nullable=False, default=20)
     
     branches = relationship("Branch", back_populates="business")
     users    = relationship("User",   back_populates="business")

@@ -8,6 +8,11 @@ import OfflineIndicator from "../OfflineIndicator";
 
 const SHOP_NAME = import.meta.env.VITE_SHOP_NAME || "ProfitTrack POS";
 
+// Pages where the branch switcher is NOT relevant — business-level pages
+const BRANCH_SWITCHER_HIDDEN_PAGES = new Set([
+  "settings", "billing", "suppliers", "businesses", "users", "analytics",
+]);
+
 const NAV_ITEMS = [
   { key: "pos",        label: "POS",                 icon: "🛒", roles: ["admin", "manager", "cashier", "superadmin"], flag: null },
   { key: "dashboard",  label: "Dashboard",           icon: "📊", roles: ["admin", "manager", "superadmin"],            flag: null },
@@ -25,24 +30,16 @@ const NAV_ITEMS = [
   { key: "billing",    label: "Plan & Billing",      icon: "💳", roles: ["admin"],                                     flag: null },
 ];
 
-// Bottom nav shows these 4 keys + "more" button — picked by most common use
 const BOTTOM_NAV_KEYS = ["pos", "sales", "products", "inventory"];
 
 const PAGE_TITLES = {
-  pos:        "Point of sale",
-  dashboard:  "Dashboard",
-  sales:      "Sales history",
-  products:   "Products",
-  inventory:  "Inventory",
-  reports:    "Reports",
-  analytics:  "Analytics",
-  users:      "Users",
-  businesses: "Businesses",
-  expenses:   "Expenses",
-  customers:  "Customers",
-  suppliers:  "Suppliers",
-  settings:   "Branding & Settings",
-  billing:    "Plan & Billing",
+  pos:        "Point of sale",     dashboard:  "Dashboard",
+  sales:      "Sales history",     products:   "Products",
+  inventory:  "Inventory",         reports:    "Reports",
+  analytics:  "Analytics",         users:      "Users",
+  businesses: "Businesses",        expenses:   "Expenses",
+  customers:  "Customers",         suppliers:  "Suppliers",
+  settings:   "Branding & Settings", billing:  "Plan & Billing",
 };
 
 const THEME_DOTS = {
@@ -51,7 +48,6 @@ const THEME_DOTS = {
   a3: { dark: "#6ab87a", light: "#1a5c2a", label: "Forest"    },
 };
 
-// Detect mobile once
 function useIsMobile() {
   const [mobile, setMobile] = useState(() => window.innerWidth < 768);
   useEffect(() => {
@@ -63,16 +59,16 @@ function useIsMobile() {
 }
 
 export default function POSLayout({ children, activePage, onNavigate, onLogout, lastScan }) {
-  const [collapsed,   setCollapsed]   = useState(false);
-  const [drawerOpen,  setDrawerOpen]  = useState(false);
+  const [collapsed,  setCollapsed]  = useState(false);
+  const [drawerOpen, setDrawerOpen] = useState(false);
   const isMobile = useIsMobile();
 
   const { activeBranchId, setActiveBranchId, branches } = useBranch();
   const { isEnabled } = useFeature();
   const { theme, mode, setTheme, toggleMode } = useTheme();
 
-  const user  = JSON.parse(localStorage.getItem("user") || "{}");
-  const role  = user.role || "cashier";
+  const user = JSON.parse(localStorage.getItem("user") || "{}");
+  const role = user.role || "cashier";
   const sideW = collapsed ? 56 : 210;
 
   const visible = NAV_ITEMS.filter(item => {
@@ -81,14 +77,14 @@ export default function POSLayout({ children, activePage, onNavigate, onLogout, 
     return true;
   });
 
-  // Bottom nav items — only show keys the user has access to
   const bottomNavItems = visible.filter(i => BOTTOM_NAV_KEYS.includes(i.key));
-  // Drawer items — everything else
   const drawerItems    = visible.filter(i => !BOTTOM_NAV_KEYS.includes(i.key));
 
+  // Only show branch switcher on pages where it's relevant
   const canSwitchBranch = ["admin", "superadmin"].includes(role)
     && branches.length > 1
-    && isEnabled("multi_branch");
+    && isEnabled("multi_branch")
+    && !BRANCH_SWITCHER_HIDDEN_PAGES.has(activePage);
 
   const [showSignOut,   setShowSignOut]   = useState(false);
   const [showChangePwd, setShowChangePwd] = useState(false);
@@ -118,20 +114,14 @@ export default function POSLayout({ children, activePage, onNavigate, onLogout, 
   };
 
   const accent = THEME_DOTS[theme][mode];
-
-  const handleNavigate = (key) => {
-    onNavigate(key);
-    setDrawerOpen(false);
-  };
+  const handleNavigate = (key) => { onNavigate(key); setDrawerOpen(false); };
 
   // ── MOBILE LAYOUT ──────────────────────────────────────────────────────────
   if (isMobile) {
     return (
       <div style={{ position: "fixed", inset: 0, display: "flex", flexDirection: "column", overflow: "hidden", background: "var(--color-background-tertiary)" }}>
-
         {/* Mobile topbar */}
         <div style={{ height: 52, display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 14px", background: "var(--color-background-primary)", borderBottom: "1px solid var(--color-border-tertiary)", flexShrink: 0, zIndex: 100 }}>
-          {/* Logo */}
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <div style={{ width: 24, height: 24, borderRadius: 6, background: accent, display: "flex", alignItems: "center", justifyContent: "center" }}>
               <div style={{ width: 10, height: 7, border: "2px solid rgba(255,255,255,0.85)", borderRadius: 2 }} />
@@ -140,82 +130,54 @@ export default function POSLayout({ children, activePage, onNavigate, onLogout, 
               {PAGE_TITLES[activePage] || SHOP_NAME}
             </span>
           </div>
-
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            {/* Branch selector on mobile */}
             {canSwitchBranch && (
-              <select
-                value={activeBranchId ?? ""}
-                onChange={e => setActiveBranchId(e.target.value ? parseInt(e.target.value) : null)}
-                style={{ padding: "4px 6px", borderRadius: 6, fontSize: 11, border: "1px solid var(--color-border-tertiary)", background: "var(--color-background-secondary)", color: "var(--color-text-primary)", maxWidth: 110 }}
-              >
+              <select value={activeBranchId ?? ""} onChange={e => setActiveBranchId(e.target.value ? parseInt(e.target.value) : null)}
+                style={{ padding: "4px 6px", borderRadius: 6, fontSize: 11, border: "1px solid var(--color-border-tertiary)", background: "var(--color-background-secondary)", color: "var(--color-text-primary)", maxWidth: 110 }}>
                 {role === "superadmin" && <option value="">All</option>}
-                {branches.map(b => (
-                  <option key={b.branch_id} value={b.branch_id}>
-                    {role === "superadmin" ? b.name : b.name}
-                  </option>
-                ))}
+                {branches.map(b => <option key={b.branch_id} value={b.branch_id}>{b.name}</option>)}
               </select>
             )}
-            {/* Hamburger */}
-            <button onClick={() => setDrawerOpen(true)} style={{ background: "none", border: "none", cursor: "pointer", padding: "6px", color: "var(--color-text-primary)", fontSize: 18, lineHeight: 1 }}>
-              ☰
-            </button>
+            <button onClick={() => setDrawerOpen(true)} style={{ background: "none", border: "none", cursor: "pointer", padding: "6px", color: "var(--color-text-primary)", fontSize: 18, lineHeight: 1 }}>☰</button>
           </div>
         </div>
 
-        {/* Page content */}
         <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", paddingBottom: 60 }}>
           {children}
         </div>
 
-        {/* Bottom navigation bar */}
+        {/* Bottom navigation */}
         <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, height: 60, background: "var(--color-background-primary)", borderTop: "1px solid var(--color-border-tertiary)", display: "flex", alignItems: "center", zIndex: 100 }}>
           {bottomNavItems.map(item => {
             const active = activePage === item.key;
             return (
               <button key={item.key} onClick={() => handleNavigate(item.key)} style={{
-                flex: 1, height: "100%", display: "flex", flexDirection: "column",
-                alignItems: "center", justifyContent: "center", gap: 3,
+                flex: 1, height: "100%", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 3,
                 border: "none", background: "none", cursor: "pointer",
                 color: active ? "var(--color-primary)" : "var(--color-text-tertiary)",
                 borderTop: active ? "2px solid var(--color-primary)" : "2px solid transparent",
-                transition: "all 0.15s",
               }}>
                 <span style={{ fontSize: 18 }}>{item.icon}</span>
                 <span style={{ fontSize: 9, fontWeight: active ? 600 : 400 }}>{item.label}</span>
               </button>
             );
           })}
-          {/* More button */}
           <button onClick={() => setDrawerOpen(true)} style={{
-            flex: 1, height: "100%", display: "flex", flexDirection: "column",
-            alignItems: "center", justifyContent: "center", gap: 3,
+            flex: 1, height: "100%", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 3,
             border: "none", background: "none", cursor: "pointer",
-            color: !BOTTOM_NAV_KEYS.includes(activePage) && activePage !== undefined
-              ? "var(--color-primary)" : "var(--color-text-tertiary)",
-            borderTop: !BOTTOM_NAV_KEYS.includes(activePage)
-              ? "2px solid var(--color-primary)" : "2px solid transparent",
+            color: !BOTTOM_NAV_KEYS.includes(activePage) ? "var(--color-primary)" : "var(--color-text-tertiary)",
+            borderTop: !BOTTOM_NAV_KEYS.includes(activePage) ? "2px solid var(--color-primary)" : "2px solid transparent",
           }}>
             <span style={{ fontSize: 18 }}>⋯</span>
             <span style={{ fontSize: 9 }}>More</span>
           </button>
         </div>
 
-        {/* Drawer overlay */}
+        {/* Drawer */}
         {drawerOpen && (
           <>
-            {/* Backdrop */}
             <div onClick={() => setDrawerOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 200 }} />
-
-            {/* Drawer panel — slides in from left */}
-            <div style={{
-              position: "fixed", top: 0, left: 0, bottom: 0, width: 280,
-              background: "var(--color-background-primary)",
-              zIndex: 201, display: "flex", flexDirection: "column",
-              boxShadow: "4px 0 24px rgba(0,0,0,0.2)",
-            }}>
-              {/* Drawer header */}
+            <div style={{ position: "fixed", top: 0, left: 0, bottom: 0, width: 280, background: "var(--color-background-primary)", zIndex: 201, display: "flex", flexDirection: "column", boxShadow: "4px 0 24px rgba(0,0,0,0.2)" }}>
               <div style={{ height: 56, display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 16px", borderBottom: "1px solid var(--color-border-tertiary)" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                   <div style={{ width: 26, height: 26, borderRadius: 7, background: accent, display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -225,35 +187,26 @@ export default function POSLayout({ children, activePage, onNavigate, onLogout, 
                 </div>
                 <button onClick={() => setDrawerOpen(false)} style={{ background: "none", border: "none", fontSize: 20, color: "var(--color-text-tertiary)", cursor: "pointer", padding: "4px" }}>✕</button>
               </div>
-
-              {/* User info */}
               <div style={{ padding: "12px 16px", borderBottom: "1px solid var(--color-border-tertiary)", background: "var(--color-background-secondary)" }}>
                 <div style={{ fontSize: 13, fontWeight: 600, color: "var(--color-text-primary)" }}>{user.username}</div>
                 <div style={{ fontSize: 11, color: "var(--color-text-tertiary)", textTransform: "capitalize", marginTop: 2 }}>{role}</div>
               </div>
-
-              {/* All nav items */}
               <nav style={{ flex: 1, overflowY: "auto", padding: "8px 8px" }}>
-                {/* Bottom nav items first */}
                 <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em", color: "var(--color-text-tertiary)", padding: "6px 8px 4px" }}>Main</div>
                 {bottomNavItems.map(item => {
                   const active = activePage === item.key;
                   return (
                     <button key={item.key} onClick={() => handleNavigate(item.key)} style={{
-                      display: "flex", alignItems: "center", gap: 10, padding: "11px 12px",
-                      borderRadius: 9, border: "none", width: "100%", textAlign: "left",
+                      display: "flex", alignItems: "center", gap: 10, padding: "11px 12px", borderRadius: 9,
+                      border: "none", width: "100%", textAlign: "left",
                       background: active ? "var(--color-primary-light)" : "transparent",
                       color: active ? "var(--color-primary)" : "var(--color-text-secondary)",
-                      fontWeight: active ? 500 : 400, fontSize: 14, cursor: "pointer",
-                      marginBottom: 2,
+                      fontWeight: active ? 500 : 400, fontSize: 14, cursor: "pointer", marginBottom: 2,
                     }}>
-                      <span style={{ fontSize: 17 }}>{item.icon}</span>
-                      <span>{item.label}</span>
+                      <span style={{ fontSize: 17 }}>{item.icon}</span><span>{item.label}</span>
                     </button>
                   );
                 })}
-
-                {/* Rest of nav */}
                 {drawerItems.length > 0 && (
                   <>
                     <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em", color: "var(--color-text-tertiary)", padding: "12px 8px 4px" }}>More</div>
@@ -261,43 +214,34 @@ export default function POSLayout({ children, activePage, onNavigate, onLogout, 
                       const active = activePage === item.key;
                       return (
                         <button key={item.key} onClick={() => handleNavigate(item.key)} style={{
-                          display: "flex", alignItems: "center", gap: 10, padding: "11px 12px",
-                          borderRadius: 9, border: "none", width: "100%", textAlign: "left",
+                          display: "flex", alignItems: "center", gap: 10, padding: "11px 12px", borderRadius: 9,
+                          border: "none", width: "100%", textAlign: "left",
                           background: active ? "var(--color-primary-light)" : "transparent",
                           color: active ? "var(--color-primary)" : "var(--color-text-secondary)",
-                          fontWeight: active ? 500 : 400, fontSize: 14, cursor: "pointer",
-                          marginBottom: 2,
+                          fontWeight: active ? 500 : 400, fontSize: 14, cursor: "pointer", marginBottom: 2,
                         }}>
-                          <span style={{ fontSize: 17 }}>{item.icon}</span>
-                          <span>{item.label}</span>
+                          <span style={{ fontSize: 17 }}>{item.icon}</span><span>{item.label}</span>
                         </button>
                       );
                     })}
                   </>
                 )}
               </nav>
-
-              {/* Theme + actions */}
               <div style={{ borderTop: "1px solid var(--color-border-tertiary)", padding: "12px 16px" }}>
-                {/* Theme dots */}
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
                   <span style={{ fontSize: 11, color: "var(--color-text-tertiary)", textTransform: "uppercase", letterSpacing: "0.06em" }}>Theme</span>
                   <div style={{ display: "flex", gap: 6 }}>
                     {Object.entries(THEME_DOTS).map(([t, colors]) => (
                       <button key={t} title={colors.label} onClick={() => setTheme(t)} style={{
-                        width: 16, height: 16, borderRadius: "50%", border: "none",
-                        background: colors[mode], cursor: "pointer", padding: 0,
-                        outline: theme === t ? `2px solid ${colors[mode]}` : "none",
-                        outlineOffset: 2, transform: theme === t ? "scale(1.2)" : "scale(1)",
+                        width: 16, height: 16, borderRadius: "50%", border: "none", background: colors[mode], cursor: "pointer", padding: 0,
+                        outline: theme === t ? `2px solid ${colors[mode]}` : "none", outlineOffset: 2, transform: theme === t ? "scale(1.2)" : "scale(1)",
                       }} />
                     ))}
-                    {/* Dark mode toggle */}
                     <button onClick={toggleMode} style={{ width: 28, height: 16, borderRadius: 20, background: "var(--color-background-secondary)", border: "1px solid var(--color-border-tertiary)", cursor: "pointer", fontSize: 10, display: "flex", alignItems: "center", justifyContent: "center" }}>
                       {mode === "dark" ? "🌙" : "☀️"}
                     </button>
                   </div>
                 </div>
-                {/* Account actions */}
                 <button onClick={() => { setDrawerOpen(false); openChangePwd(); }} style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", background: "none", border: "none", color: "var(--color-text-secondary)", fontSize: 13, cursor: "pointer", padding: "8px 0", borderTop: "1px solid var(--color-border-tertiary)" }}>
                   <span>🔒</span> Change password
                 </button>
@@ -309,7 +253,6 @@ export default function POSLayout({ children, activePage, onNavigate, onLogout, 
           </>
         )}
 
-        {/* Modals */}
         {showSignOut && <SignOutModal user={user} onConfirm={() => { setShowSignOut(false); onLogout(); }} onCancel={() => setShowSignOut(false)} />}
         {showChangePwd && <ChangePwdModal pwdForm={pwdForm} setPwdForm={setPwdForm} pwdLoading={pwdLoading} pwdError={pwdError} pwdSuccess={pwdSuccess} onSubmit={handleChangePwd} onClose={() => setShowChangePwd(false)} />}
         <OfflineIndicator />
@@ -317,14 +260,11 @@ export default function POSLayout({ children, activePage, onNavigate, onLogout, 
     );
   }
 
-  // ── DESKTOP LAYOUT (unchanged) ─────────────────────────────────────────────
+  // ── DESKTOP LAYOUT ─────────────────────────────────────────────────────────
   return (
     <div style={{ position: "fixed", inset: 0, display: "flex", overflow: "hidden", background: "var(--color-background-tertiary)" }}>
-
       {/* Sidebar */}
       <div style={{ width: sideW, minWidth: sideW, maxWidth: sideW, height: "100%", background: "var(--color-background-primary)", borderRight: "1px solid var(--color-border-tertiary)", display: "flex", flexDirection: "column", transition: "width 0.18s ease", overflow: "hidden", flexShrink: 0 }}>
-
-        {/* Logo */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: collapsed ? "center" : "space-between", padding: collapsed ? "0" : "0 12px", borderBottom: "1px solid var(--color-border-tertiary)", height: 52 }}>
           {!collapsed && (
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -336,8 +276,6 @@ export default function POSLayout({ children, activePage, onNavigate, onLogout, 
           )}
           <button onClick={() => setCollapsed(c => !c)} style={iconBtn}>{collapsed ? "▶" : "◀"}</button>
         </div>
-
-        {/* Navigation */}
         <nav style={{ flex: 1, padding: "8px 6px", display: "flex", flexDirection: "column", gap: 2, overflowY: "auto" }}>
           {visible.map(item => {
             const active = activePage === item.key;
@@ -349,8 +287,7 @@ export default function POSLayout({ children, activePage, onNavigate, onLogout, 
                 borderRadius: 8, border: "none",
                 background: active ? "var(--color-primary-light)" : "transparent",
                 color: active ? "var(--color-primary)" : "var(--color-text-secondary)",
-                fontWeight: active ? 500 : 400, fontSize: 13, cursor: "pointer",
-                width: "100%", transition: "all 0.15s",
+                fontWeight: active ? 500 : 400, fontSize: 13, cursor: "pointer", width: "100%", transition: "all 0.15s",
               }}
                 onMouseEnter={e => { if (!active) { e.currentTarget.style.background = "var(--color-background-secondary)"; e.currentTarget.style.color = "var(--color-text-primary)"; }}}
                 onMouseLeave={e => { if (!active) { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "var(--color-text-secondary)"; }}}
@@ -361,8 +298,6 @@ export default function POSLayout({ children, activePage, onNavigate, onLogout, 
             );
           })}
         </nav>
-
-        {/* Theme controls */}
         <div style={{ padding: collapsed ? "8px 0" : "8px 12px", borderTop: "1px solid var(--color-border-tertiary)" }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: collapsed ? "center" : "space-between", marginBottom: 8 }}>
             {!collapsed && <span style={{ fontSize: 10, color: "var(--color-text-tertiary)", textTransform: "uppercase", letterSpacing: "0.06em" }}>THEME</span>}
@@ -377,8 +312,6 @@ export default function POSLayout({ children, activePage, onNavigate, onLogout, 
             <span style={{ fontSize: 14 }}>{mode === "dark" ? "🌙" : "☀️"}</span>
           </button>
         </div>
-
-        {/* User section */}
         <div style={{ borderTop: "1px solid var(--color-border-tertiary)", padding: collapsed ? "10px 0" : "10px 12px" }}>
           {!collapsed && (
             <div style={{ marginBottom: 8 }}>
@@ -387,12 +320,10 @@ export default function POSLayout({ children, activePage, onNavigate, onLogout, 
             </div>
           )}
           <button onClick={openChangePwd} style={{ display: "flex", alignItems: "center", justifyContent: collapsed ? "center" : "flex-start", gap: 6, background: "none", border: "none", color: "var(--color-text-secondary)", fontSize: 12, cursor: "pointer", padding: "4px 0", width: "100%", marginBottom: 2 }}>
-            <span style={{ fontSize: 14 }}>🔒</span>
-            {!collapsed && <span>Change password</span>}
+            <span style={{ fontSize: 14 }}>🔒</span>{!collapsed && <span>Change password</span>}
           </button>
           <button onClick={() => setShowSignOut(true)} style={{ display: "flex", alignItems: "center", justifyContent: collapsed ? "center" : "flex-start", gap: 6, background: "none", border: "none", color: "var(--color-danger)", fontSize: 12, cursor: "pointer", padding: "4px 0", width: "100%" }}>
-            <span style={{ fontSize: 14 }}>🚪</span>
-            {!collapsed && <span>Sign out</span>}
+            <span style={{ fontSize: 14 }}>🚪</span>{!collapsed && <span>Sign out</span>}
           </button>
         </div>
       </div>
@@ -404,7 +335,8 @@ export default function POSLayout({ children, activePage, onNavigate, onLogout, 
           {canSwitchBranch && (
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <span style={{ fontSize: 11, color: "var(--color-text-tertiary)", flexShrink: 0 }}>{role === "superadmin" ? "Viewing:" : "Branch:"}</span>
-              <select value={activeBranchId ?? ""} onChange={e => setActiveBranchId(e.target.value ? parseInt(e.target.value) : null)} style={{ padding: "4px 8px", borderRadius: 6, fontSize: 12, border: "1px solid var(--color-border-tertiary)", background: "var(--color-background-secondary)", color: "var(--color-text-primary)", cursor: "pointer", maxWidth: 200 }}>
+              <select value={activeBranchId ?? ""} onChange={e => setActiveBranchId(e.target.value ? parseInt(e.target.value) : null)}
+                style={{ padding: "4px 8px", borderRadius: 6, fontSize: 12, border: "1px solid var(--color-border-tertiary)", background: "var(--color-background-secondary)", color: "var(--color-text-primary)", cursor: "pointer", maxWidth: 200 }}>
                 {role === "superadmin" && <option value="">All branches</option>}
                 {branches.map(b => (
                   <option key={b.branch_id} value={b.branch_id}>
@@ -422,7 +354,6 @@ export default function POSLayout({ children, activePage, onNavigate, onLogout, 
         <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>{children}</div>
       </div>
 
-      {/* Modals */}
       {showSignOut && <SignOutModal user={user} onConfirm={() => { setShowSignOut(false); onLogout(); }} onCancel={() => setShowSignOut(false)} />}
       {showChangePwd && <ChangePwdModal pwdForm={pwdForm} setPwdForm={setPwdForm} pwdLoading={pwdLoading} pwdError={pwdError} pwdSuccess={pwdSuccess} onSubmit={handleChangePwd} onClose={() => setShowChangePwd(false)} />}
       <OfflineIndicator />
@@ -430,7 +361,6 @@ export default function POSLayout({ children, activePage, onNavigate, onLogout, 
   );
 }
 
-// ── Shared modal components ───────────────────────────────────────────────────
 function SignOutModal({ user, onConfirm, onCancel }) {
   return (
     <div style={overlayStyle}>

@@ -17,6 +17,7 @@ export default function BusinessSettingsPage() {
 
   const [form, setForm] = useState({
     name: "", address: "", phone: "", email: "", owner_name: "", brand_color: "#185FA5",
+    report_hour: 20,
   });
 
   // Logo state
@@ -57,6 +58,7 @@ export default function BusinessSettingsPage() {
         email:       res.data.email       || "",
         owner_name:  res.data.owner_name  || "",
         brand_color: res.data.brand_color || "#185FA5",
+        report_hour: res.data.report_hour ?? 20,
       });
     } catch (err) {
       setError(err.response?.data?.detail || "Failed to load business settings.");
@@ -323,6 +325,34 @@ export default function BusinessSettingsPage() {
             <input style={formInput} value={form.owner_name} onChange={e => setForm(f => ({ ...f, owner_name: e.target.value }))} placeholder="e.g. Alhaji Musa" />
           </Field>
         </div>
+      </div>
+
+      {/* ── WhatsApp report time ── */}
+      <div style={sectionCard}>
+        <div style={sectionTitle}>WhatsApp daily report time</div>
+        <div style={{ fontSize: 12, color: "var(--color-text-secondary)", marginBottom: 14 }}>
+          Choose what time ProfitTrack sends your daily sales report on WhatsApp. Lagos time (WAT).
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+          <select
+            value={form.report_hour}
+            onChange={e => setForm(f => ({ ...f, report_hour: parseInt(e.target.value) }))}
+            style={{ ...formInput, maxWidth: 220, marginTop: 0 }}
+          >
+            {[18,19,20,21,22,23].map(h => {
+              const label = h === 20 ? `${h}:00 — 8:00 PM (default)` : `${h}:00 — ${h - 12}:00 PM`;
+              return <option key={h} value={h}>{label}</option>;
+            })}
+          </select>
+          <div style={{ fontSize: 12, color: "var(--color-text-tertiary)", lineHeight: 1.6 }}>
+            Report includes today's sales, profit,<br />top products, low stock and expiry alerts.
+          </div>
+        </div>
+        {form.report_hour !== (branding?.report_hour ?? 20) && (
+          <div style={{ marginTop: 10, fontSize: 12, color: "#3B6D11", background: "#EAF3DE", borderRadius: 8, padding: "8px 12px" }}>
+            ✓ Report time will change to {form.report_hour}:00 Lagos time after saving.
+          </div>
+        )}
       </div>
 
       {/* ── Invoice preview ── */}

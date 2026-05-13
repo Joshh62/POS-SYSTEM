@@ -73,6 +73,48 @@ def _business_qualifies_for_report(business) -> bool:
     return False
 
 
+def send_whatsapp_report_for_hour(db: Session, hour: int):
+    """
+    Called by scheduler at the top of every hour.
+    Sends reports to all qualifying businesses whose report_hour matches
+    the current Lagos hour. Default report_hour = 20 (8PM).
+    """
+    from app import models
+
+    businesses = db.query(models.Business).filter(
+        models.Business.is_active == True,
+        models.Business.phone.isnot(None),
+        models.Business.report_hour == hour,
+    ).all()
+
+    qualifying = [b for b in businesses if _business_qualifies_for_report(b)]
+
+    if not qualifying:
+        print(f"[WhatsApp] Hour {hour:02d}: no businesses scheduled")
+        return
+
+    client = _twilio_client()
+    if not client:
+        print("[WhatsApp] Missing Twilio credentials")
+        return
+
+    sent = failed = 0
+    for biz in qualifying:
+        to_number = _get_admin_phone(biz, db)
+        if not to_number:
+            continue
+        try:
+            body    = build_daily_report(db, biz)
+            message = client.messages.create(from_=FROM_NUMBER, to=to_number, body=body)
+            sent += 1
+            print(f"[WhatsApp] Report → {biz.name} ({to_number}) SID: {message.sid}")
+        except Exception as e:
+            failed += 1
+            print(f"[WhatsApp] Failed → {biz.name}: {e}")
+
+    print(f"[WhatsApp] Hour {hour:02d}: {sent} sent, {failed} failed")
+
+
 def _get_all_qualifying_businesses(db: Session):
     """Returns all businesses that should receive WhatsApp reports today."""
     from app import models
