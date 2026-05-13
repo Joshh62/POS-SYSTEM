@@ -74,7 +74,7 @@ app.include_router(loyalty.router)
 app.include_router(analytics.router)
 app.include_router(payments.router)
 
-@app.get("/health", tags=["System"])
+@app.api_route("/health", methods=["GET", "HEAD"], tags=["System"])
 def health():
     return {"status": "ok", "version": "1.0.0"}
 
@@ -85,6 +85,6 @@ def trigger_whatsapp_report(db: Session = Depends(get_db)):
     sid = send_whatsapp_report(db)
     return {"message": "Report sent", "sid": sid}
 
-@app.get("/")
+@app.api_route("/", methods=["GET", "HEAD"])
 def root():
     return {"service": "ProfitTrack API", "status": "ok"}
