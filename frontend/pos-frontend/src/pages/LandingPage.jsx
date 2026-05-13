@@ -410,8 +410,8 @@ export default function LandingPage({ onStart }) {
         <div className="pt-pricing-grid" style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", border: "1px solid rgba(200,130,10,0.14)", borderRadius: 16, overflow: "hidden" }}>
           {[
             {name:"Solo",price:"₦5,000",per:"/mo",annual:"₦50,000/yr",bg:"#fff",features:["1 branch","1 admin user","Full POS checkout","Inventory tracking","Sales history","Reports"]},
-            {name:"Starter",price:"₦12,000",per:"/mo",annual:"₦120,000/yr",bg:"#fff",features:["1 branch","3 staff accounts","Everything in Solo","Expense tracking","Loyalty programme","Credit management","Bulk import"]},
-            {name:"Business",price:"₦25,000",per:"/mo",annual:"₦250,000/yr",bg:DARK,hot:true,features:["3 branches","10 staff accounts","Everything in Starter","Analytics dashboard","WhatsApp reports","Multi-branch management"]},
+            {name:"Starter",price:"₦12,000",per:"/mo",annual:"₦120,000/yr",bg:DARK,hot:true,features:["1 branch","3 staff accounts","Everything in Solo","Expense tracking","Loyalty programme","Credit management","Bulk import"]},
+            {name:"Business",price:"₦25,000",per:"/mo",annual:"₦250,000/yr",bg:"#fff",features:["3 branches","10 staff accounts","Everything in Starter","Analytics dashboard","WhatsApp reports","Multi-branch management"]},
             {name:"Enterprise",price:"₦50,000",per:"/mo",annual:"₦500,000/yr",bg:"#fff",features:["Unlimited branches","Unlimited staff","Everything in Business","White-label branding","Custom invoice design","Priority support"]},
           ].map((plan,i) => (
             <div key={i} style={{ background: plan.bg, padding: "28px 20px", position: "relative", borderRight: i<3?"1px solid rgba(200,130,10,0.1)":"none" }}>
