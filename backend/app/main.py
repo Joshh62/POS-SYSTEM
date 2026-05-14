@@ -1,11 +1,37 @@
+# ── Sentry — must be initialised BEFORE FastAPI app is created ───────────────
+import sentry_sdk
+from sentry_sdk.integrations.fastapi import FastApiIntegration
+from sentry_sdk.integrations.sqlalchemy import SqlalchemyIntegration
+import os
+
+sentry_dsn = os.getenv("SENTRY_DSN")
+if sentry_dsn:
+    sentry_sdk.init(
+        dsn=sentry_dsn,
+        integrations=[
+            FastApiIntegration(transaction_style="endpoint"),
+            SqlalchemyIntegration(),
+        ],
+        traces_sample_rate=0.1,       # 10% of requests traced — stays within free tier
+        environment=os.getenv("ENVIRONMENT", "production"),
+        release="profittrack@1.0.0",
+        send_default_pii=False,       # GDPR safe — no personal data sent to Sentry
+    )
+    print("[Sentry] Error tracking active")
+else:
+    print("[Sentry] SENTRY_DSN not set — error tracking disabled")
+
+# ── Imports ───────────────────────────────────────────────────────────────────
+import time
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
+from sqlalchemy import text
 
 from app.routers import sales, products, inventory, reports, expenses
 from app.routers import auth, customers, suppliers, purchases, category
-from app.database import get_db
+from app.database import get_db, SessionLocal
 from app.routers import debts
 from app.routers import businesses
 from app.routers import admin_tools
@@ -14,7 +40,7 @@ from app.routers import loyalty
 from app.routers import analytics
 from app.routers import payments
 
-from app.middleware.rls_middleware import RLSMiddleware  # ✅ RLS import
+from app.middleware.rls_middleware import RLSMiddleware
 
 
 @asynccontextmanager
@@ -35,9 +61,7 @@ app = FastAPI(
 )
 
 # ── RLS middleware — must be added BEFORE CORSMiddleware ─────────────────────
-# Sets app.current_business_id on every DB connection based on the JWT token.
-# This is what enforces PostgreSQL Row Level Security on every query.
-app.add_middleware(RLSMiddleware)  # ✅ RLS middleware
+app.add_middleware(RLSMiddleware)
 
 # ── CORS ──────────────────────────────────────────────────────────────────────
 app.add_middleware(
@@ -74,17 +98,41 @@ app.include_router(loyalty.router)
 app.include_router(analytics.router)
 app.include_router(payments.router)
 
+# ── Health check ──────────────────────────────────────────────────────────────
 @app.api_route("/health", methods=["GET", "HEAD"], tags=["System"])
-def health():
-    return {"status": "ok", "version": "1.0.0"}
+def health_check():
+    """
+    Health check for UptimeRobot and internal monitoring.
+    Tests database connectivity. Always returns HTTP 200.
+    """
+    start = time.time()
+    try:
+        db = SessionLocal()
+        db.execute(text("SELECT 1"))
+        db.close()
+        db_status  = "ok"
+        db_latency = round((time.time() - start) * 1000, 1)
+    except Exception as e:
+        db_status  = f"error: {str(e)}"
+        db_latency = None
 
+    return {
+        "status":        "ok" if db_status == "ok" else "degraded",
+        "database":      db_status,
+        "db_latency_ms": db_latency,
+        "timestamp":     time.time(),
+        "service":       "profittrack-api",
+        "version":       "1.0.0",
+    }
 
+# ── Root ──────────────────────────────────────────────────────────────────────
+@app.api_route("/", methods=["GET", "HEAD"])
+def root():
+    return {"service": "ProfitTrack API", "status": "ok"}
+
+# ── WhatsApp report trigger ───────────────────────────────────────────────────
 @app.post("/reports/send-whatsapp", tags=["Reports"])
 def trigger_whatsapp_report(db: Session = Depends(get_db)):
     from app.whatsapp_report import send_whatsapp_report
     sid = send_whatsapp_report(db)
     return {"message": "Report sent", "sid": sid}
-
-@app.api_route("/", methods=["GET", "HEAD"])
-def root():
-    return {"service": "ProfitTrack API", "status": "ok"}
