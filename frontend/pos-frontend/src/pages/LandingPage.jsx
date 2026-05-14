@@ -2,11 +2,20 @@ import { useState, useEffect, useRef } from "react";
 import SignupPage        from "./SignupPage";
 import PWAInstallBanner  from "../components/PWAInstallBanner";
 
-const WHATSAPP_NUMBER = "2348154586355";
+const WHATSAPP_NUMBER = "+234 901 298 4122";
 const WHATSAPP_MSG    = encodeURIComponent("Hi, I'd like to learn more about ProfitTrack POS for my business.");
 const WHATSAPP_URL    = `https://wa.me/${WHATSAPP_NUMBER}?text=${WHATSAPP_MSG}`;
 const DEMO_MSG        = encodeURIComponent("Hi, I'd like to request a free demo of ProfitTrack POS.");
 const DEMO_URL        = `https://wa.me/${WHATSAPP_NUMBER}?text=${DEMO_MSG}`;
+
+// ── Hosted PDFs (Google Drive) ────────────────────────────────────────────────
+const GETTING_STARTED_URL = "https://drive.google.com/file/d/1onD_h2rL_R2K04W1DlTyrtbCX_JKsB_s/view?usp=drive_link";
+const PRIVACY_URL         = "https://drive.google.com/file/d/1VtzpgP2qytx5oBLex68hP_a1xk1sq1jJ/view?usp=drive_link";
+const DPA_URL             = "https://drive.google.com/file/d/1oF_6i5TJCbV5h5Y317gJGnYHPpc_EAsx/view?usp=drive_link";
+const HARDWARE_URL        = "https://drive.google.com/file/d/1euQXqURIyLczvo7fA0r4l_sIHGOAAfMA/view?usp=drive_link";
+const REFUND_URL          = "https://drive.google.com/file/d/1OuADp3pfF3MFGtkbUu2AaegeMt_HW6L4/view?usp=drive_link";
+const SECURITY_URL        = "https://drive.google.com/file/d/1IWrmWCG8vJ_SXGKe3aVcoSv2vNZvsssi/view?usp=drive_link";
+const TERMS_URL           = "https://drive.google.com/file/d/1336Enmvm_nEfhnP9IZb7J7Uy65keuXzN/view?usp=drive_link";
 
 const AMBER = "#C8820A";
 const DARK  = "#111111";
@@ -147,7 +156,6 @@ export default function LandingPage({ onStart }) {
   const [showSignup,   setShowSignup]   = useState(false);
   const [signupResult, setSignupResult] = useState(null);
   const [scrolled,     setScrolled]     = useState(false);
-  const [mobileMenu,   setMobileMenu]   = useState(false);
 
   useEffect(() => {
     const h = () => setScrolled(window.scrollY > 40);
@@ -189,14 +197,12 @@ export default function LandingPage({ onStart }) {
           <PTIcon size={28} />
           <span style={{ fontWeight: 700, fontSize: 15, color: DARK }}>ProfitTrack</span>
         </div>
-        {/* Desktop nav links */}
         <div className="pt-nav-links" style={{ display: "flex", gap: 2, alignItems: "center" }}>
           {[["How it works","#how"],["Features","#features"],["Pricing","#pricing"],["FAQ","#faq"]].map(([l,h]) => (
             <a key={l} href={h} style={navLink}>{l}</a>
           ))}
           <a href={WHATSAPP_URL} target="_blank" rel="noreferrer" style={{ ...navLink, color: "#128C7E" }}>WhatsApp</a>
         </div>
-        {/* CTAs */}
         <div className="pt-nav-ctas" style={{ display: "flex", gap: 8, alignItems: "center" }}>
           <button onClick={onStart} style={navLoginBtn}>Login</button>
           <button className="pt-nav-btn-trial" onClick={() => setShowSignup(true)} style={{ ...btnAmber, padding: "8px 16px", fontSize: 13 }}>Start free trial</button>
@@ -224,7 +230,6 @@ export default function LandingPage({ onStart }) {
             <p style={{ fontSize: 12, color: "#aaa" }}>No credit card · 5 minutes setup · Cancel anytime</p>
           </div>
 
-          {/* Dashboard mockup — hidden on mobile via CSS */}
           <div className="pt-hero-mockup" style={{ position: "relative" }}>
             <div style={{ background: "#151515", borderRadius: 16, overflow: "hidden", border: "1px solid rgba(200,130,10,0.18)", boxShadow: "0 24px 80px rgba(0,0,0,0.22)", aspectRatio: "4/3" }}>
               <div style={{ background: "#1a1a1a", padding: "9px 16px", display: "flex", alignItems: "center", gap: 8, borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
@@ -438,10 +443,10 @@ export default function LandingPage({ onStart }) {
           <h2 style={{ ...sH, color: "#fff" }}>Everything you need to get started</h2>
           <div className="pt-res-grid" style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 12, marginTop: 40 }}>
             {[
-              {icon:"📖",title:"Getting started guide",desc:"From registration to your first sale in 30 minutes. Step-by-step walkthrough.",link:null,label:"Coming soon"},
-              {icon:"🖥️",title:"Hardware guide",desc:"Recommended barcode scanners, receipt printers, and counter setups for Nigerian retail.",link:null,label:"Coming soon"},
+              {icon:"📖",title:"Getting started guide",desc:"From registration to your first sale in 30 minutes. Step-by-step walkthrough.",link:GETTING_STARTED_URL,label:"Read guide →",ext:true},
+              {icon:"🖥️",title:"Hardware guide",desc:"Recommended barcode scanners, receipt printers, and counter setups for Nigerian retail.",link:HARDWARE_URL,label:"Read guide →",ext:true},
               {icon:"💳",title:"Plan comparison",desc:"Detailed breakdown of what each plan includes and who it's for.",link:"#pricing",label:"View pricing ↓"},
-              {icon:"🔒",title:"Security & privacy",desc:"How we protect your data: encryption, NDPR compliance, audit logs.",link:null,label:"Coming soon"},
+              {icon:"🔒",title:"Security & privacy",desc:"How we protect your data: encryption, NDPR compliance, audit logs.",link:SECURITY_URL,label:"Read overview →",ext:true},
               {icon:"📱",title:"Video tutorials",desc:"Short screen recordings of each major feature.",link:DEMO_URL,label:"Request demo →",ext:true},
               {icon:"💬",title:"WhatsApp support",desc:"Talk to a real person. Monday–Saturday, 9AM–6PM Lagos time.",link:WHATSAPP_URL,label:"Chat now →",ext:true},
             ].map((r,i) => (
@@ -449,7 +454,10 @@ export default function LandingPage({ onStart }) {
                 <div style={{ fontSize: 24, marginBottom: 9 }}>{r.icon}</div>
                 <div style={{ fontSize: 13, fontWeight: 700, color: "#fff", marginBottom: 5, fontFamily: "Georgia,serif" }}>{r.title}</div>
                 <div style={{ fontSize: 12, color: "rgba(255,255,255,0.4)", lineHeight: 1.7, marginBottom: 12 }}>{r.desc}</div>
-                {r.link?<a href={r.link} target={r.ext?"_blank":"_self"} rel="noreferrer" style={{ fontSize: 12, color: AMBER, fontWeight: 600, textDecoration: "none" }}>{r.label}</a>:<span style={{ fontSize: 11, color: "rgba(255,255,255,0.2)", fontStyle: "italic" }}>{r.label}</span>}
+                {r.link
+                  ? <a href={r.link} target={r.ext?"_blank":"_self"} rel="noreferrer" style={{ fontSize: 12, color: AMBER, fontWeight: 600, textDecoration: "none" }}>{r.label}</a>
+                  : <span style={{ fontSize: 11, color: "rgba(255,255,255,0.2)", fontStyle: "italic" }}>{r.label}</span>
+                }
               </div>
             ))}
           </div>
@@ -506,11 +514,22 @@ export default function LandingPage({ onStart }) {
             </div>
             <div>
               <div style={fH}>Resources</div>
-              {[["Getting started",DEMO_URL,true],["Hardware guide",DEMO_URL,true],["Video tutorials",DEMO_URL,true],["WhatsApp support",WHATSAPP_URL,true]].map(([l,h,e]) => <a key={l} href={h} target={e?"_blank":"_self"} rel="noreferrer" style={fL}>{l}</a>)}
+              {[
+                ["Getting started", GETTING_STARTED_URL, true],
+                ["Hardware guide",  HARDWARE_URL,        true],
+                ["Video tutorials", DEMO_URL,            true],
+                ["WhatsApp support",WHATSAPP_URL,        true],
+              ].map(([l,h,e]) => <a key={l} href={h} target={e?"_blank":"_self"} rel="noreferrer" style={fL}>{l}</a>)}
             </div>
             <div>
               <div style={fH}>Legal</div>
-              {[["Privacy Policy",DEMO_URL,true],["Terms of Service",DEMO_URL,true],["Security Overview",DEMO_URL,true]].map(([l,h,e]) => <a key={l} href={h} target={e?"_blank":"_self"} rel="noreferrer" style={fL}>{l}</a>)}
+              {[
+                ["Privacy Policy",   PRIVACY_URL,  true],
+                ["Terms of Service", TERMS_URL,    true],
+                ["Security Overview",SECURITY_URL, true],
+                ["Refund Policy",    REFUND_URL,   true],
+                ["DPA",              DPA_URL,      true],
+              ].map(([l,h,e]) => <a key={l} href={h} target={e?"_blank":"_self"} rel="noreferrer" style={fL}>{l}</a>)}
             </div>
           </div>
           <div style={{ borderTop: "1px solid rgba(255,255,255,0.05)", paddingTop: 20, display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
