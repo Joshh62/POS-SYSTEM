@@ -6,6 +6,7 @@ import SplashScreen       from "./components/SplashScreen";
 
 import LandingPage          from "./pages/LandingPage";
 import LoginPage            from "./pages/LoginPage";
+import DocsPage             from "./pages/DocsPage";
 import POS                  from "./pages/POS";
 import DashboardPage        from "./pages/DashboardPage";
 import InventoryPage        from "./pages/InventoryPage";
@@ -22,7 +23,10 @@ import AnalyticsPage        from "./pages/AnalyticsPage";
 import BusinessSettingsPage from "./pages/BusinessSettingsPage";
 import PricingPage          from "./pages/PricingPage";
 
-import TrialBanner    from "./components/TrialBanner";
+import TrialBanner from "./components/TrialBanner";
+
+// ── Public route check — /docs loads before auth logic ───────────────────────
+const IS_DOCS_ROUTE = window.location.pathname === "/docs";
 
 export default function App() {
   const [booting, setBooting] = useState(true);
@@ -56,7 +60,10 @@ export default function App() {
     setView("login");
   };
 
-  if (booting)          return <SplashScreen />;
+  // ── Public route — no auth needed ────────────────────────────────────────
+  if (IS_DOCS_ROUTE) return <DocsPage />;
+
+  if (booting)            return <SplashScreen />;
   if (view === "landing") return <LandingPage onStart={() => setView("login")} />;
   if (!isLoggedIn)        return <LoginPage onLogin={handleLogin} />;
 
