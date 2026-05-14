@@ -103,6 +103,40 @@ function Counter({ target, suffix = "", duration = 1800 }) {
   return <span ref={ref}>{val}{suffix}</span>;
 }
 
+// ── Set your YouTube video ID here when ready ─────────────────────────────────
+// From https://www.youtube.com/watch?v=XXXXXXXXXX the ID is XXXXXXXXXX
+// Keep as null to show placeholder until video is ready
+const HERO_VIDEO_ID = null; // ← paste your YouTube video ID here e.g. "dQw4w9WgXcQ"
+
+function YouTubeEmbed({ videoId, title }) {
+  const [playing, setPlaying] = useState(false);
+  if (playing) {
+    return (
+      <div style={{ borderRadius: 14, overflow: "hidden", aspectRatio: "16/9", background: "#000", border: "1px solid rgba(200,130,10,0.3)" }}>
+        <iframe
+          width="100%" height="100%"
+          src={`https://www.youtube.com/embed/${videoId}?autoplay=1&rel=0`}
+          title={title} frameBorder="0"
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+          allowFullScreen style={{ display: "block", width: "100%", height: "100%" }}
+        />
+      </div>
+    );
+  }
+  return (
+    <div onClick={() => setPlaying(true)} style={{ position: "relative", borderRadius: 14, overflow: "hidden", aspectRatio: "16/9", background: "#000", cursor: "pointer", border: "1px solid rgba(200,130,10,0.18)" }}>
+      <img src={`https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`} alt={title}
+        style={{ width: "100%", height: "100%", objectFit: "cover", opacity: 0.85 }} />
+      <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 12, background: "rgba(0,0,0,0.3)" }}>
+        <div style={{ width: 64, height: 64, borderRadius: "50%", background: AMBER, display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 4px 24px rgba(200,130,10,0.5)" }}>
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="white"><path d="M8 5v14l11-7z" /></svg>
+        </div>
+        <div style={{ fontSize: 14, fontWeight: 700, color: "#fff", textAlign: "center", padding: "0 16px" }}>{title}</div>
+      </div>
+    </div>
+  );
+}
+
 function VideoPlaceholder({ title, desc }) {
   const [hov, setHov] = useState(false);
   return (
@@ -346,7 +380,10 @@ export default function LandingPage({ onStart }) {
           <h2 style={{ ...sH, color: "#fff" }}>Watch ProfitTrack work</h2>
           <p style={{ textAlign: "center", color: "rgba(255,255,255,0.4)", fontSize: 13, marginBottom: 40 }}>Video tutorials coming soon — request a live WhatsApp demo anytime.</p>
           <div className="pt-video-grid2" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 14 }}>
-            <VideoPlaceholder title="Making your first sale" desc="POS checkout · barcode scanning · payment methods · PDF receipt" />
+            {HERO_VIDEO_ID
+              ? <YouTubeEmbed videoId={HERO_VIDEO_ID} title="Making your first sale" />
+              : <VideoPlaceholder title="Making your first sale" desc="POS checkout · barcode scanning · payment methods · PDF receipt" />
+            }
             <VideoPlaceholder title="Setting up inventory" desc="Adding products · bulk import · receive stock · reorder alerts" />
           </div>
           <div className="pt-video-grid3" style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 14 }}>
@@ -449,6 +486,7 @@ export default function LandingPage({ onStart }) {
               {icon:"🔒",title:"Security & privacy",desc:"How we protect your data: encryption, NDPR compliance, audit logs.",link:SECURITY_URL,label:"Read overview →",ext:true},
               {icon:"📱",title:"Video tutorials",desc:"Short screen recordings of each major feature.",link:DEMO_URL,label:"Request demo →",ext:true},
               {icon:"💬",title:"WhatsApp support",desc:"Talk to a real person. Monday–Saturday, 9AM–6PM Lagos time.",link:WHATSAPP_URL,label:"Chat now →",ext:true},
+              {icon:"📚",title:"Document library",desc:"All legal and product documents in one place — Privacy Policy, Terms, DPA, Refund Policy, and guides.",link:"/docs",label:"Open library →",ext:false},
             ].map((r,i) => (
               <div key={i} style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.05)", borderRadius: 13, padding: "20px 18px" }}>
                 <div style={{ fontSize: 24, marginBottom: 9 }}>{r.icon}</div>
@@ -515,10 +553,11 @@ export default function LandingPage({ onStart }) {
             <div>
               <div style={fH}>Resources</div>
               {[
-                ["Getting started", GETTING_STARTED_URL, true],
-                ["Hardware guide",  HARDWARE_URL,        true],
-                ["Video tutorials", DEMO_URL,            true],
-                ["WhatsApp support",WHATSAPP_URL,        true],
+                ["Getting started", GETTING_STARTED_URL,           true],
+                ["Hardware guide",  HARDWARE_URL,                  true],
+                ["Document library","/docs",                       false],
+                ["Video tutorials", DEMO_URL,                      true],
+                ["WhatsApp support",WHATSAPP_URL,                  true],
               ].map(([l,h,e]) => <a key={l} href={h} target={e?"_blank":"_self"} rel="noreferrer" style={fL}>{l}</a>)}
             </div>
             <div>
