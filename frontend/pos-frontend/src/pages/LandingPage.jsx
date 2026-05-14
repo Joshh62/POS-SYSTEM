@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import SignupPage        from "./SignupPage";
 import PWAInstallBanner  from "../components/PWAInstallBanner";
 
-const WHATSAPP_NUMBER = "+234 901 298 4122";
+const WHATSAPP_NUMBER = "2348154586355";
 const WHATSAPP_MSG    = encodeURIComponent("Hi, I'd like to learn more about ProfitTrack POS for my business.");
 const WHATSAPP_URL    = `https://wa.me/${WHATSAPP_NUMBER}?text=${WHATSAPP_MSG}`;
 const DEMO_MSG        = encodeURIComponent("Hi, I'd like to request a free demo of ProfitTrack POS.");
@@ -198,7 +198,7 @@ export default function LandingPage({ onStart }) {
           <span style={{ fontWeight: 700, fontSize: 15, color: DARK }}>ProfitTrack</span>
         </div>
         <div className="pt-nav-links" style={{ display: "flex", gap: 2, alignItems: "center" }}>
-          {[["How it works","#how"],["Features","#features"],["Pricing","#pricing"],["FAQ","#faq"]].map(([l,h]) => (
+          {[["How it works","#how"],["Features","#features"],["Pricing","#pricing"],["Resources","#resources"],["FAQ","#faq"]].map(([l,h]) => (
             <a key={l} href={h} style={navLink}>{l}</a>
           ))}
           <a href={WHATSAPP_URL} target="_blank" rel="noreferrer" style={{ ...navLink, color: "#128C7E" }}>WhatsApp</a>
@@ -437,7 +437,7 @@ export default function LandingPage({ onStart }) {
       </section>
 
       {/* ── Resources ── */}
-      <section className="pt-dark-section" style={{ background: DARK, padding: "72px 24px" }}>
+      <section id="resources" className="pt-dark-section" style={{ background: DARK, padding: "72px 24px" }}>
         <div style={{ maxWidth: 1100, margin: "0 auto" }}>
           <p style={{ ...sL, color: AMBER }}>Resources</p>
           <h2 style={{ ...sH, color: "#fff" }}>Everything you need to get started</h2>
@@ -548,5 +548,5 @@ const navLink     = { fontSize: 13, color: "#555", textDecoration: "none", paddi
 const navLoginBtn = { padding: "7px 14px", borderRadius: 8, border: "1px solid rgba(200,130,10,0.25)", background: "transparent", color: AMBER, fontSize: 12, cursor: "pointer", fontFamily: "Georgia,serif" };
 const sL = { fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.12em", color: AMBER, textAlign: "center", marginBottom: 9 };
 const sH = { fontSize: "clamp(20px,3vw,32px)", fontWeight: 700, textAlign: "center", marginBottom: 0, color: DARK, fontFamily: "Georgia,serif" };
-const fH = { fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", color: "rgba(255,255,255,0.35)", marginBottom: 11 };
+const fH = { fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", color: "rgba(255,255,255,0.7)", marginBottom: 11 };
 const fL = { display: "block", fontSize: 12, color: "rgba(255,255,255,0.35)", textDecoration: "none", marginBottom: 8 };
