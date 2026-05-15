@@ -26,31 +26,39 @@ const PLANS = [
 ];
 
 export default function SignupPage({ onSignupSuccess, onBack }) {
-  const [step,       setStep]       = useState(1); // 1=plan, 2=details
-  const [plan,       setPlan]       = useState("starter");
-  const [form,       setForm]       = useState({
+  const [step,    setStep]    = useState(1);
+  const [plan,    setPlan]    = useState("starter");
+  const [form,    setForm]    = useState({
     business_name: "", address: "", phone: "",
     full_name: "", username: "", password: "", confirm_password: "", email: "",
   });
-  const [loading,    setLoading]    = useState(false);
-  const [error,      setError]      = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error,   setError]   = useState(null);
 
   const selectedPlan = PLANS.find(p => p.key === plan);
+
+  // ── Live validation states ───────────────────────────────────────────────
+  const pwdLength  = form.password.length;
+  const pwdOk      = pwdLength >= 6;
+  const confirmTouched = form.confirm_password.length > 0;
+  const pwdMatch   = form.password === form.confirm_password;
+  const emailOk    = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email);
 
   const handleSubmit = async () => {
     if (!form.business_name.trim()) { setError("Business name is required."); return; }
     if (!form.full_name.trim())     { setError("Your full name is required."); return; }
     if (!form.username.trim())      { setError("Username is required."); return; }
-    if (!form.email.trim())         { setError("Email is required."); return; }
-    if (form.password.length < 6)   { setError("Password must be at least 6 characters."); return; }
-    if (form.password !== form.confirm_password) { setError("Passwords do not match."); return; }
+    if (!form.email.trim())         { setError("Email address is required."); return; }
+    if (!emailOk)                   { setError("Please enter a valid email address."); return; }
+    if (!pwdOk)                     { setError("Password must be at least 6 characters."); return; }
+    if (!pwdMatch)                  { setError("Passwords do not match."); return; }
 
     setLoading(true); setError(null);
     try {
       const res = await api.post("/payments/signup", {
         business_name: form.business_name.trim(),
-        address:       form.address.trim() || null,
-        phone:         form.phone.trim()   || null,
+        address:       form.address.trim()  || null,
+        phone:         form.phone.trim()    || null,
         full_name:     form.full_name.trim(),
         username:      form.username.trim().toLowerCase(),
         password:      form.password,
@@ -65,7 +73,7 @@ export default function SignupPage({ onSignupSuccess, onBack }) {
 
   const f = (key) => ({
     value: form[key],
-    onChange: (e) => setForm(f => ({ ...f, [key]: e.target.value })),
+    onChange: (e) => setForm(prev => ({ ...prev, [key]: e.target.value })),
     style: inputS,
   });
 
@@ -91,7 +99,7 @@ export default function SignupPage({ onSignupSuccess, onBack }) {
           <StepDot n={2} label="Your details" active={step === 2} done={false} />
         </div>
 
-        {/* Step 1 — Plan selection */}
+        {/* ── Step 1 — Plan selection ── */}
         {step === 1 && (
           <>
             <div style={pageTitle}>Choose your plan</div>
@@ -118,9 +126,9 @@ export default function SignupPage({ onSignupSuccess, onBack }) {
                     </div>
                   </div>
                   <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                    {p.features.map((f, i) => (
+                    {p.features.map((feat, i) => (
                       <div key={i} style={{ fontSize: 12, color: "#444", display: "flex", alignItems: "center", gap: 6 }}>
-                        <span style={{ color: "#3B6D11", fontSize: 11 }}>✓</span> {f}
+                        <span style={{ color: "#3B6D11", fontSize: 11 }}>✓</span> {feat}
                       </div>
                     ))}
                   </div>
@@ -143,7 +151,7 @@ export default function SignupPage({ onSignupSuccess, onBack }) {
           </>
         )}
 
-        {/* Step 2 — Details */}
+        {/* ── Step 2 — Details ── */}
         {step === 2 && (
           <>
             <div style={pageTitle}>Set up your account</div>
@@ -159,10 +167,13 @@ export default function SignupPage({ onSignupSuccess, onBack }) {
             {error && <div style={errorBox}>{error}</div>}
 
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+              {/* Business name */}
               <div style={{ gridColumn: "1 / -1" }}>
                 <FieldLabel>Business name *</FieldLabel>
                 <input placeholder="e.g. Wear Haus" {...f("business_name")} />
               </div>
+
+              {/* Phone + address */}
               <div>
                 <FieldLabel>Phone number</FieldLabel>
                 <input placeholder="08012345678" {...f("phone")} />
@@ -172,10 +183,12 @@ export default function SignupPage({ onSignupSuccess, onBack }) {
                 <input placeholder="e.g. Wuse Market, Abuja" {...f("address")} />
               </div>
 
+              {/* Divider */}
               <div style={{ gridColumn: "1 / -1", borderTop: "1px solid #eee", paddingTop: 14, marginTop: 4 }}>
                 <div style={{ fontSize: 12, fontWeight: 600, color: "#1a1a1a", marginBottom: 10 }}>Your admin account</div>
               </div>
 
+              {/* Full name + email */}
               <div>
                 <FieldLabel>Your full name *</FieldLabel>
                 <input placeholder="e.g. Alhaji Musa" {...f("full_name")} />
@@ -183,31 +196,72 @@ export default function SignupPage({ onSignupSuccess, onBack }) {
               <div>
                 <FieldLabel>Email address *</FieldLabel>
                 <input type="email" placeholder="you@email.com" {...f("email")} />
+                {form.email.length > 0 && !emailOk && (
+                  <div style={hintErr}>⚠ Enter a valid email address</div>
+                )}
+                {form.email.length > 0 && emailOk && (
+                  <div style={hintOk}>✓ Valid email</div>
+                )}
               </div>
-              <div>
+
+              {/* Username */}
+              <div style={{ gridColumn: "1 / -1" }}>
                 <FieldLabel>Username *</FieldLabel>
-                <input placeholder="e.g. musa_wearhaus" {...f("username")} />
+                <input placeholder="e.g. musa_wearhaus (no spaces)" {...f("username")} />
+                {form.username.length > 0 && /\s/.test(form.username) && (
+                  <div style={hintErr}>⚠ Username cannot contain spaces</div>
+                )}
               </div>
-              <div style={{ gridColumn: "1 / -1", height: 0 }} />
+
+              {/* Password */}
               <div>
                 <FieldLabel>Password * (min 6 characters)</FieldLabel>
                 <input type="password" placeholder="Create a password" {...f("password")} />
+                {pwdLength > 0 && !pwdOk && (
+                  <div style={hintErr}>⚠ At least 6 characters needed ({pwdLength}/6)</div>
+                )}
+                {pwdOk && (
+                  <div style={hintOk}>✓ Password length is good</div>
+                )}
               </div>
+
+              {/* Confirm password */}
               <div>
                 <FieldLabel>Confirm password *</FieldLabel>
-                <input type="password" placeholder="Repeat password" {...f("confirm_password")} />
+                <input
+                  type="password"
+                  placeholder="Repeat password"
+                  style={{
+                    ...inputS,
+                    borderColor: confirmTouched
+                      ? pwdMatch ? "#3B6D11" : "#A32D2D"
+                      : "#e0e0e0",
+                  }}
+                  value={form.confirm_password}
+                  onChange={e => setForm(prev => ({ ...prev, confirm_password: e.target.value }))}
+                />
+                {confirmTouched && !pwdMatch && (
+                  <div style={hintErr}>⚠ Passwords do not match</div>
+                )}
+                {confirmTouched && pwdMatch && pwdOk && (
+                  <div style={hintOk}>✓ Passwords match</div>
+                )}
               </div>
             </div>
 
             <div style={{ fontSize: 12, color: "#888", marginTop: 12, lineHeight: 1.6 }}>
-              By creating an account you agree to our terms of service. Your 14-day free trial starts immediately — no credit card required. You'll be prompted to add payment details before your trial ends.
+              By creating an account you agree to our terms of service. Your 14-day free trial starts immediately — no credit card required.
             </div>
 
             <div style={{ display: "flex", gap: 10, marginTop: 16 }}>
               <button onClick={() => { setStep(1); setError(null); }} style={backBtnForm}>
                 ← Back
               </button>
-              <button onClick={handleSubmit} disabled={loading} style={{ ...primaryBtn, flex: 1, opacity: loading ? 0.7 : 1 }}>
+              <button
+                onClick={handleSubmit}
+                disabled={loading || !pwdOk || !pwdMatch || !emailOk}
+                style={{ ...primaryBtn, flex: 1, opacity: (loading || !pwdOk || !pwdMatch || !emailOk) ? 0.6 : 1 }}
+              >
                 {loading ? "Creating your account..." : "Start free trial →"}
               </button>
             </div>
@@ -239,18 +293,20 @@ function FieldLabel({ children }) {
   return <label style={{ display: "block", fontSize: 12, fontWeight: 500, color: "#555", marginBottom: 5 }}>{children}</label>;
 }
 
-const page       = { minHeight: "100vh", background: "#F8FAFC", fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" };
-const header     = { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 40px", background: "#fff", borderBottom: "1px solid #eee", position: "sticky", top: 0, zIndex: 100 };
-const logoBox    = { width: 36, height: 36, background: "#185FA5", borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18 };
-const backBtn    = { background: "none", border: "1px solid #e0e0e0", borderRadius: 8, padding: "7px 14px", fontSize: 13, cursor: "pointer", color: "#555" };
+const page        = { minHeight: "100vh", background: "#F8FAFC", fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" };
+const header      = { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 40px", background: "#fff", borderBottom: "1px solid #eee", position: "sticky", top: 0, zIndex: 100 };
+const logoBox     = { width: 36, height: 36, background: "#185FA5", borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18 };
+const backBtn     = { background: "none", border: "1px solid #e0e0e0", borderRadius: 8, padding: "7px 14px", fontSize: 13, cursor: "pointer", color: "#555" };
 const backBtnForm = { padding: "11px 20px", borderRadius: 10, border: "1px solid #e0e0e0", background: "#fff", color: "#555", fontSize: 14, cursor: "pointer" };
-const container  = { maxWidth: 680, margin: "40px auto", padding: "0 24px 60px" };
-const stepRow    = { display: "flex", alignItems: "flex-start", marginBottom: 32 };
-const pageTitle  = { fontSize: 22, fontWeight: 700, color: "#1a1a1a", marginBottom: 6 };
-const pageSub    = { fontSize: 13, color: "#666", marginBottom: 24, lineHeight: 1.6 };
-const planGrid   = { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 16 };
-const planCard   = { borderRadius: 12, padding: "16px 14px", transition: "all 0.15s" };
+const container   = { maxWidth: 680, margin: "40px auto", padding: "0 24px 60px" };
+const stepRow     = { display: "flex", alignItems: "flex-start", marginBottom: 32 };
+const pageTitle   = { fontSize: 22, fontWeight: 700, color: "#1a1a1a", marginBottom: 6 };
+const pageSub     = { fontSize: 13, color: "#666", marginBottom: 24, lineHeight: 1.6 };
+const planGrid    = { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 16 };
+const planCard    = { borderRadius: 12, padding: "16px 14px", transition: "all 0.15s" };
 const popularBadge = { position: "absolute", top: -10, left: "50%", transform: "translateX(-50%)", background: "#185FA5", color: "#fff", fontSize: 10, fontWeight: 700, padding: "2px 12px", borderRadius: 20, whiteSpace: "nowrap" };
-const primaryBtn = { width: "100%", padding: "13px 0", borderRadius: 10, border: "none", background: "#185FA5", color: "#fff", fontSize: 15, fontWeight: 600, cursor: "pointer", marginTop: 16 };
-const inputS     = { display: "block", width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid #e0e0e0", fontSize: 13, background: "#fff", color: "#1a1a1a", boxSizing: "border-box", outline: "none", fontFamily: "inherit", marginTop: 0 };
-const errorBox   = { background: "#FCEBEB", color: "#A32D2D", borderRadius: 8, padding: "10px 14px", fontSize: 13, marginBottom: 16 };
+const primaryBtn  = { width: "100%", padding: "13px 0", borderRadius: 10, border: "none", background: "#185FA5", color: "#fff", fontSize: 15, fontWeight: 600, cursor: "pointer", marginTop: 16 };
+const inputS      = { display: "block", width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid #e0e0e0", fontSize: 13, background: "#fff", color: "#1a1a1a", boxSizing: "border-box", outline: "none", fontFamily: "inherit", marginTop: 0 };
+const errorBox    = { background: "#FCEBEB", color: "#A32D2D", borderRadius: 8, padding: "10px 14px", fontSize: 13, marginBottom: 16 };
+const hintErr     = { fontSize: 11, color: "#A32D2D", marginTop: 4, fontWeight: 500 };
+const hintOk      = { fontSize: 11, color: "#3B6D11", marginTop: 4, fontWeight: 500 };
