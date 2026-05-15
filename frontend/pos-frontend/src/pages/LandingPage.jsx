@@ -9,13 +9,13 @@ const DEMO_MSG        = encodeURIComponent("Hi, I'd like to request a free demo 
 const DEMO_URL        = `https://wa.me/${WHATSAPP_NUMBER}?text=${DEMO_MSG}`;
 
 // ── Hosted PDFs (Google Drive) ────────────────────────────────────────────────
-const GETTING_STARTED_URL = "https://drive.google.com/file/d/1onD_h2rL_R2K04W1DlTyrtbCX_JKsB_s/view?usp=drive_link";
-const PRIVACY_URL         = "https://drive.google.com/file/d/1VtzpgP2qytx5oBLex68hP_a1xk1sq1jJ/view?usp=drive_link";
-const DPA_URL             = "https://drive.google.com/file/d/1oF_6i5TJCbV5h5Y317gJGnYHPpc_EAsx/view?usp=drive_link";
-const HARDWARE_URL        = "https://drive.google.com/file/d/1euQXqURIyLczvo7fA0r4l_sIHGOAAfMA/view?usp=drive_link";
-const REFUND_URL          = "https://drive.google.com/file/d/1OuADp3pfF3MFGtkbUu2AaegeMt_HW6L4/view?usp=drive_link";
-const SECURITY_URL        = "https://drive.google.com/file/d/1IWrmWCG8vJ_SXGKe3aVcoSv2vNZvsssi/view?usp=drive_link";
-const TERMS_URL           = "https://drive.google.com/file/d/1336Enmvm_nEfhnP9IZb7J7Uy65keuXzN/view?usp=drive_link";
+const GETTING_STARTED_URL = "/docs";
+const PRIVACY_URL         = "/docs";
+const DPA_URL             = "/docs";
+const HARDWARE_URL        = "/docs";
+const REFUND_URL          = "/docs";
+const SECURITY_URL        = "/docs";
+const TERMS_URL           = "/docs";
 
 const AMBER = "#C8820A";
 const DARK  = "#111111";
@@ -480,10 +480,10 @@ export default function LandingPage({ onStart }) {
           <h2 style={{ ...sH, color: "#fff" }}>Everything you need to get started</h2>
           <div className="pt-res-grid" style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 12, marginTop: 40 }}>
             {[
-              {icon:"📖",title:"Getting started guide",desc:"From registration to your first sale in 30 minutes. Step-by-step walkthrough.",link:GETTING_STARTED_URL,label:"Read guide →",ext:true},
-              {icon:"🖥️",title:"Hardware guide",desc:"Recommended barcode scanners, receipt printers, and counter setups for Nigerian retail.",link:HARDWARE_URL,label:"Read guide →",ext:true},
+              {icon:"📖",title:"Getting started guide",desc:"From registration to your first sale in 30 minutes. Step-by-step walkthrough.",link:GETTING_STARTED_URL,label:"Read guide →",ext:false},
+              {icon:"🖥️",title:"Hardware guide",desc:"Recommended barcode scanners, receipt printers, and counter setups for Nigerian retail.",link:HARDWARE_URL,label:"Read guide →",ext:false},
               {icon:"💳",title:"Plan comparison",desc:"Detailed breakdown of what each plan includes and who it's for.",link:"#pricing",label:"View pricing ↓"},
-              {icon:"🔒",title:"Security & privacy",desc:"How we protect your data: encryption, NDPR compliance, audit logs.",link:SECURITY_URL,label:"Read overview →",ext:true},
+              {icon:"🔒",title:"Security & privacy",desc:"How we protect your data: encryption, NDPR compliance, audit logs.",link:SECURITY_URL,label:"Read overview →",ext:false},
               {icon:"📱",title:"Video tutorials",desc:"Short screen recordings of each major feature.",link:DEMO_URL,label:"Request demo →",ext:true},
               {icon:"💬",title:"WhatsApp support",desc:"Talk to a real person. Monday–Saturday, 9AM–6PM Lagos time.",link:WHATSAPP_URL,label:"Chat now →",ext:true},
               {icon:"📚",title:"Document library",desc:"All legal and product documents in one place — Privacy Policy, Terms, DPA, Refund Policy, and guides.",link:"/docs",label:"Open library →",ext:false},
@@ -553,8 +553,8 @@ export default function LandingPage({ onStart }) {
             <div>
               <div style={fH}>Resources</div>
               {[
-                ["Getting started", GETTING_STARTED_URL,           true],
-                ["Hardware guide",  HARDWARE_URL,                  true],
+                ["Getting started", GETTING_STARTED_URL, false],
+                ["Hardware guide",  HARDWARE_URL,  false],
                 ["Document library","/docs",                       false],
                 ["Video tutorials", DEMO_URL,                      true],
                 ["WhatsApp support",WHATSAPP_URL,                  true],
@@ -563,11 +563,11 @@ export default function LandingPage({ onStart }) {
             <div>
               <div style={fH}>Legal</div>
               {[
-                ["Privacy Policy",   PRIVACY_URL,  true],
-                ["Terms of Service", TERMS_URL,    true],
-                ["Security Overview",SECURITY_URL, true],
-                ["Refund Policy",    REFUND_URL,   true],
-                ["DPA",              DPA_URL,      true],
+                ["Privacy Policy",   PRIVACY_URL,  false],
+                ["Terms of Service", TERMS_URL,    false],
+                ["Security Overview",SECURITY_URL, false],
+                ["Refund Policy",    REFUND_URL,   false],
+                ["DPA",              DPA_URL,      false],
               ].map(([l,h,e]) => <a key={l} href={h} target={e?"_blank":"_self"} rel="noreferrer" style={fL}>{l}</a>)}
             </div>
           </div>
