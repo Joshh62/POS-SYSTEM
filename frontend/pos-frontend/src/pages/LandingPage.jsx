@@ -269,7 +269,7 @@ export default function LandingPage({ onStart }) {
               <img
                 src="/images/hero.png"
                 alt="Nigerian shop owner using ProfitTrack POS"
-                style={{ width: "100%", height: "100%", objectFit: "cover", display: "block", aspectRatio: "4/3" }}
+                style={{ width: "100%", height: "auto", display: "block", maxHeight: 480, objectFit: "cover" }}
               />
             </div>
             <div style={{ position: "absolute", bottom: -16, left: -16, background: "#fff", borderRadius: 12, padding: "10px 14px", boxShadow: "0 6px 28px rgba(0,0,0,0.1)", border: "1px solid rgba(200,130,10,0.12)", display: "flex", alignItems: "center", gap: 9 }}>
@@ -289,7 +289,7 @@ export default function LandingPage({ onStart }) {
               <img
                 src="/images/pain.png"
                 alt="Frustrated Nigerian shop owner looking at inventory"
-                style={{ width: "100%", display: "block", objectFit: "cover", aspectRatio: "1/1" }}
+                style={{ width: "100%", height: 380, display: "block", objectFit: "cover", objectPosition: "center" }}
               />
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
@@ -355,7 +355,7 @@ export default function LandingPage({ onStart }) {
           ].map((s,i) => (
             <div key={i} style={{ padding: i===1?"0":"30px 26px", background: i===1?DARK:"#fff", borderRight: i<2?"1px solid rgba(200,130,10,0.08)":"none", overflow: "hidden" }}>
               {i === 1 ? (
-                <img src="/images/shop-owner.png" alt="Shop owner using ProfitTrack" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block", minHeight: 260 }} />
+                <img src="/images/shop-owner.png" alt="Shop owner using ProfitTrack" style={{ width: "100%", height: 300, objectFit: "cover", objectPosition: "center top", display: "block" }} />
               ) : (
                 <>
                   <div style={{ fontSize: 40, fontWeight: 700, color: "rgba(200,130,10,0.12)", fontFamily: "Georgia,serif", marginBottom: 12, lineHeight: 1 }}>{s.n}</div>
@@ -396,7 +396,7 @@ export default function LandingPage({ onStart }) {
         <div className="pt-feat-grid" style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 12, marginTop: 40 }}>
           <FeatureCard icon="🧾" title="Fast POS checkout" tag="All plans" text="Scan barcodes, add products, complete sales in seconds. Cash, transfer, card, or credit. Branded PDF invoice generated instantly." />
           <div style={{ background: "#fff", border: "1px solid rgba(200,130,10,0.1)", borderRadius: 14, overflow: "hidden", transition: "all 0.2s" }}>
-            <img src="/images/staff.png" alt="Staff accountability with ProfitTrack" style={{ width: "100%", aspectRatio: "16/9", objectFit: "cover", display: "block" }} />
+            <img src="/images/staff.png" alt="Staff accountability with ProfitTrack" style={{ width: "100%", height: 200, objectFit: "cover", objectPosition: "center", display: "block" }} />
             <div style={{ padding: "16px 20px" }}>
               <span style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", color: AMBER, background: "rgba(200,130,10,0.1)", padding: "2px 9px", borderRadius: 20, display: "inline-block", marginBottom: 8 }}>All plans</span>
               <div style={{ fontSize: 14, fontWeight: 700, color: DARK, marginBottom: 7, fontFamily: "Georgia,serif" }}>Staff accountability</div>
@@ -407,7 +407,7 @@ export default function LandingPage({ onStart }) {
           <FeatureCard icon="📊" title="Analytics dashboard" tag="Business+" text="Revenue trends, peak hours, best sellers by margin, dead stock alerts, cashier performance." />
           <FeatureCard icon="💬" title="WhatsApp daily report" tag="Business+" text="Every night at 8PM: sales, profit, top products, low stock, expiry warnings. Sent to your phone automatically." />
           <div style={{ background: "#fff", border: "1px solid rgba(200,130,10,0.1)", borderRadius: 14, overflow: "hidden", transition: "all 0.2s" }}>
-            <img src="/images/multi-branch.png" alt="Multi-branch management with ProfitTrack" style={{ width: "100%", aspectRatio: "16/9", objectFit: "cover", display: "block" }} />
+            <img src="/images/multi-branch.png" alt="Multi-branch management with ProfitTrack" style={{ width: "100%", height: 200, objectFit: "cover", objectPosition: "center", display: "block" }} />
             <div style={{ padding: "16px 20px" }}>
               <span style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", color: AMBER, background: "rgba(200,130,10,0.1)", padding: "2px 9px", borderRadius: 20, display: "inline-block", marginBottom: 8 }}>Business+</span>
               <div style={{ fontSize: 14, fontWeight: 700, color: DARK, marginBottom: 7, fontFamily: "Georgia,serif" }}>Multi-branch</div>
@@ -441,7 +441,7 @@ export default function LandingPage({ onStart }) {
               <img
                 src="/images/whatsapp.png"
                 alt="Shop owner reading WhatsApp daily report at night"
-                style={{ width: "100%", display: "block", objectFit: "cover" }}
+                style={{ width: "100%", height: "auto", display: "block", maxHeight: 520 }}
               />
             </div>
           </div>
