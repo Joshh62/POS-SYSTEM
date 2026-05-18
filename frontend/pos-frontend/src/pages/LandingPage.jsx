@@ -265,32 +265,12 @@ export default function LandingPage({ onStart }) {
           </div>
 
           <div className="pt-hero-mockup" style={{ position: "relative" }}>
-            <div style={{ background: "#151515", borderRadius: 16, overflow: "hidden", border: "1px solid rgba(200,130,10,0.18)", boxShadow: "0 24px 80px rgba(0,0,0,0.22)", aspectRatio: "4/3" }}>
-              <div style={{ background: "#1a1a1a", padding: "9px 16px", display: "flex", alignItems: "center", gap: 8, borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
-                <PTIcon size={18} /><span style={{ fontSize: 10, color: "rgba(255,255,255,0.4)", fontFamily: "monospace" }}>ProfitTrack POS</span>
-                <div style={{ marginLeft: "auto", display: "flex", gap: 4 }}>
-                  {["#ff5f57","#febc2e","#28c840"].map(c => <div key={c} style={{ width: 9, height: 9, borderRadius: "50%", background: c }} />)}
-                </div>
-              </div>
-              <div style={{ padding: 16, display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
-                {[["Today's revenue","₦94,500","▲",true],["Transactions","7","▲",true],["Gross profit","₦41,200","▼",false]].map(([l,v,arrow,up],i) => (
-                  <div key={i} style={{ background: "rgba(255,255,255,0.05)", borderRadius: 9, padding: "10px 11px", border: "1px solid rgba(255,255,255,0.06)" }}>
-                    <div style={{ fontSize: 8, color: "rgba(255,255,255,0.35)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 4, fontFamily: "monospace" }}>{l}</div>
-                    <div style={{ fontSize: 14, fontWeight: 700, color: "#fff" }}>{v}</div>
-                    <div style={{ fontSize: 8, color: up?"#4ade80":"#f87171", marginTop: 3 }}>{arrow} vs yesterday</div>
-                  </div>
-                ))}
-              </div>
-              <div style={{ padding: "0 16px 12px", display: "flex", alignItems: "flex-end", gap: 3, height: 64 }}>
-                {[40,65,50,80,55,90,70].map((h,i) => <div key={i} style={{ flex: 1, height: `${h}%`, background: i===5?AMBER:"rgba(200,130,10,0.28)", borderRadius: "3px 3px 0 0" }} />)}
-              </div>
-              <div style={{ padding: "0 16px", display: "flex", flexDirection: "column", gap: 1 }}>
-                {["Men Vintage Shirt × 3 — ₦12,500","Denim Jacket × 1 — ₦8,000","Sports Bra × 2 — ₦5,400"].map((item,i) => (
-                  <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "5px 8px", background: "rgba(255,255,255,0.03)", borderRadius: 5, fontSize: 9, color: "rgba(255,255,255,0.5)", fontFamily: "monospace" }}>
-                    <span>{item.split(" — ")[0]}</span><span style={{ color: AMBER }}>{item.split(" — ")[1]}</span>
-                  </div>
-                ))}
-              </div>
+            <div style={{ borderRadius: 16, overflow: "hidden", boxShadow: "0 24px 80px rgba(0,0,0,0.22)", border: "1px solid rgba(200,130,10,0.18)" }}>
+              <img
+                src="/images/hero.png"
+                alt="Nigerian shop owner using ProfitTrack POS"
+                style={{ width: "100%", height: "100%", objectFit: "cover", display: "block", aspectRatio: "4/3" }}
+              />
             </div>
             <div style={{ position: "absolute", bottom: -16, left: -16, background: "#fff", borderRadius: 12, padding: "10px 14px", boxShadow: "0 6px 28px rgba(0,0,0,0.1)", border: "1px solid rgba(200,130,10,0.12)", display: "flex", alignItems: "center", gap: 9 }}>
               <span style={{ fontSize: 18 }}>📱</span>
@@ -304,13 +284,22 @@ export default function LandingPage({ onStart }) {
       <section style={{ background: DARK, padding: "40px 24px" }}>
         <div style={{ maxWidth: 1100, margin: "0 auto" }}>
           <p style={{ textAlign: "center", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.12em", color: AMBER, marginBottom: 20 }}>Sound familiar?</p>
-          <div className="pt-pain-grid" style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 1 }}>
-            {[["😤","Staff selling off-record and pocketing cash"],["😰","No visibility of what's happening when you're away"],["📦","Stock levels you can never trust or verify"],["🗑️","Expired products quietly destroying your profit"]].map(([icon,text],i) => (
-              <div key={i} style={{ padding: "20px 16px", background: "rgba(255,255,255,0.04)", textAlign: "center" }}>
-                <div style={{ fontSize: 24, marginBottom: 8 }}>{icon}</div>
-                <div style={{ fontSize: 13, color: "rgba(255,255,255,0.55)", lineHeight: 1.65 }}>{text}</div>
-              </div>
-            ))}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24, alignItems: "center", maxWidth: 1100, margin: "0 auto" }}>
+            <div style={{ borderRadius: 14, overflow: "hidden", boxShadow: "0 8px 40px rgba(0,0,0,0.3)" }}>
+              <img
+                src="/images/pain.png"
+                alt="Frustrated Nigerian shop owner looking at inventory"
+                style={{ width: "100%", display: "block", objectFit: "cover", aspectRatio: "1/1" }}
+              />
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+              {[["😤","Staff selling off-record and pocketing cash"],["😰","No visibility of what's happening when you're away"],["📦","Stock levels you can never trust or verify"],["🗑️","Expired products quietly destroying your profit"]].map(([icon,text],i) => (
+                <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 12, padding: "12px 16px", background: "rgba(255,255,255,0.04)", borderRadius: 10, border: "1px solid rgba(255,255,255,0.05)" }}>
+                  <span style={{ fontSize: 22, flexShrink: 0 }}>{icon}</span>
+                  <span style={{ fontSize: 13, color: "rgba(255,255,255,0.65)", lineHeight: 1.65 }}>{text}</span>
+                </div>
+              ))}
+            </div>
           </div>
           <p style={{ textAlign: "center", marginTop: 24, fontSize: 14, color: "#fff", fontWeight: 600 }}>
             This is not a staff problem. <span style={{ color: AMBER }}>It's a system problem.</span> ProfitTrack is the system.
@@ -364,10 +353,16 @@ export default function LandingPage({ onStart }) {
             {n:"02",title:"Add products & staff",desc:"Import your product catalog from Excel or add products one by one. Create staff accounts with the right roles — cashier, manager, admin."},
             {n:"03",title:"Start selling",desc:"Open the POS, scan a barcode, select payment method, complete the sale. PDF receipt generated. Stock updated. Report sent tonight."},
           ].map((s,i) => (
-            <div key={i} style={{ padding: "30px 26px", background: i===1?DARK:"#fff", borderRight: i<2?"1px solid rgba(200,130,10,0.08)":"none" }}>
-              <div style={{ fontSize: 40, fontWeight: 700, color: i===1?"rgba(200,130,10,0.22)":"rgba(200,130,10,0.12)", fontFamily: "Georgia,serif", marginBottom: 12, lineHeight: 1 }}>{s.n}</div>
-              <div style={{ fontSize: 14, fontWeight: 700, color: i===1?"#fff":DARK, marginBottom: 8, fontFamily: "Georgia,serif" }}>{s.title}</div>
-              <div style={{ fontSize: 13, color: i===1?"rgba(255,255,255,0.5)":"#666", lineHeight: 1.8 }}>{s.desc}</div>
+            <div key={i} style={{ padding: i===1?"0":"30px 26px", background: i===1?DARK:"#fff", borderRight: i<2?"1px solid rgba(200,130,10,0.08)":"none", overflow: "hidden" }}>
+              {i === 1 ? (
+                <img src="/images/shop-owner.png" alt="Shop owner using ProfitTrack" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block", minHeight: 260 }} />
+              ) : (
+                <>
+                  <div style={{ fontSize: 40, fontWeight: 700, color: "rgba(200,130,10,0.12)", fontFamily: "Georgia,serif", marginBottom: 12, lineHeight: 1 }}>{s.n}</div>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: DARK, marginBottom: 8, fontFamily: "Georgia,serif" }}>{s.title}</div>
+                  <div style={{ fontSize: 13, color: "#666", lineHeight: 1.8 }}>{s.desc}</div>
+                </>
+              )}
             </div>
           ))}
         </div>
@@ -400,11 +395,25 @@ export default function LandingPage({ onStart }) {
         <h2 style={sH}>Everything your shop needs</h2>
         <div className="pt-feat-grid" style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 12, marginTop: 40 }}>
           <FeatureCard icon="🧾" title="Fast POS checkout" tag="All plans" text="Scan barcodes, add products, complete sales in seconds. Cash, transfer, card, or credit. Branded PDF invoice generated instantly." />
-          <FeatureCard icon="👁️" title="Staff accountability" tag="All plans" text="Every sale, refund, and edit is recorded with the cashier's name and time. Full audit log that cannot be deleted or edited." />
+          <div style={{ background: "#fff", border: "1px solid rgba(200,130,10,0.1)", borderRadius: 14, overflow: "hidden", transition: "all 0.2s" }}>
+            <img src="/images/staff.png" alt="Staff accountability with ProfitTrack" style={{ width: "100%", aspectRatio: "16/9", objectFit: "cover", display: "block" }} />
+            <div style={{ padding: "16px 20px" }}>
+              <span style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", color: AMBER, background: "rgba(200,130,10,0.1)", padding: "2px 9px", borderRadius: 20, display: "inline-block", marginBottom: 8 }}>All plans</span>
+              <div style={{ fontSize: 14, fontWeight: 700, color: DARK, marginBottom: 7, fontFamily: "Georgia,serif" }}>Staff accountability</div>
+              <div style={{ fontSize: 13, color: "#555", lineHeight: 1.7 }}>Every sale, refund, and edit is recorded with the cashier's name and time. Full audit log that cannot be deleted or edited.</div>
+            </div>
+          </div>
           <FeatureCard icon="📦" title="Inventory management" tag="All plans" text="Real-time stock levels. Low stock alerts. Batch expiry tracking. Receive stock via barcode scanner. Bulk import from Excel." />
           <FeatureCard icon="📊" title="Analytics dashboard" tag="Business+" text="Revenue trends, peak hours, best sellers by margin, dead stock alerts, cashier performance." />
           <FeatureCard icon="💬" title="WhatsApp daily report" tag="Business+" text="Every night at 8PM: sales, profit, top products, low stock, expiry warnings. Sent to your phone automatically." />
-          <FeatureCard icon="🏢" title="Multi-branch" tag="Business+" text="Manage multiple locations from one dashboard. Each branch has its own inventory, staff, and sales history." />
+          <div style={{ background: "#fff", border: "1px solid rgba(200,130,10,0.1)", borderRadius: 14, overflow: "hidden", transition: "all 0.2s" }}>
+            <img src="/images/multi-branch.png" alt="Multi-branch management with ProfitTrack" style={{ width: "100%", aspectRatio: "16/9", objectFit: "cover", display: "block" }} />
+            <div style={{ padding: "16px 20px" }}>
+              <span style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", color: AMBER, background: "rgba(200,130,10,0.1)", padding: "2px 9px", borderRadius: 20, display: "inline-block", marginBottom: 8 }}>Business+</span>
+              <div style={{ fontSize: 14, fontWeight: 700, color: DARK, marginBottom: 7, fontFamily: "Georgia,serif" }}>Multi-branch</div>
+              <div style={{ fontSize: 13, color: "#555", lineHeight: 1.7 }}>Manage multiple locations from one dashboard. Each branch has its own inventory, staff, and sales history.</div>
+            </div>
+          </div>
           <FeatureCard icon="🎁" title="Customer loyalty" tag="Starter+" text="Earn points on every purchase. Redeem at checkout. WhatsApp notification when points are earned." />
           <FeatureCard icon="💸" title="Expense tracking" tag="Starter+" text="Log operating expenses by category. Compare against revenue. See your true net profit." />
           <FeatureCard icon="🤝" title="Credit management" tag="Starter+" text="Set credit limits for trusted customers. Track outstanding balances. WhatsApp reminders when payments are due." />
@@ -428,16 +437,12 @@ export default function LandingPage({ onStart }) {
             ))}
           </div>
           <div style={{ display: "flex", justifyContent: "center" }}>
-            <div style={{ background: "#DCF8C6", borderRadius: "4px 16px 16px 16px", padding: "16px 18px", maxWidth: 290, boxShadow: "0 4px 20px rgba(0,0,0,0.1)" }}>
-              {[
-                {b:true,t:"📊 Daily Sales Report — WEAR HAUS"},{t:"📅 Friday, 1 May 2026"},{sp:true},
-                {b:true,t:"💰 Total Sales: ₦94,500.00"},{t:"🧾 Transactions: 7"},{t:"📈 Profit: ₦41,200.00"},{sp:true},
-                {b:true,t:"🏆 Top Products:"},{t:"  1. Men Vintage Shirt — 9 units"},{t:"  2. Denim Jacket — 2 units"},{sp:true},
-                {b:true,t:"⚠️ Low Stock:"},{t:"  • Sports Bra: 2 remaining"},{sp:true},
-                {sm:true,t:"Sent automatically by ProfitTrack"},
-              ].map((l,i) => l.sp?<div key={i} style={{ height:6 }} />:
-                <div key={i} style={{ fontSize: l.sm?10:12, color: l.sm?"#aaa":"#1a1a1a", fontWeight: l.b?600:400, lineHeight:1.75, fontStyle:l.sm?"italic":"normal", fontFamily:l.sm?"monospace":"Georgia,serif" }}>{l.t}</div>
-              )}
+            <div style={{ borderRadius: 16, overflow: "hidden", boxShadow: "0 8px 40px rgba(0,0,0,0.15)", border: "1px solid rgba(200,130,10,0.15)", maxWidth: 420, width: "100%" }}>
+              <img
+                src="/images/whatsapp.png"
+                alt="Shop owner reading WhatsApp daily report at night"
+                style={{ width: "100%", display: "block", objectFit: "cover" }}
+              />
             </div>
           </div>
         </div>
