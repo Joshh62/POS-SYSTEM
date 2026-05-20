@@ -11,7 +11,7 @@ import { getCachedProducts } from "../utils/offlineQueue";
 export default function POS({ onScanResult }) {
   const [showCheckout, setShowCheckout] = useState(false);
   const [scanFeedback, setScanFeedback] = useState(null);
-  const [showCart,     setShowCart]     = useState(false);  // mobile: toggle cart view
+  const [showCart,     setShowCart]     = useState(false);
   const [isMobile,     setIsMobile]     = useState(window.innerWidth < 640);
   const { addToCart, cartItems } = useCart();
 
@@ -23,6 +23,7 @@ export default function POS({ onScanResult }) {
 
   const totalItems = cartItems?.reduce((s, i) => s + (i.quantity || 1), 0) ?? 0;
 
+  // ── Shared scan handler (USB scanner hook + search input Enter) ────────────
   const handleScan = useCallback(async (barcode) => {
     onScanResult?.(barcode);
     try {
@@ -31,7 +32,7 @@ export default function POS({ onScanResult }) {
       setScanFeedback({ type: "success", message: `Added: ${product.product_name}` });
     } catch {
       if (!navigator.onLine) {
-        const cached = getCachedProducts();
+        const cached  = getCachedProducts();
         const product = cached?.find(p => p.barcode === barcode);
         if (product) {
           addToCart(product);
@@ -46,9 +47,29 @@ export default function POS({ onScanResult }) {
     setTimeout(() => setScanFeedback(null), 2500);
   }, [addToCart, onScanResult]);
 
+  // ── Global USB/Bluetooth scanner hook ─────────────────────────────────────
   useBarcodeScanner(handleScan);
 
-  // ── Mobile layout ──────────────────────────────────────────────────────────
+  // ── Search input Enter key → try barcode lookup first ─────────────────────
+  // If the value matches a barcode: add to cart, clear field, reset grid.
+  // If no barcode match: do nothing — name search results stay visible.
+  const handleSearchKeyDown = useCallback(async (e) => {
+    if (e.key !== "Enter") return;
+    const val = e.target.value.trim();
+    if (!val) return;
+    try {
+      const product = await getProductByBarcode(val);
+      addToCart(product);
+      setScanFeedback({ type: "success", message: `Added: ${product.product_name}` });
+      e.target.value = "";
+      window.dispatchEvent(new CustomEvent("pos-search", { detail: "" }));
+    } catch {
+      // Not a barcode match — leave search results showing
+    }
+    setTimeout(() => setScanFeedback(null), 2500);
+  }, [addToCart]);
+
+  // ── MOBILE LAYOUT ──────────────────────────────────────────────────────────
   if (isMobile) {
     return (
       <div style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}>
@@ -74,9 +95,10 @@ export default function POS({ onScanResult }) {
             <div style={{ padding: "10px 12px", borderBottom: "1px solid var(--color-border-tertiary)", background: "var(--color-background-primary)", flexShrink: 0 }}>
               <input
                 type="text"
-                placeholder={navigator.onLine ? "Search products..." : "🔴 Offline — showing cached products"}
+                placeholder={navigator.onLine ? "Search by name, or type barcode + Enter" : "🔴 Offline — showing cached products"}
                 style={{ width: "100%", padding: "8px 12px", borderRadius: 8, border: "1px solid var(--color-border-tertiary)", background: "var(--color-background-secondary)", color: "var(--color-text-primary)", fontSize: 13, outline: "none", boxSizing: "border-box" }}
                 onChange={(e) => window.dispatchEvent(new CustomEvent("pos-search", { detail: e.target.value }))}
+                onKeyDown={handleSearchKeyDown}
               />
             </div>
             {scanFeedback && (
@@ -87,7 +109,6 @@ export default function POS({ onScanResult }) {
             <div style={{ flex: 1, padding: 12, overflowY: "auto" }}>
               <ProductGrid externalSearch />
             </div>
-            {/* Sticky checkout bar */}
             {totalItems > 0 && (
               <div style={{ padding: "10px 12px", borderTop: "1px solid var(--color-border-tertiary)", background: "var(--color-background-primary)", flexShrink: 0 }}>
                 <button onClick={() => setShowCart(true)} style={{ width: "100%", padding: "12px 0", borderRadius: 10, border: "none", background: "var(--color-primary)", color: "#fff", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>
@@ -123,7 +144,7 @@ export default function POS({ onScanResult }) {
     );
   }
 
-  // ── Desktop layout (unchanged) ─────────────────────────────────────────────
+  // ── DESKTOP LAYOUT ─────────────────────────────────────────────────────────
   return (
     <div style={{ display: "flex", flex: 1, height: "100%", overflow: "hidden" }}>
 
@@ -132,9 +153,10 @@ export default function POS({ onScanResult }) {
         <div style={{ padding: "10px 16px", borderBottom: "1px solid var(--color-border-tertiary)", background: "var(--color-background-primary)", flexShrink: 0 }}>
           <input
             type="text"
-            placeholder={navigator.onLine ? "Search products... (or scan a barcode)" : "🔴 Offline — showing cached products"}
+            placeholder={navigator.onLine ? "Search by name, or type barcode + Enter to add" : "🔴 Offline — showing cached products"}
             style={{ width: "100%", padding: "8px 12px", borderRadius: 8, border: "1px solid var(--color-border-tertiary)", background: "var(--color-background-secondary)", color: "var(--color-text-primary)", fontSize: 13, outline: "none", boxSizing: "border-box" }}
             onChange={(e) => window.dispatchEvent(new CustomEvent("pos-search", { detail: e.target.value }))}
+            onKeyDown={handleSearchKeyDown}
           />
         </div>
         {scanFeedback && (

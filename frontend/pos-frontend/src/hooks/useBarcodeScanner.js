@@ -7,10 +7,13 @@ import { useEffect, useRef, useCallback } from "react";
  * USB scanners type characters very fast (< 50ms between keystrokes)
  * and always end with an Enter keypress.
  *
+ * Also supports manual barcode entry when focus is outside any input field —
+ * type the barcode at any speed and press Enter to trigger a scan.
+ *
  * @param {function} onScan - called with the scanned barcode string
  * @param {object}   options
  *   @param {number}  options.minLength    - minimum barcode length to trigger (default: 3)
- *   @param {number}  options.maxGap       - max ms between keystrokes to count as scanner (default: 50)
+ *   @param {number}  options.maxGap       - max ms between keystrokes to count as scanner input inside an editable field (default: 50)
  *   @param {boolean} options.enabled      - pause listening when false (default: true)
  */
 export function useBarcodeScanner(onScan, { minLength = 3, maxGap = 50, enabled = true } = {}) {
@@ -30,9 +33,7 @@ export function useBarcodeScanner(onScan, { minLength = 3, maxGap = 50, enabled 
     if (!enabled) return;
 
     const handleKeyDown = (e) => {
-      // Ignore keypresses inside text inputs / textareas / selects
-      // so the scanner doesn't interfere with manual typing
-      const tag = e.target.tagName.toLowerCase();
+      const tag        = e.target.tagName.toLowerCase();
       const isEditable = tag === "input" || tag === "textarea" || tag === "select" || e.target.isContentEditable;
 
       const now = Date.now();
@@ -42,28 +43,35 @@ export function useBarcodeScanner(onScan, { minLength = 3, maxGap = 50, enabled 
       if (e.key === "Enter") {
         // Scanner finished — flush regardless of where focus is
         if (buffer.current.length >= minLength) {
-          e.preventDefault(); // don't submit forms
+          e.preventDefault();
           flush();
         }
         return;
       }
 
-      // Only accumulate if keystrokes are fast (scanner-speed) OR
-      // the target is not an editable field
-      if (!isEditable || gap < maxGap) {
-        if (e.key.length === 1) {
-          // Clear buffer if gap is too long (user paused — reset)
-          if (gap > maxGap && buffer.current.length > 0 && isEditable) {
-            buffer.current = "";
-          }
-          buffer.current += e.key;
+      if (e.key.length !== 1) return; // ignore Shift, Ctrl, Alt, etc.
 
-          // Auto-reset buffer after 500ms of no input
+      if (isEditable) {
+        // Inside an input: only accumulate if keystrokes are scanner-fast
+        // This prevents manual typing in search/form fields from triggering scans
+        if (gap < maxGap) {
+          buffer.current += e.key;
           clearTimeout(timeoutId.current);
-          timeoutId.current = setTimeout(() => {
-            buffer.current = "";
-          }, 500);
+          timeoutId.current = setTimeout(() => { buffer.current = ""; }, 500);
+        } else {
+          // Too slow for a scanner — reset buffer (user is typing manually)
+          buffer.current = "";
         }
+      } else {
+        // Outside any input: accumulate at any speed
+        // This lets you manually type a barcode anywhere on the page and press Enter
+        // Reset buffer if gap is very long (user paused/restarted)
+        if (gap > 2000 && buffer.current.length > 0) {
+          buffer.current = "";
+        }
+        buffer.current += e.key;
+        clearTimeout(timeoutId.current);
+        timeoutId.current = setTimeout(() => { buffer.current = ""; }, 2000);
       }
     };
 
