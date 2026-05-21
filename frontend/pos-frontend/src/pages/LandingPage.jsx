@@ -106,7 +106,7 @@ function Counter({ target, suffix = "", duration = 1800 }) {
 // ── Set your YouTube video ID here when ready ─────────────────────────────────
 // From https://www.youtube.com/watch?v=XXXXXXXXXX the ID is XXXXXXXXXX
 // Keep as null to show placeholder until video is ready
-const HERO_VIDEO_ID = null; // ← paste your YouTube video ID here e.g. "dQw4w9WgXcQ"
+const HERO_VIDEO_ID = "gh2-QrXWCbA"; // ← paste your YouTube video ID here e.g. "dQw4w9WgXcQ"
 
 function YouTubeEmbed({ videoId, title }) {
   const [playing, setPlaying] = useState(false);
