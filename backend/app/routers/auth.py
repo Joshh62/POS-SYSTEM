@@ -217,6 +217,26 @@ def change_password(
 
     current_user.password_hash = hash_password(data.new_password)
     db.commit()
+    try:
+        from app.email_service import password_changed as send_pwd_changed
+        import pytz
+        from datetime import datetime
+        now_lagos = datetime.utcnow().replace(tzinfo=pytz.utc).astimezone(pytz.timezone("Africa/Lagos"))
+        changed_at = now_lagos.strftime("%-d %B %Y at %-I:%M %p")
+        # Get email from business record or user record
+        biz = db.query(models.Business).filter(
+            models.Business.business_id == current_user.business_id
+        ).first()
+        email = biz.email if biz and biz.email else None
+        if email:
+            send_pwd_changed(
+                to_email=email,
+                full_name=current_user.full_name or current_user.username,
+                username=current_user.username,
+                changed_at=changed_at,
+            )
+    except Exception as e:
+        print(f"[Email] password_changed failed: {e}")
     return {"message": "Password changed successfully"}
 
 

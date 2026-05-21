@@ -168,6 +168,59 @@ async def account_deletion_cleanup_loop():
         await asyncio.sleep(60)
 
 
+async def trial_reminder_loop():
+    """
+    Runs daily at 10:00 AM Lagos time.
+    Sends trial ending emails to businesses with 3 days and 1 day left.
+    """
+    while True:
+        wait = seconds_until(10, 0)
+        print(f"[Scheduler] Next trial reminder in {int(wait//3600)}h {int((wait%3600)//60)}m")
+        await asyncio.sleep(wait)
+        try:
+            from app.database import SessionLocal
+            from app import models
+            from app.email_service import trial_ending as send_trial_ending
+            from datetime import datetime as dt, timedelta
+ 
+            db  = SessionLocal()
+            now = dt.utcnow()
+            try:
+                for days_left in [3, 1]:
+                    window_start = now + timedelta(days=days_left) - timedelta(hours=12)
+                    window_end   = now + timedelta(days=days_left) + timedelta(hours=12)
+                    businesses = db.query(models.Business).filter(
+                        models.Business.subscription_status == "trial",
+                        models.Business.trial_ends_at >= window_start,
+                        models.Business.trial_ends_at <= window_end,
+                        models.Business.email.isnot(None),
+                        models.Business.is_active == True,
+                    ).all()
+                    for biz in businesses:
+                        admin = db.query(models.User).filter(
+                            models.User.business_id == biz.business_id,
+                            models.User.role == "admin",
+                            models.User.is_active == True,
+                        ).first()
+                        try:
+                            send_trial_ending(
+                                to_email=biz.email,
+                                full_name=admin.full_name if admin else "Admin",
+                                business_name=biz.name,
+                                days_left=days_left,
+                                trial_ends_at=biz.trial_ends_at.strftime("%-d %B %Y"),
+                                plan=biz.plan,
+                            )
+                            print(f"[Scheduler] Trial reminder ({days_left}d) → {biz.name}")
+                        except Exception as e:
+                            print(f"[Scheduler] Trial reminder failed for {biz.name}: {e}")
+            finally:
+                db.close()
+        except Exception as e:
+            print(f"[Scheduler] Trial reminder loop error: {e}")
+        await asyncio.sleep(60)
+
+
 def _delete_business(db, biz):
     from app import models
     biz_id = biz.business_id

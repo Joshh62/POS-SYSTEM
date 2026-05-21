@@ -401,6 +401,19 @@ def request_account_deletion(data: AccountDeletionRequest,
     ))
 
     db.commit()
+    try:
+        from app.email_service import account_deletion_requested as send_deletion
+        from datetime import timedelta
+        deletion_date = (now + timedelta(days=90)).strftime("%-d %B %Y")
+        if biz.email:
+            send_deletion(
+                to_email=biz.email,
+                full_name=user.full_name or user.username,
+                business_name=biz.name,
+                deletion_date=deletion_date,
+            )
+    except Exception as e:
+        print(f"[Email] account_deletion_requested failed: {e}")
 
     # Send WhatsApp confirmation if business has a phone number
     try:

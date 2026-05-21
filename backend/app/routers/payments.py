@@ -1,10 +1,6 @@
 """
 payments.py — ProfitTrack subscription billing via Paystack.
-
-Plan change rules:
-- Upgrade (higher tier or monthly→annual): activates immediately, full price charged
-- Downgrade (lower tier or annual→monthly): scheduled for next renewal, auto-applied
-- Same plan + same billing: blocked at frontend
+Emails sent via email_service.py on every payment event.
 """
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Header
@@ -66,10 +62,31 @@ async def _paystack_get(path):
     return result["data"]
 
 
+def _fmt_date(dt: datetime) -> str:
+    if not dt: return "—"
+    return dt.strftime("%-d %B %Y")
+
+
+def _fmt_datetime(dt: datetime) -> str:
+    if not dt: return "—"
+    lagos = pytz.timezone("Africa/Lagos")
+    local = dt.replace(tzinfo=pytz.utc).astimezone(lagos)
+    return local.strftime("%-d %B %Y at %-I:%M %p")
+
+
+def _get_admin(db: Session, business_id: int):
+    return db.query(models.User).filter(
+        models.User.business_id == business_id,
+        models.User.role == "admin",
+        models.User.is_active == True,
+    ).first()
+
+
 class InitializePaymentRequest(BaseModel):
     plan:    str
     billing: str
     email:   str
+
 
 class PublicSignupRequest(BaseModel):
     business_name: str
@@ -92,8 +109,10 @@ def get_plans():
 @router.post("/signup")
 async def public_signup(data: PublicSignupRequest, db: Session = Depends(get_db)):
     from app.auth import hash_password
+    from app.email_service import welcome as send_welcome
+
     if data.plan not in PLANS:
-        raise HTTPException(status_code=400, detail=f"Invalid plan")
+        raise HTTPException(status_code=400, detail="Invalid plan")
     if db.query(models.User).filter(models.User.username == data.username).first():
         raise HTTPException(status_code=400, detail="Username already taken")
     if db.query(models.Business).filter(models.Business.name.ilike(data.business_name.strip())).first():
@@ -104,19 +123,38 @@ async def public_signup(data: PublicSignupRequest, db: Session = Depends(get_db)
     now = datetime.utcnow()
     trial_ends = now + timedelta(days=TRIAL_DAYS)
     try:
-        business = models.Business(name=data.business_name.strip(), address=data.address,
+        business = models.Business(
+            name=data.business_name.strip(), address=data.address,
             phone=data.phone, email=data.email, plan=data.plan, is_active=True,
-            subscription_status="trial", trial_ends_at=trial_ends)
+            subscription_status="trial", trial_ends_at=trial_ends,
+        )
         db.add(business); db.flush()
         branch = models.Branch(name="Main Branch", business_id=business.business_id)
         db.add(branch); db.flush()
-        admin = models.User(full_name=data.full_name, username=data.username,
+        admin = models.User(
+            full_name=data.full_name, username=data.username,
             password_hash=hash_password(data.password), role="admin",
-            business_id=business.business_id, branch_id=branch.branch_id, is_active=True)
+            business_id=business.business_id, branch_id=branch.branch_id, is_active=True,
+        )
         db.add(admin); db.commit(); db.refresh(business); db.refresh(admin)
-        return {"message": f"Welcome! Your {TRIAL_DAYS}-day free trial has started.",
-                "business_id": business.business_id, "business_name": business.name,
-                "username": admin.username, "trial_ends_at": trial_ends.isoformat(), "plan": data.plan}
+
+        send_welcome(
+            to_email=data.email,
+            full_name=data.full_name,
+            business_name=business.name,
+            username=data.username,
+            plan=data.plan,
+            trial_ends_at=_fmt_date(trial_ends),
+        )
+
+        return {
+            "message":       f"Welcome! Your {TRIAL_DAYS}-day free trial has started.",
+            "business_id":   business.business_id,
+            "business_name": business.name,
+            "username":      admin.username,
+            "trial_ends_at": trial_ends.isoformat(),
+            "plan":          data.plan,
+        }
     except Exception as e:
         db.rollback(); raise HTTPException(status_code=500, detail=str(e))
 
@@ -129,17 +167,32 @@ def get_subscription(db: Session = Depends(get_db), user=Depends(get_current_use
     biz = db.query(models.Business).filter(models.Business.business_id == user.business_id).first()
     if not biz: raise HTTPException(status_code=404, detail="Business not found")
 
-    now          = datetime.utcnow()
-    trial_active = biz.subscription_status == "trial" and biz.trial_ends_at and biz.trial_ends_at > now
+    now             = datetime.utcnow()
+    trial_active    = biz.subscription_status == "trial" and biz.trial_ends_at and biz.trial_ends_at > now
     trial_days_left = max(0, (biz.trial_ends_at - now).days) if trial_active else 0
 
     if biz.subscription_status == "trial" and biz.trial_ends_at and biz.trial_ends_at <= now:
-        biz.subscription_status = "expired"; db.commit()
+        biz.subscription_status = "expired"
+        db.commit()
+        try:
+            from app.email_service import trial_expired as send_trial_expired
+            if biz.email:
+                admin = _get_admin(db, biz.business_id)
+                send_trial_expired(
+                    to_email=biz.email,
+                    full_name=admin.full_name if admin else "Admin",
+                    business_name=biz.name,
+                    plan=biz.plan,
+                )
+        except Exception as e:
+            print(f"[Email] trial_expired failed: {e}")
 
-    # Auto-apply pending downgrade if period ended
     if (biz.pending_plan and biz.current_period_end and
             biz.current_period_end <= now and biz.subscription_status in ("active", "cancelled")):
-        biz.plan = biz.pending_plan; biz.pending_plan = None; biz.pending_billing = None; db.commit()
+        biz.plan = biz.pending_plan
+        biz.pending_plan = None
+        biz.pending_billing = None
+        db.commit()
 
     return {
         "subscription_status":     biz.subscription_status,
@@ -155,25 +208,44 @@ def get_subscription(db: Session = Depends(get_db), user=Depends(get_current_use
 
 
 @router.post("/initialize")
-async def initialize_payment(data: InitializePaymentRequest,
-                              db: Session = Depends(get_db), user=Depends(get_current_user)):
+async def initialize_payment(
+    data: InitializePaymentRequest,
+    db: Session = Depends(get_db),
+    user=Depends(get_current_user),
+):
+    from app.email_service import downgrade_scheduled as send_downgrade
+
     if data.plan not in PLANS: raise HTTPException(status_code=400, detail="Invalid plan")
     if data.billing not in ("monthly", "annual"): raise HTTPException(status_code=400, detail="Invalid billing")
 
     biz = db.query(models.Business).filter(models.Business.business_id == user.business_id).first()
     if not biz: raise HTTPException(status_code=404, detail="Business not found")
 
-    current_billing = "monthly"   # default — billing not stored per-business yet
+    current_billing = "monthly"
     upgrade = _is_upgrade(biz.plan, current_billing, data.plan, data.billing)
 
-    # Downgrade on active paid subscription — schedule, don't charge
-    if (not upgrade and biz.subscription_status == "active" and
-            data.plan != biz.plan):
-        biz.pending_plan = data.plan; biz.pending_billing = data.billing; db.commit()
-        period_str = biz.current_period_end.strftime("%d %b %Y") if biz.current_period_end else "next renewal"
+    if not upgrade and biz.subscription_status == "active" and data.plan != biz.plan:
+        biz.pending_plan = data.plan
+        biz.pending_billing = data.billing
+        db.commit()
+        period_str = _fmt_date(biz.current_period_end) if biz.current_period_end else "next renewal"
+        try:
+            if biz.email:
+                admin = _get_admin(db, biz.business_id)
+                send_downgrade(
+                    to_email=biz.email,
+                    full_name=admin.full_name if admin else "Admin",
+                    business_name=biz.name,
+                    current_plan=biz.plan,
+                    new_plan=data.plan,
+                    applies_on=period_str,
+                )
+        except Exception as e:
+            print(f"[Email] downgrade_scheduled failed: {e}")
         return {
             "type":       "downgrade_scheduled",
-            "message":    f"Downgrade to {PLANS[data.plan]['name']} scheduled for {period_str}. Your {PLANS[biz.plan]['name']} plan continues until then.",
+            "message":    f"Downgrade to {PLANS[data.plan]['name']} scheduled for {period_str}. "
+                          f"Your {PLANS[biz.plan]['name']} plan continues until then.",
             "plan":       data.plan,
             "billing":    data.billing,
             "applies_on": biz.current_period_end.isoformat() if biz.current_period_end else None,
@@ -182,7 +254,6 @@ async def initialize_payment(data: InitializePaymentRequest,
     plan   = PLANS[data.plan]
     amount = plan["annual_price"] if data.billing == "annual" else plan["monthly_price"]
     frontend_url = os.getenv("FRONTEND_URL", "https://www.profittrack.ng")
-
     result = await _paystack_post("/transaction/initialize", {
         "email":        data.email,
         "amount":       amount,
@@ -193,7 +264,6 @@ async def initialize_payment(data: InitializePaymentRequest,
                          "user_id": user.user_id, "is_upgrade": upgrade},
         "channels":     ["card", "bank", "ussd", "bank_transfer"],
     })
-
     return {"type": "payment_required", "payment_url": result["authorization_url"],
             "reference": result["reference"], "amount": amount / 100,
             "plan": data.plan, "billing": data.billing, "is_upgrade": upgrade}
@@ -201,28 +271,46 @@ async def initialize_payment(data: InitializePaymentRequest,
 
 @router.get("/verify/{reference}")
 async def verify_payment(reference: str, db: Session = Depends(get_db), user=Depends(get_current_user)):
+    from app.email_service import payment_success as send_payment_success
+
     result = await _paystack_get(f"/transaction/verify/{reference}")
     if result["status"] != "success":
         raise HTTPException(status_code=400, detail=f"Payment not successful: {result['status']}")
 
-    metadata   = result.get("metadata", {})
-    plan       = metadata.get("plan", "starter")
-    billing    = metadata.get("billing", "monthly")
+    metadata = result.get("metadata", {})
+    plan     = metadata.get("plan", "starter")
+    billing  = metadata.get("billing", "monthly")
 
     biz = db.query(models.Business).filter(models.Business.business_id == user.business_id).first()
     if not biz: raise HTTPException(status_code=404, detail="Business not found")
 
     now        = datetime.utcnow()
     period_end = now + timedelta(days=365 if billing == "annual" else 30)
-    biz.plan = plan; biz.subscription_status = "active"; biz.current_period_end = period_end
+    biz.plan = plan; biz.subscription_status = "active"
+    biz.current_period_end = period_end
     biz.pending_plan = None; biz.pending_billing = None
     customer = result.get("customer", {})
     if customer.get("customer_code"): biz.paystack_customer_code = customer["customer_code"]
     db.commit()
 
+    try:
+        if biz.email:
+            admin = _get_admin(db, biz.business_id)
+            send_payment_success(
+                to_email=biz.email,
+                full_name=admin.full_name if admin else "Admin",
+                business_name=biz.name,
+                plan=plan, billing=billing,
+                amount_paid=result["amount"] / 100,
+                period_end=_fmt_date(period_end),
+                reference=reference,
+            )
+    except Exception as e:
+        print(f"[Email] payment_success failed: {e}")
+
     return {"message": "Payment successful! Your subscription is now active.",
-            "plan": plan, "billing": billing, "period_end": period_end.isoformat(),
-            "amount_paid": result["amount"] / 100}
+            "plan": plan, "billing": billing,
+            "period_end": period_end.isoformat(), "amount_paid": result["amount"] / 100}
 
 
 @router.delete("/pending-downgrade")
@@ -237,6 +325,11 @@ def cancel_pending_downgrade(db: Session = Depends(get_db), user=Depends(require
 @router.post("/webhook")
 async def paystack_webhook(request: Request, db: Session = Depends(get_db),
                             x_paystack_signature: Optional[str] = Header(None)):
+    from app.email_service import (
+        payment_success as send_payment_success,
+        payment_failed  as send_payment_failed,
+    )
+
     body         = await request.body()
     secret       = os.getenv("PAYSTACK_SECRET_KEY", "")
     expected_sig = hmac.new(secret.encode("utf-8"), body, hashlib.sha512).hexdigest()
@@ -263,6 +356,20 @@ async def paystack_webhook(request: Request, db: Session = Depends(get_db),
                 customer = data.get("customer", {})
                 if customer.get("customer_code"): biz.paystack_customer_code = customer["customer_code"]
                 db.commit()
+                try:
+                    if biz.email:
+                        admin = _get_admin(db, biz.business_id)
+                        send_payment_success(
+                            to_email=biz.email,
+                            full_name=admin.full_name if admin else "Admin",
+                            business_name=biz.name,
+                            plan=plan, billing=billing,
+                            amount_paid=data.get("amount", 0) / 100,
+                            period_end=_fmt_date(period_end),
+                            reference=data.get("reference", "—"),
+                        )
+                except Exception as e:
+                    print(f"[Webhook] payment_success email failed: {e}")
 
     elif event == "subscription.disable":
         cc = data.get("customer", {}).get("customer_code")
@@ -277,11 +384,18 @@ async def paystack_webhook(request: Request, db: Session = Depends(get_db),
             if biz:
                 biz.subscription_status = "past_due"; db.commit()
                 try:
-                    admin = db.query(models.User).filter(models.User.business_id == biz.business_id,
-                        models.User.role.in_(["admin"]), models.User.is_active == True).first()
-                    if admin and biz.phone: _send_payment_failed_whatsapp(biz, admin)
+                    admin = _get_admin(db, biz.business_id)
+                    if biz.email:
+                        send_payment_failed(
+                            to_email=biz.email,
+                            full_name=admin.full_name if admin else "Admin",
+                            business_name=biz.name,
+                            plan=biz.plan,
+                        )
+                    if admin and biz.phone:
+                        _send_payment_failed_whatsapp(biz, admin)
                 except Exception as e:
-                    print(f"[Webhook] WhatsApp failed: {e}")
+                    print(f"[Webhook] payment_failed notifications failed: {e}")
 
     elif event == "subscription.create":
         sc = data.get("subscription_code"); cc = data.get("customer", {}).get("customer_code")
@@ -294,6 +408,8 @@ async def paystack_webhook(request: Request, db: Session = Depends(get_db),
 
 @router.post("/cancel")
 async def cancel_subscription(db: Session = Depends(get_db), user=Depends(require_role(["admin"]))):
+    from app.email_service import subscription_cancelled as send_cancelled
+
     biz = db.query(models.Business).filter(models.Business.business_id == user.business_id).first()
     if not biz: raise HTTPException(status_code=404, detail="Business not found")
     if not biz.paystack_subscription_code:
@@ -304,20 +420,33 @@ async def cancel_subscription(db: Session = Depends(get_db), user=Depends(requir
     except Exception as e:
         print(f"[Cancel] {e}")
     biz.subscription_status = "cancelled"; db.commit()
-    return {"message": "Subscription cancelled. Access continues until your current period ends.",
+    try:
+        if biz.email:
+            admin = _get_admin(db, biz.business_id)
+            access_until    = _fmt_date(biz.current_period_end)
+            data_kept_until = _fmt_date(biz.current_period_end + timedelta(days=90)) if biz.current_period_end else "90 days from now"
+            send_cancelled(
+                to_email=biz.email,
+                full_name=admin.full_name if admin else "Admin",
+                business_name=biz.name, plan=biz.plan,
+                access_until=access_until, data_kept_until=data_kept_until,
+            )
+    except Exception as e:
+        print(f"[Email] subscription_cancelled failed: {e}")
+    return {"message": "Subscription cancelled. Access continues until the end of your current period.",
             "period_end": biz.current_period_end.isoformat() if biz.current_period_end else None}
 
 
 def _send_payment_failed_whatsapp(biz, admin):
     import twilio.rest
-    TWILIO_SID = os.getenv("TWILIO_ACCOUNT_SID"); TWILIO_TOKEN = os.getenv("TWILIO_AUTH_TOKEN")
-    FROM_NUMBER = os.getenv("TWILIO_WHATSAPP_FROM", "whatsapp:+14155238886")
+    TWILIO_SID   = os.getenv("TWILIO_ACCOUNT_SID"); TWILIO_TOKEN = os.getenv("TWILIO_AUTH_TOKEN")
+    FROM_NUMBER  = os.getenv("TWILIO_WHATSAPP_FROM", "whatsapp:+14155238886")
     if not TWILIO_SID or not TWILIO_TOKEN or not biz.phone: return
     phone = biz.phone.strip()
     if not phone.startswith("+"): phone = "+234" + phone.lstrip("0")
     client = twilio.rest.Client(TWILIO_SID, TWILIO_TOKEN)
     client.messages.create(from_=FROM_NUMBER, to=f"whatsapp:{phone}",
-        body=f"⚠️ ProfitTrack Payment Failed\n\nHi {admin.full_name}, your ProfitTrack subscription "
-             f"payment for *{biz.name}* has failed.\n\nPlease update your payment method at "
-             f"*profittrack.ng* within 3 days to avoid service interruption.\n\n"
-             f"Need help? Reply to this message or call 09012984122.")
+        body=(f"⚠️ ProfitTrack Payment Failed\n\nHi {admin.full_name}, your ProfitTrack "
+              f"subscription payment for *{biz.name}* has failed.\n\nPlease update your "
+              f"payment method at *profittrack.ng* within 3 days to avoid service interruption.\n\n"
+              f"Need help? Reply here or call 09012984122."))
