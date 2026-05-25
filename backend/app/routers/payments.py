@@ -21,12 +21,11 @@ from app.dependencies import require_role, get_current_user, SUPERADMIN_ROLE
 router = APIRouter(prefix="/payments", tags=["Payments"])
 
 PLANS = {
-    "solo":       {"name": "Solo",       "monthly_price": 500000,  "annual_price": 5000000,  "rank": 1, "description": "1 branch, 1 user, full POS and inventory"},
-    "starter":    {"name": "Starter",    "monthly_price": 1200000, "annual_price": 12000000, "rank": 2, "description": "1 branch, 3 users, all core features"},
-    "business":   {"name": "Business",   "monthly_price": 2500000, "annual_price": 25000000, "rank": 3, "description": "3 branches, 10 users, analytics + WhatsApp"},
-    "enterprise": {"name": "Enterprise", "monthly_price": 5000000, "annual_price": 50000000, "rank": 4, "description": "Unlimited branches, white-label branding"},
+    "starter":    {"name": "Starter",    "monthly_price": 500000,  "annual_price": 5000000,  "rank": 1, "description": "1 branch, 3 staff, full POS and inventory"},
+    "business":   {"name": "Business",   "monthly_price": 1500000, "annual_price": 15000000, "rank": 2, "description": "3 branches, 10 staff, analytics + WhatsApp"},
+    "enterprise": {"name": "Enterprise", "monthly_price": 3000000, "annual_price": 30000000, "rank": 3, "description": "Unlimited branches, white-label branding"},
 }
-TRIAL_DAYS = 14
+TRIAL_DAYS = 30
 
 
 def _is_upgrade(current_plan, current_billing, new_plan, new_billing) -> bool:

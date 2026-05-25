@@ -3,69 +3,35 @@ import api from "../api/api";
 
 const PLANS = [
   {
-    key: "solo", name: "Solo", monthly: 5000, annual: 50000, rank: 1,
-    desc: "1 branch · 1 user",
-    features: ["Full POS checkout", "Inventory management", "Sales history", "Reports"],
-  },
-  {
-    key: "starter", name: "Starter", monthly: 12000, annual: 120000, rank: 2,
-    desc: "1 branch · 3 users",
-    features: ["Everything in Solo", "3 staff accounts", "Expense tracking", "Loyalty & credit", "Bulk import"],
+    key: "starter", name: "Starter", monthly: 5000, annual: 50000, rank: 1,
+    desc: "1 branch · 3 staff",
+    features: ["Full POS checkout", "Inventory management", "3 staff accounts", "Expense tracking", "Loyalty & credit", "Bulk import"],
     popular: true,
   },
   {
-    key: "business", name: "Business", monthly: 25000, annual: 250000, rank: 3,
-    desc: "3 branches · 10 users",
-    features: ["Everything in Starter", "Multi-branch", "Analytics dashboard", "WhatsApp reports"],
+    key: "business", name: "Business", monthly: 15000, annual: 150000, rank: 2,
+    desc: "3 branches · 10 staff",
+    features: ["Everything in Starter", "3 branches", "10 staff accounts", "Analytics dashboard", "WhatsApp daily reports", "Multi-branch management"],
   },
   {
-    key: "enterprise", name: "Enterprise", monthly: 50000, annual: 500000, rank: 4,
-    desc: "Unlimited branches & users",
-    features: ["Everything in Business", "Unlimited branches", "White-label branding", "Priority support"],
+    key: "enterprise", name: "Enterprise", monthly: 30000, annual: 300000, rank: 3,
+    desc: "Unlimited branches & staff",
+    features: ["Everything in Business", "Unlimited branches", "Unlimited staff", "White-label branding", "Priority support"],
   },
 ];
 
 const PLAN_GUIDE = [
-  {
-    q: "How does the 14-day free trial work?",
-    a: "When you register, you get 14 days of full access on your chosen plan — no payment required. Before the trial ends, add your payment details to continue. If you don't, the account is suspended until payment is made.",
-  },
-  {
-    q: "What happens when I upgrade to a higher plan?",
-    a: "Upgrades take effect immediately. You are charged the full price of the new plan right away. Your previous plan is not refunded — the upgrade replaces it from the moment of payment.",
-  },
-  {
-    q: "What happens when I downgrade to a lower plan?",
-    a: "Downgrades are scheduled for your next renewal date. Your current plan continues until that date, then the lower plan activates automatically. You are not charged anything immediately.",
-  },
-  {
-    q: "Can I switch from monthly to annual billing?",
-    a: "Yes. Switching from monthly to annual is treated as an upgrade — it takes effect immediately and you are charged the full annual price. You save the equivalent of 2 months compared to paying monthly.",
-  },
-  {
-    q: "Can I switch from annual to monthly?",
-    a: "Yes, but it is treated as a downgrade. Your annual plan continues until its end date, then monthly billing begins at the next renewal.",
-  },
-  {
-    q: "What happens if my payment fails?",
-    a: "You receive a WhatsApp alert immediately. You have a 3-day grace period to update your payment method. If payment is not resolved within 3 days, access is suspended. Your data is never deleted — it is restored the moment payment is made.",
-  },
-  {
-    q: "Can I cancel my subscription?",
-    a: "Yes. You can cancel at any time from this page. Access continues until the end of your current paid period. After that, the account is suspended but your data is kept for 90 days in case you return.",
-  },
-  {
-    q: "What happens to my data if I cancel?",
-    a: "Your data (products, sales history, customers, inventory) is kept for 90 days after cancellation. If you resubscribe within that period, everything is restored exactly as you left it.",
-  },
-  {
-    q: "Can I have multiple branches on a lower plan?",
-    a: "No. The number of branches is enforced by your plan. If you downgrade and have more branches than your new plan allows, you will need to deactivate the extra branches before the downgrade takes effect.",
-  },
-  {
-    q: "How do I get a receipt for my payment?",
-    a: "Paystack sends a payment receipt to your registered email address automatically after every successful transaction.",
-  },
+  { q: "How does the 30-day free trial work?", a: "When you register, you get 30 days of full access on your chosen plan — no payment required. Before the trial ends, add your payment details to continue. If you don't, the account is suspended until payment is made." },
+  { q: "What happens when I upgrade to a higher plan?", a: "Upgrades take effect immediately. You are charged the full price of the new plan right away. Your previous plan is not refunded — the upgrade replaces it from the moment of payment." },
+  { q: "What happens when I downgrade to a lower plan?", a: "Downgrades are scheduled for your next renewal date. Your current plan continues until that date, then the lower plan activates automatically. You are not charged anything immediately." },
+  { q: "Can I switch from monthly to annual billing?", a: "Yes. Switching from monthly to annual is treated as an upgrade — it takes effect immediately and you are charged the full annual price. You save the equivalent of 2 months compared to paying monthly." },
+  { q: "Can I switch from annual to monthly?", a: "Yes, but it is treated as a downgrade. Your annual plan continues until its end date, then monthly billing begins at the next renewal." },
+  { q: "What happens if my payment fails?", a: "You receive a WhatsApp alert immediately. You have a 3-day grace period to update your payment method. If payment is not resolved within 3 days, access is suspended. Your data is never deleted — it is restored the moment payment is made." },
+  { q: "Can I cancel my subscription?", a: "Yes. You can cancel at any time from this page. Access continues until the end of your current paid period. After that, the account is suspended but your data is kept for 90 days in case you return." },
+  { q: "What happens to my data if I cancel?", a: "Your data (products, sales history, customers, inventory) is kept for 90 days after cancellation. If you resubscribe within that period, everything is restored exactly as you left it." },
+  { q: "Can I have multiple branches on a lower plan?", a: "No. The number of branches is enforced by your plan. If you downgrade and have more branches than your new plan allows, you will need to deactivate the extra branches before the downgrade takes effect." },
+  { q: "How do I get a receipt for my payment?", a: "Paystack sends a payment receipt to your registered email address automatically after every successful transaction." },
+  { q: "What is the setup fee?", a: "The setup fee (₦25,000–₦50,000) is a one-time optional service where our team helps you configure ProfitTrack — uploading your product catalog, setting up branches, training your staff, and making sure everything runs smoothly before go-live. Contact us on WhatsApp to arrange." },
 ];
 
 const fmt = (v) => `₦${parseFloat(v || 0).toLocaleString("en-NG")}`;
@@ -73,23 +39,23 @@ const fmt = (v) => `₦${parseFloat(v || 0).toLocaleString("en-NG")}`;
 export default function PricingPage() {
   const user = JSON.parse(localStorage.getItem("user") || "{}");
 
-  const [subscription,   setSubscription]   = useState(null);
-  const [billing,        setBilling]        = useState("monthly");
-  const [selectedPlan,   setSelectedPlan]   = useState(null);
-  const [loading,        setLoading]        = useState(true);
-  const [paying,         setPaying]         = useState(false);
-  const [error,          setError]          = useState(null);
-  const [successMsg,     setSuccessMsg]     = useState(null);
-  const [infoMsg,        setInfoMsg]        = useState(null);
-  const [branding,       setBranding]       = useState(null);
-  const [activeGuide,    setActiveGuide]    = useState(null);
-  const [showGuide,      setShowGuide]      = useState(false);
-  const [cancelling,     setCancelling]     = useState(false);
-  const [showCancel,     setShowCancel]     = useState(false);
+  const [subscription,  setSubscription]  = useState(null);
+  const [billing,       setBilling]       = useState("monthly");
+  const [selectedPlan,  setSelectedPlan]  = useState(null);
+  const [loading,       setLoading]       = useState(true);
+  const [paying,        setPaying]        = useState(false);
+  const [error,         setError]         = useState(null);
+  const [successMsg,    setSuccessMsg]    = useState(null);
+  const [infoMsg,       setInfoMsg]       = useState(null);
+  const [branding,      setBranding]      = useState(null);
+  const [activeGuide,   setActiveGuide]   = useState(null);
+  const [showGuide,     setShowGuide]     = useState(false);
+  const [cancelling,    setCancelling]    = useState(false);
+  const [showCancel,    setShowCancel]    = useState(false);
   const paystackLoaded = useRef(false);
 
   useEffect(() => {
-    const fetch = async () => {
+    const fetchData = async () => {
       setLoading(true);
       try {
         const [subRes, brandRes] = await Promise.all([
@@ -102,7 +68,7 @@ export default function PricingPage() {
       } catch { setError("Failed to load subscription details."); }
       finally { setLoading(false); }
     };
-    fetch();
+    fetchData();
     loadPaystack();
   }, []);
 
@@ -115,50 +81,36 @@ export default function PricingPage() {
     document.head.appendChild(s);
   };
 
-  // Determine change type
-  const currentRank   = PLANS.find(p => p.key === subscription?.plan)?.rank || 0;
-  const selectedRank  = PLANS.find(p => p.key === selectedPlan)?.rank || 0;
-  const isUpgrade     = selectedRank > currentRank || (selectedRank === currentRank && billing === "annual");
-  const isDowngrade   = selectedRank < currentRank || (selectedRank === currentRank && billing === "monthly");
-  const isSamePlan    = selectedPlan === subscription?.plan && subscription?.subscription_status === "active";
-  const hasPending    = !!subscription?.pending_plan;
+  const currentRank  = PLANS.find(p => p.key === subscription?.plan)?.rank || 0;
+  const selectedRank = PLANS.find(p => p.key === selectedPlan)?.rank || 0;
+  const isUpgrade    = selectedRank > currentRank || (selectedRank === currentRank && billing === "annual");
+  const isDowngrade  = selectedRank < currentRank || (selectedRank === currentRank && billing === "monthly");
+  const isSamePlan   = selectedPlan === subscription?.plan && subscription?.subscription_status === "active";
+  const hasPending   = !!subscription?.pending_plan;
 
   const handlePay = async () => {
     if (!selectedPlan) return;
     if (!branding?.email) { setError("Please add your email in Branding & Settings first."); return; }
-
     setPaying(true); setError(null); setInfoMsg(null);
-
     try {
-      const initRes = await api.post("/payments/initialize", {
-        plan: selectedPlan, billing, email: branding.email,
-      });
-
-      // Downgrade scheduled — no payment needed
+      const initRes = await api.post("/payments/initialize", { plan: selectedPlan, billing, email: branding.email });
       if (initRes.data.type === "downgrade_scheduled") {
         setInfoMsg(initRes.data.message);
         setSubscription(s => ({ ...s, pending_plan: selectedPlan, pending_billing: billing }));
         setPaying(false);
         return;
       }
-
       const { payment_url, reference, amount } = initRes.data;
-
       if (!window.PaystackPop) { window.location.href = payment_url; return; }
-
       const PUBLIC_KEY = import.meta.env.VITE_PAYSTACK_PUBLIC_KEY || "";
       const handler = window.PaystackPop.setup({
-        key:      PUBLIC_KEY,
-        email:    branding.email,
-        amount:   amount * 100,
-        ref:      reference,
-        currency: "NGN",
-        channels: ["card", "bank", "ussd", "bank_transfer"],
+        key: PUBLIC_KEY, email: branding.email, amount: amount * 100, ref: reference,
+        currency: "NGN", channels: ["card", "bank", "ussd", "bank_transfer"],
         metadata: { business_id: user.business_id, plan: selectedPlan, billing },
         onSuccess: async (transaction) => {
           try {
             const verifyRes = await api.get(`/payments/verify/${transaction.reference}`);
-            setSuccessMsg(`🎉 Payment successful! Your ${PLANS.find(p=>p.key===verifyRes.data.plan)?.name} plan is now active.`);
+            setSuccessMsg(`🎉 Payment successful! Your ${PLANS.find(p => p.key === verifyRes.data.plan)?.name} plan is now active.`);
             setTimeout(() => { window.location.href = window.location.href; }, 3000);
           } catch { setError("Payment received but verification failed. Contact support."); }
           setPaying(false);
@@ -166,7 +118,6 @@ export default function PricingPage() {
         onCancel: () => { setPaying(false); },
       });
       handler.openIframe();
-
     } catch (err) {
       setError(err.response?.data?.detail || "Payment initialization failed.");
       setPaying(false);
@@ -195,26 +146,25 @@ export default function PricingPage() {
   const statusBadge = () => {
     if (!subscription) return null;
     const { subscription_status, trial_active, trial_days_left } = subscription;
-    if (trial_active)                         return <Badge color="#854F0B" bg="#FAEEDA">⏰ Trial — {trial_days_left} day{trial_days_left !== 1 ? "s" : ""} left</Badge>;
-    if (subscription_status === "active")     return <Badge color="#3B6D11" bg="#EAF3DE">✓ Active</Badge>;
-    if (subscription_status === "past_due")   return <Badge color="#A32D2D" bg="#FCEBEB">⚠️ Payment failed</Badge>;
-    if (subscription_status === "cancelled")  return <Badge color="#5F5E5A" bg="#F1EFE8">Cancelled</Badge>;
+    if (trial_active)                        return <Badge color="#854F0B" bg="#FAEEDA">⏰ Trial — {trial_days_left} day{trial_days_left !== 1 ? "s" : ""} left</Badge>;
+    if (subscription_status === "active")    return <Badge color="#3B6D11" bg="#EAF3DE">✓ Active</Badge>;
+    if (subscription_status === "past_due")  return <Badge color="#A32D2D" bg="#FCEBEB">⚠️ Payment failed</Badge>;
+    if (subscription_status === "cancelled") return <Badge color="#5F5E5A" bg="#F1EFE8">Cancelled</Badge>;
     return <Badge color="#A32D2D" bg="#FCEBEB">Expired</Badge>;
   };
 
-  const chosenPlan     = PLANS.find(p => p.key === selectedPlan);
-  const price          = chosenPlan ? (billing === "annual" ? chosenPlan.annual : chosenPlan.monthly) : 0;
-  const annualSaving   = chosenPlan ? (chosenPlan.monthly * 12) - chosenPlan.annual : 0;
-  const currentPlan    = PLANS.find(p => p.key === subscription?.plan);
+  const chosenPlan   = PLANS.find(p => p.key === selectedPlan);
+  const price        = chosenPlan ? (billing === "annual" ? chosenPlan.annual : chosenPlan.monthly) : 0;
+  const annualSaving = chosenPlan ? (chosenPlan.monthly * 12) - chosenPlan.annual : 0;
+  const currentPlan  = PLANS.find(p => p.key === subscription?.plan);
 
-  // Button state
   const getButtonState = () => {
-    if (successMsg)   return { text: "Payment complete", disabled: true };
-    if (paying)       return { text: "Opening payment...", disabled: true };
-    if (isSamePlan)   return { text: "✓ Already on this plan", disabled: true };
+    if (successMsg) return { text: "Payment complete", disabled: true };
+    if (paying)     return { text: "Opening payment...", disabled: true };
+    if (isSamePlan) return { text: "✓ Already on this plan", disabled: true };
     if (isDowngrade && subscription?.subscription_status === "active")
-                      return { text: `Schedule downgrade to ${chosenPlan?.name}`, disabled: false, isSchedule: true };
-    if (isUpgrade)    return { text: `Upgrade — Pay ${fmt(price)} now`, disabled: false };
+                    return { text: `Schedule downgrade to ${chosenPlan?.name}`, disabled: false, isSchedule: true };
+    if (isUpgrade)  return { text: `Upgrade — Pay ${fmt(price)} now`, disabled: false };
     return { text: `Pay ${fmt(price)} via Paystack`, disabled: false };
   };
 
@@ -268,23 +218,17 @@ export default function PricingPage() {
         {/* ── Plan guide ── */}
         {showGuide && (
           <div style={{ background: "var(--color-background-primary)", border: "1px solid var(--color-border-tertiary)", borderRadius: 12, padding: "18px 20px", marginBottom: 16 }}>
-            <div style={{ fontSize: 14, fontWeight: 600, color: "var(--color-text-primary)", marginBottom: 14 }}>
-              📖 Plan management guide
-            </div>
+            <div style={{ fontSize: 14, fontWeight: 600, color: "var(--color-text-primary)", marginBottom: 14 }}>📖 Plan management guide</div>
             <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
               {PLAN_GUIDE.map((item, i) => (
                 <div key={i}>
-                  <button
-                    onClick={() => setActiveGuide(activeGuide === i ? null : i)}
-                    style={{ width: "100%", textAlign: "left", background: activeGuide === i ? "var(--color-background-secondary)" : "none", border: "none", borderRadius: 8, padding: "10px 12px", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }}
-                  >
+                  <button onClick={() => setActiveGuide(activeGuide === i ? null : i)}
+                    style={{ width: "100%", textAlign: "left", background: activeGuide === i ? "var(--color-background-secondary)" : "none", border: "none", borderRadius: 8, padding: "10px 12px", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                     <span style={{ fontSize: 13, fontWeight: 500, color: "var(--color-text-primary)" }}>{item.q}</span>
                     <span style={{ fontSize: 14, color: "var(--color-text-tertiary)", flexShrink: 0, marginLeft: 8 }}>{activeGuide === i ? "▲" : "▼"}</span>
                   </button>
                   {activeGuide === i && (
-                    <div style={{ padding: "4px 12px 12px", fontSize: 13, color: "var(--color-text-secondary)", lineHeight: 1.7 }}>
-                      {item.a}
-                    </div>
+                    <div style={{ padding: "4px 12px 12px", fontSize: 13, color: "var(--color-text-secondary)", lineHeight: 1.7 }}>{item.a}</div>
                   )}
                 </div>
               ))}
@@ -292,14 +236,18 @@ export default function PricingPage() {
           </div>
         )}
 
-        {/* ── Pending downgrade notice ── */}
+        {/* ── Setup fee notice ── */}
+        <div style={{ background: "var(--color-background-secondary)", border: "1px solid var(--color-border-tertiary)", borderRadius: 10, padding: "11px 16px", marginBottom: 16, fontSize: 12, color: "var(--color-text-secondary)", display: "flex", alignItems: "center", gap: 10 }}>
+          <span style={{ fontSize: 16 }}>🛠️</span>
+          <span>Need help getting set up? One-time <strong>setup service (₦25,000–₦50,000)</strong> — product import, staff training, go-live support. <a href="https://wa.me/2349012984122" target="_blank" rel="noreferrer" style={{ color: "var(--color-primary)", fontWeight: 600 }}>WhatsApp us →</a></span>
+        </div>
+
+        {/* ── Pending downgrade ── */}
         {hasPending && (
           <div style={{ background: "#FAEEDA", border: "1px solid rgba(133,79,11,0.3)", borderRadius: 10, padding: "12px 16px", marginBottom: 16, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
             <div style={{ fontSize: 13, color: "#854F0B" }}>
-              <strong>Downgrade scheduled:</strong> Your plan will change to <strong>{PLANS.find(p=>p.key===subscription.pending_plan)?.name}</strong> on{" "}
-              {subscription.current_period_end
-                ? new Date(subscription.current_period_end).toLocaleDateString("en-NG", { day: "numeric", month: "long", year: "numeric" })
-                : "next renewal"}.
+              <strong>Downgrade scheduled:</strong> Your plan will change to <strong>{PLANS.find(p => p.key === subscription?.pending_plan)?.name}</strong> on{" "}
+              {subscription?.current_period_end ? new Date(subscription.current_period_end).toLocaleDateString("en-NG", { day: "numeric", month: "long", year: "numeric" }) : "next renewal"}.
             </div>
             <button onClick={handleCancelDowngrade}
               style={{ padding: "6px 12px", borderRadius: 7, border: "1px solid #854F0B", background: "none", color: "#854F0B", fontSize: 12, cursor: "pointer", whiteSpace: "nowrap", fontWeight: 500 }}>
@@ -313,9 +261,7 @@ export default function PricingPage() {
           <div style={{ background: "#FCEBEB", border: "1px solid rgba(163,45,45,0.3)", borderRadius: 10, padding: "14px 18px", marginBottom: 16 }}>
             <div style={{ fontSize: 13, fontWeight: 600, color: "#A32D2D", marginBottom: 6 }}>Cancel subscription?</div>
             <div style={{ fontSize: 12, color: "#A32D2D", marginBottom: 12, lineHeight: 1.6 }}>
-              Access continues until {subscription?.current_period_end
-                ? new Date(subscription.current_period_end).toLocaleDateString("en-NG", { day: "numeric", month: "long", year: "numeric" })
-                : "the end of your current period"}. Your data is kept for 90 days.
+              Access continues until {subscription?.current_period_end ? new Date(subscription.current_period_end).toLocaleDateString("en-NG", { day: "numeric", month: "long", year: "numeric" }) : "the end of your current period"}. Your data is kept for 90 days.
             </div>
             <div style={{ display: "flex", gap: 8 }}>
               <button onClick={handleCancelSubscription} disabled={cancelling}
@@ -337,16 +283,8 @@ export default function PricingPage() {
             <div style={{ fontSize: 12, color: "#5a8a3a", marginTop: 4, fontWeight: 400 }}>Refreshing in a moment...</div>
           </div>
         )}
-        {infoMsg && (
-          <div style={{ background: "#E6F1FB", border: "1px solid rgba(24,95,165,0.3)", borderRadius: 10, padding: "12px 16px", marginBottom: 16, fontSize: 13, color: "#185FA5" }}>
-            ℹ️ {infoMsg}
-          </div>
-        )}
-        {error && (
-          <div style={{ background: "var(--error-bg)", color: "var(--error-text)", borderRadius: 8, padding: "10px 14px", fontSize: 13, marginBottom: 16 }}>
-            {error}
-          </div>
-        )}
+        {infoMsg && <div style={{ background: "#E6F1FB", border: "1px solid rgba(24,95,165,0.3)", borderRadius: 10, padding: "12px 16px", marginBottom: 16, fontSize: 13, color: "#185FA5" }}>ℹ️ {infoMsg}</div>}
+        {error && <div style={{ background: "var(--error-bg)", color: "var(--error-text)", borderRadius: 8, padding: "10px 14px", fontSize: 13, marginBottom: 16 }}>{error}</div>}
         {!branding?.email && (
           <div style={{ background: "#FAEEDA", border: "1px solid rgba(133,79,11,0.2)", borderRadius: 8, padding: "10px 14px", fontSize: 12, color: "#854F0B", marginBottom: 16 }}>
             ⚠️ Add your email in <strong>Branding & Settings</strong> before making a payment.
@@ -354,7 +292,7 @@ export default function PricingPage() {
         )}
 
         {/* ── Billing toggle ── */}
-        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16, flexWrap: "wrap" }}>
           <span style={{ fontSize: 13, color: "var(--color-text-primary)", fontWeight: 500 }}>Billing:</span>
           <div style={{ display: "flex", background: "var(--color-background-secondary)", borderRadius: 8, padding: 3, border: "1px solid var(--color-border-tertiary)" }}>
             {["monthly", "annual"].map(b => (
@@ -368,16 +306,16 @@ export default function PricingPage() {
               </button>
             ))}
           </div>
+          <span style={{ fontSize: 11, color: "var(--color-text-tertiary)" }}>30-day free trial · No credit card required</span>
         </div>
 
         {/* ── Plan cards ── */}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 12, marginBottom: 16 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12, marginBottom: 16 }}>
           {PLANS.map(plan => {
-            const p       = billing === "annual" ? plan.annual : plan.monthly;
-            const selected = selectedPlan === plan.key;
-            const current  = subscription?.plan === plan.key && subscription?.subscription_status === "active";
+            const p         = billing === "annual" ? plan.annual : plan.monthly;
+            const selected  = selectedPlan === plan.key;
+            const current   = subscription?.plan === plan.key && subscription?.subscription_status === "active";
             const isPending = subscription?.pending_plan === plan.key;
-
             return (
               <div key={plan.key} onClick={() => setSelectedPlan(plan.key)} style={{
                 background: "var(--color-background-primary)",
@@ -389,13 +327,8 @@ export default function PricingPage() {
                     Most popular
                   </div>
                 )}
-                {current && !isPending && (
-                  <div style={{ position: "absolute", top: 10, right: 10, background: "#EAF3DE", color: "#3B6D11", fontSize: 10, fontWeight: 600, padding: "2px 8px", borderRadius: 6 }}>Current</div>
-                )}
-                {isPending && (
-                  <div style={{ position: "absolute", top: 10, right: 10, background: "#FAEEDA", color: "#854F0B", fontSize: 10, fontWeight: 600, padding: "2px 8px", borderRadius: 6 }}>Pending</div>
-                )}
-
+                {current && !isPending && <div style={{ position: "absolute", top: 10, right: 10, background: "#EAF3DE", color: "#3B6D11", fontSize: 10, fontWeight: 600, padding: "2px 8px", borderRadius: 6 }}>Current</div>}
+                {isPending && <div style={{ position: "absolute", top: 10, right: 10, background: "#FAEEDA", color: "#854F0B", fontSize: 10, fontWeight: 600, padding: "2px 8px", borderRadius: 6 }}>Pending</div>}
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 }}>
                   <div>
                     <div style={{ fontSize: 14, fontWeight: 700, color: "var(--color-text-primary)" }}>{plan.name}</div>
@@ -405,20 +338,16 @@ export default function PricingPage() {
                     <div style={{ fontSize: 18, fontWeight: 700, color: "var(--color-primary)" }}>
                       {fmt(p)}<span style={{ fontSize: 11, color: "var(--color-text-tertiary)", fontWeight: 400 }}>/{billing === "annual" ? "yr" : "mo"}</span>
                     </div>
-                    {billing === "annual" && (
-                      <div style={{ fontSize: 10, color: "#3B6D11", fontWeight: 600 }}>Save {fmt((plan.monthly*12)-plan.annual)}</div>
-                    )}
+                    {billing === "annual" && <div style={{ fontSize: 10, color: "#3B6D11", fontWeight: 600 }}>Save {fmt((plan.monthly * 12) - plan.annual)}</div>}
                   </div>
                 </div>
-
                 <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
-                  {plan.features.map((f, i) => (
+                  {plan.features.map((feature, i) => (
                     <div key={i} style={{ fontSize: 11, color: "var(--color-text-secondary)", display: "flex", alignItems: "center", gap: 5 }}>
-                      <span style={{ color: "#3B6D11", fontSize: 10 }}>✓</span> {f}
+                      <span style={{ color: "#3B6D11", fontSize: 10 }}>✓</span> {feature}
                     </div>
                   ))}
                 </div>
-
                 {selected && (
                   <div style={{ position: "absolute", top: 10, left: 10, width: 16, height: 16, borderRadius: "50%", background: "var(--color-primary)", display: "flex", alignItems: "center", justifyContent: "center" }}>
                     <span style={{ color: "#fff", fontSize: 10, fontWeight: 700 }}>✓</span>
@@ -431,68 +360,46 @@ export default function PricingPage() {
 
         {/* ── Payment summary ── */}
         <div style={{ background: "var(--color-background-primary)", border: "1px solid var(--color-border-tertiary)", borderRadius: 12, padding: "18px 20px" }}>
-
-          {/* Change type notice */}
           {!isSamePlan && subscription?.subscription_status === "active" && (
-            <div style={{
-              marginBottom: 12, padding: "8px 12px", borderRadius: 8, fontSize: 12,
-              background: isUpgrade ? "#E6F1FB" : "#FAEEDA",
-              color: isUpgrade ? "#185FA5" : "#854F0B",
-            }}>
+            <div style={{ marginBottom: 12, padding: "8px 12px", borderRadius: 8, fontSize: 12, background: isUpgrade ? "#E6F1FB" : "#FAEEDA", color: isUpgrade ? "#185FA5" : "#854F0B" }}>
               {isUpgrade
                 ? `⬆️ Upgrade — ${chosenPlan?.name} activates immediately. You are charged ${fmt(price)} now.`
                 : `⬇️ Downgrade — ${chosenPlan?.name} will activate at your next renewal. No charge today.`}
             </div>
           )}
-
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
             <div>
-              <div style={{ fontSize: 13, fontWeight: 600, color: "var(--color-text-primary)" }}>
-                {chosenPlan?.name} — {billing === "annual" ? "Annual" : "Monthly"}
-              </div>
+              <div style={{ fontSize: 13, fontWeight: 600, color: "var(--color-text-primary)" }}>{chosenPlan?.name} — {billing === "annual" ? "Annual" : "Monthly"}</div>
               <div style={{ fontSize: 11, color: "var(--color-text-tertiary)", marginTop: 2 }}>
                 {billing === "annual" ? `${fmt(chosenPlan?.monthly)}/month billed annually` : "Billed every month · cancel anytime"}
               </div>
             </div>
             <div style={{ fontSize: 22, fontWeight: 700, color: "var(--color-primary)" }}>{fmt(price)}</div>
           </div>
-
           {billing === "annual" && annualSaving > 0 && (
             <div style={{ background: "#EAF3DE", border: "1px solid rgba(59,109,17,0.2)", borderRadius: 8, padding: "8px 12px", fontSize: 12, color: "#3B6D11", marginBottom: 14 }}>
               🎉 You save {fmt(annualSaving)} compared to monthly billing
             </div>
           )}
-
-          <button
-            onClick={handlePay}
-            disabled={btnState.disabled || !branding?.email}
+          <button onClick={handlePay} disabled={btnState.disabled || !branding?.email}
             style={{
               width: "100%", padding: "13px 0", borderRadius: 10, border: "none",
-              background: btnState.disabled || !branding?.email
-                ? "var(--color-background-secondary)"
-                : btnState.isSchedule ? "#854F0B" : "var(--color-primary)",
+              background: btnState.disabled || !branding?.email ? "var(--color-background-secondary)" : btnState.isSchedule ? "#854F0B" : "var(--color-primary)",
               color: btnState.disabled || !branding?.email ? "var(--color-text-tertiary)" : "#fff",
-              fontSize: 15, fontWeight: 600,
-              cursor: btnState.disabled || !branding?.email ? "not-allowed" : "pointer",
-              transition: "all 0.2s",
-            }}
-          >
+              fontSize: 15, fontWeight: 600, cursor: btnState.disabled || !branding?.email ? "not-allowed" : "pointer", transition: "all 0.2s",
+            }}>
             {btnState.text}
           </button>
-
           <div style={{ fontSize: 11, color: "var(--color-text-tertiary)", textAlign: "center", marginTop: 10, lineHeight: 1.6 }}>
             Secured by Paystack · Card, bank transfer, or USSD · No hidden fees
           </div>
         </div>
+
       </div>
     </div>
   );
 }
 
 function Badge({ color, bg, children }) {
-  return (
-    <span style={{ background: bg, color, padding: "3px 12px", borderRadius: 20, fontSize: 12, fontWeight: 600 }}>
-      {children}
-    </span>
-  );
+  return <span style={{ background: bg, color, padding: "3px 12px", borderRadius: 20, fontSize: 12, fontWeight: 600 }}>{children}</span>;
 }

@@ -35,7 +35,7 @@ const MOBILE_CSS = `
     .pt-video-grid2   { grid-template-columns: 1fr !important; }
     .pt-video-grid3   { grid-template-columns: 1fr 1fr !important; }
     .pt-wa-grid       { grid-template-columns: 1fr !important; gap: 32px !important; }
-    .pt-pricing-grid  { grid-template-columns: 1fr 1fr !important; }
+    .pt-pricing-grid  { grid-template-columns: 1fr !important; }
     .pt-res-grid      { grid-template-columns: 1fr 1fr !important; }
     .pt-footer-grid   { grid-template-columns: 1fr 1fr !important; gap: 28px !important; }
     .pt-nav-links     { display: none !important; }
@@ -204,7 +204,7 @@ export default function LandingPage({ onStart }) {
           <PTIcon size={48} />
           <h1 style={{ fontSize: 24, fontWeight: 700, color: DARK, margin: "18px 0 8px" }}>You're in.</h1>
           <p style={{ fontSize: 14, color: "#555", marginBottom: 22, lineHeight: 1.7 }}>
-            <strong style={{ color: DARK }}>{signupResult.business_name}</strong> is on ProfitTrack.<br />Your <strong>14-day free trial</strong> has started.
+            <strong style={{ color: DARK }}>{signupResult.business_name}</strong> is on ProfitTrack.<br />Your <strong>30-day free trial</strong> has started.
           </p>
           <div style={{ background: "#FDF8F0", border: "1px solid rgba(200,130,10,0.18)", borderRadius: 12, padding: "14px 18px", marginBottom: 24, textAlign: "left" }}>
             <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: AMBER, marginBottom: 7 }}>Your login</div>
@@ -258,7 +258,7 @@ export default function LandingPage({ onStart }) {
               Track every sale. Monitor your staff. Manage inventory across branches. Get a WhatsApp report every night.
             </p>
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 16 }}>
-              <button onClick={() => setShowSignup(true)} style={{ ...btnAmber, fontSize: 14, padding: "13px 24px" }}>Start 14-day free trial →</button>
+              <button onClick={() => setShowSignup(true)} style={{ ...btnAmber, fontSize: 14, padding: "13px 24px" }}>Start 30-day free trial →</button>
               <a href={DEMO_URL} target="_blank" rel="noreferrer" style={{ ...btnOutline, fontSize: 13, padding: "13px 20px" }}>📱 Request a demo</a>
             </div>
             <p style={{ fontSize: 12, color: "#aaa" }}>No credit card · 5 minutes setup · Cancel anytime</p>
@@ -309,8 +309,8 @@ export default function LandingPage({ onStart }) {
 
       {/* ── Stats ── */}
       <section style={{ background: CREAM2, padding: "48px 24px" }}>
-        <div className="pt-stats-grid" style={{ maxWidth: 860, margin: "0 auto", display: "grid", gridTemplateColumns: "repeat(4,1fr)" }}>
-          {[{n:14,s:" days",l:"Free trial — no card"},{n:30,s:" min",l:"Average setup time"},{n:99,s:"%",l:"Uptime target"},{n:5,s:" min",l:"Time to first sale"}].map((s,i) => (
+        <div className="pt-stats-grid" style={{ maxWidth: 860, margin: "0 auto", display: "grid", gridTemplateColumns: "repeat(3,1fr)" }}>
+          {[{n:30,s:" days",l:"Free trial — no card"},{n:30,s:" min",l:"Average setup time"},{n:99,s:"%",l:"Uptime target"},{n:5,s:" min",l:"Time to first sale"}].map((s,i) => (
             <div key={i} className={i<3?"pt-stats-border":""} style={{ textAlign: "center", padding: "16px 8px", borderRight: i<3?"1px solid rgba(200,130,10,0.12)":"none" }}>
               <div style={{ fontSize: 32, fontWeight: 700, color: AMBER, fontFamily: "Georgia,serif" }}><Counter target={s.n} suffix={s.s} /></div>
               <div style={{ fontSize: 11, color: "#888", marginTop: 4, textTransform: "uppercase", letterSpacing: "0.06em" }}>{s.l}</div>
@@ -453,15 +453,14 @@ export default function LandingPage({ onStart }) {
         <p style={sL}>Pricing</p>
         <h2 style={sH}>Simple, honest pricing</h2>
         <p style={{ textAlign: "center", color: "#666", fontSize: 14, maxWidth: 480, margin: "10px auto 10px", lineHeight: 1.7 }}>Most shops lose ₦20,000–₦100,000 monthly from untracked sales. ProfitTrack pays for itself within weeks.</p>
-        <p style={{ textAlign: "center", fontSize: 13, color: AMBER, fontWeight: 600, marginBottom: 40 }}>14-day free trial on all plans. No credit card required.</p>
-        <div className="pt-pricing-grid" style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", border: "1px solid rgba(200,130,10,0.14)", borderRadius: 16, overflow: "hidden" }}>
+        <p style={{ textAlign: "center", fontSize: 13, color: AMBER, fontWeight: 600, marginBottom: 40 }}>30-day free trial on all plans. No credit card required.</p>
+        <div className="pt-pricing-grid" style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", border: "1px solid rgba(200,130,10,0.14)", borderRadius: 16, overflow: "hidden" }}>
           {[
-            {name:"Solo",price:"₦5,000",per:"/mo",annual:"₦50,000/yr",bg:"#fff",features:["1 branch","1 admin user","Full POS checkout","Inventory tracking","Sales history","Reports"]},
-            {name:"Starter",price:"₦12,000",per:"/mo",annual:"₦120,000/yr",bg:DARK,hot:true,features:["1 branch","3 staff accounts","Everything in Solo","Expense tracking","Loyalty programme","Credit management","Bulk import"]},
-            {name:"Business",price:"₦25,000",per:"/mo",annual:"₦250,000/yr",bg:"#fff",features:["3 branches","10 staff accounts","Everything in Starter","Analytics dashboard","WhatsApp reports","Multi-branch management"]},
-            {name:"Enterprise",price:"₦50,000",per:"/mo",annual:"₦500,000/yr",bg:"#fff",features:["Unlimited branches","Unlimited staff","Everything in Business","White-label branding","Custom invoice design","Priority support"]},
+            {name:"Starter",price:"₦5,000",per:"/mo",annual:"₦50,000/yr",bg:"#fff",features:["1 branch","3 staff accounts","Full POS checkout","Inventory tracking","Sales history","Reports","Expense tracking","Loyalty & credit","Bulk import"]},
+            {name:"Business",price:"₦15,000",per:"/mo",annual:"₦150,000/yr",bg:DARK,hot:true,features:["3 branches","10 staff accounts","Everything in Starter","Analytics dashboard","WhatsApp daily reports","Multi-branch management"]},
+            {name:"Enterprise",price:"₦30,000",per:"/mo",annual:"₦300,000/yr",bg:"#fff",features:["Unlimited branches","Unlimited staff","Everything in Business","White-label branding","Custom invoice design","Priority support"]},
           ].map((plan,i) => (
-            <div key={i} style={{ background: plan.bg, padding: "28px 20px", position: "relative", borderRight: i<3?"1px solid rgba(200,130,10,0.1)":"none" }}>
+            <div key={i} style={{ background: plan.bg, padding: "28px 20px", position: "relative", borderRight: i<2?"1px solid rgba(200,130,10,0.1)":"none" }}>
               {plan.hot && <div style={{ position: "absolute", top: 0, left: "50%", transform: "translateX(-50%)", background: AMBER, color: "#fff", fontSize: 9, fontWeight: 700, padding: "3px 12px", borderRadius: "0 0 7px 7px", textTransform: "uppercase", letterSpacing: "0.08em" }}>Most popular</div>}
               <div style={{ fontSize: 13, fontWeight: 700, color: plan.hot?"#fff":DARK, marginBottom: 6, fontFamily: "Georgia,serif" }}>{plan.name}</div>
               <div style={{ fontSize: 22, fontWeight: 700, color: AMBER, lineHeight: 1 }}>{plan.price}<span style={{ fontSize: 11, color: plan.hot?"rgba(255,255,255,0.4)":"#bbb", fontWeight: 400 }}>{plan.per}</span></div>
@@ -514,14 +513,14 @@ export default function LandingPage({ onStart }) {
         <div style={{ marginTop: 32 }}>
           {[
             {q:"Do I need a Paystack account to use ProfitTrack?",a:"No. Paystack is only used to process your subscription payment to ProfitTrack. Your customers pay you using your existing methods — cash, bank transfer, or your bank's POS terminal."},
-            {q:"What happens after my 14-day free trial?",a:"You'll be prompted to add payment details to continue. Your data is never deleted immediately — access is suspended until you subscribe. If you don't subscribe, data is kept for 30 days after trial expiry."},
+            {q:"What happens after my 30-day free trial?",a:"You'll be prompted to add payment details to continue. Your data is never deleted immediately — access is suspended until you subscribe. If you don't subscribe, data is kept for 30 days after trial expiry."},
             {q:"Can I change my plan after subscribing?",a:"Yes. Upgrades take effect immediately. Downgrades are scheduled for your next renewal date. Manage from Plan & Billing inside the app."},
             {q:"Does the system work without internet?",a:"Yes. Cash and transfer sales queue offline and sync when connectivity returns. Reports, analytics, and credit sales require internet."},
             {q:"How does the WhatsApp daily report work?",a:"Available on Business and Enterprise plans (and all plans during trial). Every night at 8PM Lagos time, ProfitTrack sends a complete daily summary to your registered phone number automatically."},
             {q:"Can I install ProfitTrack on my phone?",a:"Yes. On Android, open profittrack.ng in Chrome and tap the install icon in the address bar or use the install section above. On iPhone, open in Safari → tap Share → Add to Home Screen."},
             {q:"What hardware do I need?",a:"Any device with a browser. For a full POS setup, a USB barcode scanner (₦10,000–₦25,000) and a thermal receipt printer add significant efficiency. Hardware is optional."},
             {q:"Is my business data safe?",a:"Yes. All data is encrypted in transit (TLS 1.2+) and at rest (AES-256). Each business's data is completely isolated. We are NDPR-compliant with full audit logs of every action."},
-            {q:"What is your refund policy?",a:"No refunds after payment. The 14-day free trial exists for evaluation. In exceptional circumstances within 48 hours of payment, contact us and we'll review."},
+            {q:"What is your refund policy?",a:"No refunds after payment. The 30-day free trial exists for evaluation. In exceptional circumstances within 48 hours of payment, contact us and we'll review."},
             {q:"How do I get support?",a:"WhatsApp is fastest — +234 901 298 4122, Mon–Sat 9AM–6PM Lagos time. Email: support@profittrack.ng."},
           ].map((item,i) => <FAQItem key={i} {...item} />)}
         </div>
@@ -531,7 +530,7 @@ export default function LandingPage({ onStart }) {
       <section style={{ background: DARK, padding: "72px 24px", textAlign: "center" }}>
         <PTIcon size={42} />
         <h2 style={{ fontSize: "clamp(26px,4vw,34px)", fontWeight: 700, color: "#fff", margin: "20px 0 10px", fontFamily: "Georgia,serif" }}>Ready to take control?</h2>
-        <p style={{ color: "rgba(255,255,255,0.45)", fontSize: 14, marginBottom: 30 }}>14 days free. No credit card. Setup in 5 minutes.</p>
+        <p style={{ color: "rgba(255,255,255,0.45)", fontSize: 14, marginBottom: 30 }}>30 days free. No credit card. Setup in 5 minutes.</p>
         <div style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap" }}>
           <button onClick={() => setShowSignup(true)} style={{ ...btnAmber, fontSize: 14, padding: "13px 28px" }}>Start free trial today →</button>
           <a href={WHATSAPP_URL} target="_blank" rel="noreferrer" style={{ padding: "13px 24px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.12)", background: "transparent", color: "#fff", fontSize: 14, textDecoration: "none", display: "inline-block", fontFamily: "Georgia,serif" }}>📱 WhatsApp: 09012984122</a>

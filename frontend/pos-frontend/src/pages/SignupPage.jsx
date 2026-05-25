@@ -3,25 +3,20 @@ import api from "../api/api";
 
 const PLANS = [
   {
-    key: "solo", name: "Solo", price: "₦5,000", annual: "₦50,000/yr",
-    desc: "1 branch · 1 user · Full POS & inventory",
-    features: ["POS checkout", "Inventory", "Sales history", "Reports"],
-  },
-  {
-    key: "starter", name: "Starter", price: "₦12,000", annual: "₦120,000/yr",
-    desc: "1 branch · 3 users · All core features",
-    features: ["Everything in Solo", "3 staff accounts", "Expense tracking", "Loyalty & credit", "Bulk import"],
+    key: "starter", name: "Starter", price: "₦5,000", annual: "₦50,000/yr",
+    desc: "1 branch · 3 staff · Full POS & inventory",
+    features: ["Full POS checkout", "Inventory tracking", "3 staff accounts", "Expense tracking", "Loyalty & credit", "Bulk import"],
     popular: true,
   },
   {
-    key: "business", name: "Business", price: "₦25,000", annual: "₦250,000/yr",
-    desc: "3 branches · 10 users · Full analytics",
-    features: ["Everything in Starter", "Multi-branch", "Analytics dashboard", "WhatsApp reports"],
+    key: "business", name: "Business", price: "₦15,000", annual: "₦150,000/yr",
+    desc: "3 branches · 10 staff · Analytics & WhatsApp",
+    features: ["Everything in Starter", "3 branches", "10 staff accounts", "Analytics dashboard", "WhatsApp daily reports", "Multi-branch management"],
   },
   {
-    key: "enterprise", name: "Enterprise", price: "₦50,000", annual: "₦500,000/yr",
-    desc: "Unlimited branches & users",
-    features: ["Everything in Business", "Unlimited branches", "White-label branding", "Priority support"],
+    key: "enterprise", name: "Enterprise", price: "₦30,000", annual: "₦300,000/yr",
+    desc: "Unlimited branches & staff",
+    features: ["Everything in Business", "Unlimited branches", "Unlimited staff", "White-label branding", "Priority support"],
   },
 ];
 
@@ -103,7 +98,7 @@ export default function SignupPage({ onSignupSuccess, onBack }) {
         {step === 1 && (
           <>
             <div style={pageTitle}>Choose your plan</div>
-            <div style={pageSub}>All plans include a <strong>14-day free trial</strong>. No credit card required to start.</div>
+            <div style={pageSub}>All plans include a <strong>30-day free trial</strong>. No credit card required to start.</div>
 
             <div style={planGrid}>
               {PLANS.map(p => (
@@ -142,7 +137,7 @@ export default function SignupPage({ onSignupSuccess, onBack }) {
             </div>
 
             <div style={{ background: "#EAF3DE", border: "1px solid rgba(59,109,17,0.3)", borderRadius: 10, padding: "12px 16px", fontSize: 13, color: "#3B6D11", marginTop: 8, textAlign: "center" }}>
-              🎉 You selected <strong>{selectedPlan?.name}</strong> — 14 days free, then {selectedPlan?.price}/month. Cancel anytime.
+              🎉 You selected <strong>{selectedPlan?.name}</strong> — 30 days free, then {selectedPlan?.price}/month. Cancel anytime.
             </div>
 
             <button onClick={() => setStep(2)} style={primaryBtn}>
@@ -250,7 +245,7 @@ export default function SignupPage({ onSignupSuccess, onBack }) {
             </div>
 
             <div style={{ fontSize: 12, color: "#888", marginTop: 12, lineHeight: 1.6 }}>
-              By creating an account you agree to our terms of service. Your 14-day free trial starts immediately — no credit card required.
+              By creating an account you agree to our terms of service. Your 30-day free trial starts immediately — no credit card required.
             </div>
 
             <div style={{ display: "flex", gap: 10, marginTop: 16 }}>
@@ -302,7 +297,7 @@ const container   = { maxWidth: 680, margin: "40px auto", padding: "0 24px 60px"
 const stepRow     = { display: "flex", alignItems: "flex-start", marginBottom: 32 };
 const pageTitle   = { fontSize: 22, fontWeight: 700, color: "#1a1a1a", marginBottom: 6 };
 const pageSub     = { fontSize: 13, color: "#666", marginBottom: 24, lineHeight: 1.6 };
-const planGrid    = { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 16 };
+const planGrid    = { display: "grid", gridTemplateColumns: "1fr", gap: 12, marginBottom: 16 };
 const planCard    = { borderRadius: 12, padding: "16px 14px", transition: "all 0.15s" };
 const popularBadge = { position: "absolute", top: -10, left: "50%", transform: "translateX(-50%)", background: "#185FA5", color: "#fff", fontSize: 10, fontWeight: 700, padding: "2px 12px", borderRadius: 20, whiteSpace: "nowrap" };
 const primaryBtn  = { width: "100%", padding: "13px 0", borderRadius: 10, border: "none", background: "#185FA5", color: "#fff", fontSize: 15, fontWeight: 600, cursor: "pointer", marginTop: 16 };

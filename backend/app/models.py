@@ -17,7 +17,7 @@ class Business(Base):
     owner_name  = Column(String, nullable=True)
     is_active   = Column(Boolean, default=True)
     created_at  = Column(DateTime, default=datetime.utcnow)
-    plan        = Column(String, default="starter", nullable=False)  # solo | starter | business | enterprise
+    plan = Column(String, default="starter", nullable=False)  # starter | business | enterprise
     features    = Column(JSONB, nullable=False, server_default="{}")
     loyalty_earn_rate   = Column(Numeric(6, 2), nullable=False, default=1)
     loyalty_redeem_rate = Column(Numeric(6, 2), nullable=False, default=5)
