@@ -188,6 +188,7 @@ export default function LandingPage({ onStart }) {
   injectCSS();
 
   const [showSignup,   setShowSignup]   = useState(false);
+  const [signupPlan,   setSignupPlan]   = useState(null);
   const [signupResult, setSignupResult] = useState(null);
   const [scrolled,     setScrolled]     = useState(false);
 
@@ -220,7 +221,7 @@ export default function LandingPage({ onStart }) {
     );
   }
 
-  if (showSignup) return <SignupPage onSignupSuccess={d => { setSignupResult(d); setShowSignup(false); }} onBack={() => setShowSignup(false)} />;
+  if (showSignup) return <SignupPage initialPlan={signupPlan} onSignupSuccess={d => { setSignupResult(d); setShowSignup(false); }} onBack={() => { setShowSignup(false); setSignupPlan(null); }} />;
 
   return (
     <div style={{ fontFamily: "Georgia,'Times New Roman',serif", background: CREAM, color: DARK, overflowX: "hidden" }}>
@@ -468,7 +469,7 @@ export default function LandingPage({ onStart }) {
               <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 20 }}>
                 {plan.features.map((f,j) => <div key={j} style={{ fontSize: 12, color: plan.hot?"rgba(255,255,255,0.65)":"#555", display: "flex", alignItems: "flex-start", gap: 5, lineHeight: 1.4 }}><span style={{ color: AMBER, flexShrink: 0, fontSize: 10, marginTop: 1 }}>✓</span>{f}</div>)}
               </div>
-              <button onClick={() => setShowSignup(true)} style={{ width: "100%", padding: "9px 0", borderRadius: 8, border: plan.hot?"none":`1px solid ${AMBER}`, background: plan.hot?AMBER:"transparent", color: plan.hot?"#fff":AMBER, fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "Georgia,serif" }}>
+              <button onClick={() => { setSignupPlan(plan.name.toLowerCase()); setShowSignup(true); }} style={{ width: "100%", padding: "9px 0", borderRadius: 8, border: plan.hot?"none":`1px solid ${AMBER}`, background: plan.hot?AMBER:"transparent", color: plan.hot?"#fff":AMBER, fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "Georgia,serif" }}>
                 Start free trial
               </button>
             </div>

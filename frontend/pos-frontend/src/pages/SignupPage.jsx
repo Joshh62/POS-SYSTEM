@@ -6,12 +6,12 @@ const PLANS = [
     key: "starter", name: "Starter", price: "₦5,000", annual: "₦50,000/yr",
     desc: "1 branch · 3 staff · Full POS & inventory",
     features: ["Full POS checkout", "Inventory tracking", "3 staff accounts", "Expense tracking", "Loyalty & credit", "Bulk import"],
-    popular: true,
   },
   {
     key: "business", name: "Business", price: "₦15,000", annual: "₦150,000/yr",
     desc: "3 branches · 10 staff · Analytics & WhatsApp",
     features: ["Everything in Starter", "3 branches", "10 staff accounts", "Analytics dashboard", "WhatsApp daily reports", "Multi-branch management"],
+    popular: true,
   },
   {
     key: "enterprise", name: "Enterprise", price: "₦30,000", annual: "₦300,000/yr",
@@ -20,9 +20,9 @@ const PLANS = [
   },
 ];
 
-export default function SignupPage({ onSignupSuccess, onBack }) {
+export default function SignupPage({ onSignupSuccess, onBack, initialPlan }) {
   const [step,    setStep]    = useState(1);
-  const [plan,    setPlan]    = useState("starter");
+  const [plan,    setPlan]    = useState(initialPlan || "starter");
   const [form,    setForm]    = useState({
     business_name: "", address: "", phone: "",
     full_name: "", username: "", password: "", confirm_password: "", email: "",
