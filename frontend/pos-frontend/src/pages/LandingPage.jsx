@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import SignupPage        from "./SignupPage";
 import PWAInstallBanner  from "../components/PWAInstallBanner";
 
-const WHATSAPP_NUMBER = "2348154586355";
+const WHATSAPP_NUMBER = "2349012984122";
 const WHATSAPP_MSG    = encodeURIComponent("Hi, I'd like to learn more about ProfitTrack POS for my business.");
 const WHATSAPP_URL    = `https://wa.me/${WHATSAPP_NUMBER}?text=${WHATSAPP_MSG}`;
 const DEMO_MSG        = encodeURIComponent("Hi, I'd like to request a free demo of ProfitTrack POS.");
@@ -224,10 +224,10 @@ export default function LandingPage({ onStart }) {
   if (showSignup) return <SignupPage initialPlan={signupPlan} onSignupSuccess={d => { setSignupResult(d); setShowSignup(false); }} onBack={() => { setShowSignup(false); setSignupPlan(null); }} />;
 
   return (
-    <div style={{ fontFamily: "Georgia,'Times New Roman',serif", background: CREAM, color: DARK, overflowX: "hidden" }}>
+    <div style={{ fontFamily: "Georgia,'Times New Roman',serif", background: CREAM, color: DARK, overflowX: "hidden", paddingTop: 60 }}>
 
       {/* ── Nav ── */}
-      <nav style={{ position: "sticky", top: 0, zIndex: 200, background: scrolled?"rgba(249,245,238,0.96)":CREAM, backdropFilter: "blur(12px)", borderBottom: scrolled?"1px solid rgba(200,130,10,0.12)":"1px solid transparent", padding: "0 24px", height: 60, display: "flex", alignItems: "center", justifyContent: "space-between", transition: "all 0.3s" }}>
+      <nav style={{ position: "fixed", top: 0, left: 0, right: 0, zIndex: 200, background: scrolled?"rgba(249,245,238,0.97)":CREAM, backdropFilter: "blur(12px)", borderBottom: scrolled?"1px solid rgba(200,130,10,0.12)":"1px solid transparent", padding: "0 24px", height: 60, display: "flex", alignItems: "center", justifyContent: "space-between", transition: "all 0.3s" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
           <PTIcon size={28} />
           <span style={{ fontWeight: 700, fontSize: 15, color: DARK }}>ProfitTrack</span>
@@ -236,7 +236,6 @@ export default function LandingPage({ onStart }) {
           {[["How it works","#how"],["Features","#features"],["Pricing","#pricing"],["Resources","#resources"],["FAQ","#faq"]].map(([l,h]) => (
             <a key={l} href={h} style={navLink}>{l}</a>
           ))}
-          <a href={WHATSAPP_URL} target="_blank" rel="noreferrer" style={{ ...navLink, color: "#128C7E" }}>WhatsApp</a>
         </div>
         <div className="pt-nav-ctas" style={{ display: "flex", gap: 8, alignItems: "center" }}>
           <button onClick={onStart} style={navLoginBtn}>Login</button>
@@ -260,7 +259,6 @@ export default function LandingPage({ onStart }) {
             </p>
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 16 }}>
               <button onClick={() => setShowSignup(true)} style={{ ...btnAmber, fontSize: 14, padding: "13px 24px" }}>Start 30-day free trial →</button>
-              <a href={DEMO_URL} target="_blank" rel="noreferrer" style={{ ...btnOutline, fontSize: 13, padding: "13px 20px" }}>📱 Request a demo</a>
             </div>
             <p style={{ fontSize: 12, color: "#aaa" }}>No credit card · 5 minutes setup · Cancel anytime</p>
           </div>
@@ -310,7 +308,7 @@ export default function LandingPage({ onStart }) {
 
       {/* ── Stats ── */}
       <section style={{ background: CREAM2, padding: "48px 24px" }}>
-        <div className="pt-stats-grid" style={{ maxWidth: 860, margin: "0 auto", display: "grid", gridTemplateColumns: "repeat(3,1fr)" }}>
+        <div className="pt-stats-grid" style={{ maxWidth: 860, margin: "0 auto", display: "grid", gridTemplateColumns: "repeat(4,1fr)" }}>
           {[{n:30,s:" days",l:"Free trial — no card"},{n:30,s:" min",l:"Average setup time"},{n:99,s:"%",l:"Uptime target"},{n:5,s:" min",l:"Time to first sale"}].map((s,i) => (
             <div key={i} className={i<3?"pt-stats-border":""} style={{ textAlign: "center", padding: "16px 8px", borderRight: i<3?"1px solid rgba(200,130,10,0.12)":"none" }}>
               <div style={{ fontSize: 32, fontWeight: 700, color: AMBER, fontFamily: "Georgia,serif" }}><Counter target={s.n} suffix={s.s} /></div>
@@ -369,23 +367,19 @@ export default function LandingPage({ onStart }) {
         </div>
       </section>
 
-      {/* ── Videos ── */}
+      {/* ── Video demo ── */}
       <section className="pt-dark-section" style={{ background: DARK, padding: "72px 24px" }}>
-        <div style={{ maxWidth: 1100, margin: "0 auto" }}>
+        <div style={{ maxWidth: 760, margin: "0 auto" }}>
           <p style={{ ...sL, color: AMBER }}>See it in action</p>
-          <h2 style={{ ...sH, color: "#fff" }}>Watch ProfitTrack work</h2>
-          <p style={{ textAlign: "center", color: "rgba(255,255,255,0.4)", fontSize: 13, marginBottom: 40 }}>Video tutorials coming soon — request a live WhatsApp demo anytime.</p>
-          <div className="pt-video-grid2" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 14 }}>
-            {HERO_VIDEO_ID
-              ? <YouTubeEmbed videoId={HERO_VIDEO_ID} title="Making your first sale" />
-              : <VideoPlaceholder title="Making your first sale" desc="POS checkout · barcode scanning · payment methods · PDF receipt" />
-            }
-            <VideoPlaceholder title="Setting up inventory" desc="Adding products · bulk import · receive stock · reorder alerts" />
-          </div>
-          <div className="pt-video-grid3" style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 14 }}>
-            <VideoPlaceholder title="Analytics dashboard" desc="Revenue trends · peak hours · best sellers" />
-            <VideoPlaceholder title="WhatsApp daily reports" desc="What you receive every night at 8PM" />
-            <VideoPlaceholder title="Staff & branch management" desc="Roles · permissions · multi-branch" />
+          <h2 style={{ ...sH, color: "#fff", marginBottom: 12 }}>Watch ProfitTrack make a sale</h2>
+          <p style={{ textAlign: "center", color: "rgba(255,255,255,0.45)", fontSize: 14, marginBottom: 36, lineHeight: 1.7 }}>
+            From opening the POS to printing the receipt — under 60 seconds.
+          </p>
+          <YouTubeEmbed videoId={HERO_VIDEO_ID} title="Making your first sale with ProfitTrack POS" />
+          <div style={{ display: "flex", justifyContent: "center", marginTop: 24 }}>
+            <a href={WHATSAPP_URL} target="_blank" rel="noreferrer" style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "11px 22px", borderRadius: 10, border: "1px solid rgba(200,130,10,0.35)", background: "transparent", color: "rgba(255,255,255,0.7)", fontSize: 13, textDecoration: "none", fontFamily: "Georgia,serif" }}>
+              📱 Questions? WhatsApp us: 09012984122
+            </a>
           </div>
         </div>
       </section>
@@ -483,14 +477,11 @@ export default function LandingPage({ onStart }) {
         <div style={{ maxWidth: 1100, margin: "0 auto" }}>
           <p style={{ ...sL, color: AMBER }}>Resources</p>
           <h2 style={{ ...sH, color: "#fff" }}>Everything you need to get started</h2>
-          <div className="pt-res-grid" style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 12, marginTop: 40 }}>
+          <div className="pt-res-grid" style={{ display: "grid", gridTemplateColumns: "repeat(2,1fr)", gap: 12, marginTop: 40 }}>
             {[
               {icon:"📖",title:"Getting started guide",desc:"From registration to your first sale in 30 minutes. Step-by-step walkthrough.",link:GETTING_STARTED_URL,label:"Read guide →",ext:false},
               {icon:"🖥️",title:"Hardware guide",desc:"Recommended barcode scanners, receipt printers, and counter setups for Nigerian retail.",link:HARDWARE_URL,label:"Read guide →",ext:false},
-              {icon:"💳",title:"Plan comparison",desc:"Detailed breakdown of what each plan includes and who it's for.",link:"#pricing",label:"View pricing ↓"},
               {icon:"🔒",title:"Security & privacy",desc:"How we protect your data: encryption, NDPR compliance, audit logs.",link:SECURITY_URL,label:"Read overview →",ext:false},
-              {icon:"📱",title:"Video tutorials",desc:"Short screen recordings of each major feature.",link:DEMO_URL,label:"Request demo →",ext:true},
-              {icon:"💬",title:"WhatsApp support",desc:"Talk to a real person. Monday–Saturday, 9AM–6PM Lagos time.",link:WHATSAPP_URL,label:"Chat now →",ext:true},
               {icon:"📚",title:"Document library",desc:"All legal and product documents in one place — Privacy Policy, Terms, DPA, Refund Policy, and guides.",link:"/docs",label:"Open library →",ext:false},
             ].map((r,i) => (
               <div key={i} style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.05)", borderRadius: 13, padding: "20px 18px" }}>
