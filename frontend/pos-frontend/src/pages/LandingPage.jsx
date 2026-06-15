@@ -198,6 +198,16 @@ export default function LandingPage({ onStart }) {
     return () => window.removeEventListener("scroll", h);
   }, []);
 
+  useEffect(() => {
+    const hash = window.location.hash;
+    if (hash) {
+      setTimeout(() => {
+        const el = document.querySelector(hash);
+        if (el) el.scrollIntoView({ behavior: 'smooth' });
+      }, 400);
+    }
+  }, []);
+
   if (signupResult) {
     return (
       <div style={{ minHeight: "100vh", background: CREAM, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "Georgia, serif", padding: 20 }}>
