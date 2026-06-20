@@ -26,8 +26,8 @@ import resend
 
 resend.api_key = os.getenv("RESEND_API_KEY", "")
 
-HELLO_EMAIL   = "hello@profittrack.ng"
-BILLING_EMAIL = "billing@profittrack.ng"
+HELLO_EMAIL   = "ProfitTrack <hello@profitapps.ng>"
+BILLING_EMAIL = "ProfitTrack Billing <accounts@profitapps.ng>"
 APP_URL       = "https://www.profittrack.ng"
 SUPPORT_PHONE = "+234 901 298 4122"
 AMBER         = "#C8820A"
