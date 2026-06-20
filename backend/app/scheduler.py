@@ -242,8 +242,13 @@ def _delete_business(db, biz):
         db.query(models.InventoryBatch).filter(models.InventoryBatch.product_id.in_(product_ids), models.InventoryBatch.branch_id.in_(branch_ids)).delete(synchronize_session=False)
         db.query(models.BranchInventory).filter(models.BranchInventory.branch_id.in_(branch_ids)).delete(synchronize_session=False)
     db.query(models.Product).filter(models.Product.business_id==biz_id).delete(synchronize_session=False)
-    for m in ["Supplier","Expense","ExpenseCategory","FeatureFlag"]:
-        if hasattr(models,m): getattr(db.query(getattr(models,m)).filter(getattr(getattr(models,m),"business_id")==biz_id,"delete")(synchronize_session=False),"__class__",None)
+    for m in ["Supplier", "Expense", "ExpenseCategory", "FeatureFlag"]:
+        if hasattr(models, m):
+            model_cls = getattr(models, m)
+            if hasattr(model_cls, "business_id"):
+                db.query(model_cls).filter(
+                    model_cls.business_id == biz_id
+                ).delete(synchronize_session=False)
     db.query(models.Customer).filter(models.Customer.business_id==biz_id).delete(synchronize_session=False)
     if user_ids: db.query(models.AuditLog).filter(models.AuditLog.user_id.in_(user_ids)).delete(synchronize_session=False)
     db.query(models.User).filter(models.User.business_id==biz_id).delete(synchronize_session=False)

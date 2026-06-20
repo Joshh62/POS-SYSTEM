@@ -170,7 +170,7 @@ def welcome(
            f"full access, no credit card needed."),
         _info_box([
             ("Business name", business_name),
-            ("Plan", f"{plan_label} (14-day free trial)"),
+            ("Plan", f"{plan_label} (30-day free trial)"),
             ("Username", f"<span style='font-family:monospace;font-size:14px;'>{username}</span>"),
             ("Trial ends", trial_ends_at),
         ]),
