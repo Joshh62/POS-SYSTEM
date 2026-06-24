@@ -435,7 +435,7 @@ export default function AnalyticsPage() {
             <>
               <Section title="Stock health overview">
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginBottom: 16 }}>
-                  <KpiCard label="Total SKUs"       value={inventory.summary.total_sku}         color="var(--color-text-primary)" />
+                  <KpiCard label="Total Stock"       value={inventory.summary.total_sku}         color="var(--color-text-primary)" />
                   <KpiCard label="OK"               value={inventory.summary.ok}                color="#3B6D11" />
                   <KpiCard label="Low stock"        value={inventory.summary.low}               color="#854F0B" />
                   <KpiCard label="Out of stock"     value={inventory.summary.out_of_stock}      color="#A32D2D" />
