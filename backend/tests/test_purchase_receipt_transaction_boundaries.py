@@ -93,6 +93,10 @@ def pg_engine():
     with engine.begin() as connection:
         connection.execute(text(ddl))
     yield engine
+    with engine.begin() as connection:
+        connection.execute(text(
+            "DROP FUNCTION IF EXISTS enforce_purchase_receipt_quantity() CASCADE"
+        ))
     models.Base.metadata.drop_all(engine)
     engine.dispose()
 
