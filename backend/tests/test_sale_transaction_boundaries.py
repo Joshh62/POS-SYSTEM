@@ -44,9 +44,13 @@ class FakeDB:
         self.added.append(obj)
 
     def flush(self):
-        for obj in self.added:
-            if hasattr(obj, "sale_id") and getattr(obj, "sale_id", None) is None:
-                obj.sale_id = 500
+        # Simulate the database-generated primary key assigned to the first
+        # Sale object after INSERT/flush. The test models are SimpleNamespace
+        # objects, so an unset ORM column is represented by a missing attr.
+        if self.added:
+            new_sale = self.added[0]
+            if not hasattr(new_sale, "sale_id"):
+                new_sale.sale_id = 500
 
     def commit(self):
         self.committed = True
