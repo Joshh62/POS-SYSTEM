@@ -1,5 +1,5 @@
 from pydantic import BaseModel, ConfigDict, Field, model_validator
-from datetime import datetime
+from datetime import date, datetime
 from typing import List, Optional
 
 
@@ -139,19 +139,50 @@ class SupplierResponse(BaseModel):
 # ---------------------------
 class PurchaseOrderItemCreate(BaseModel):
     product_id: int
-    quantity:   int
-    unit_cost:  float
+    quantity: int = Field(gt=0)
+    unit_cost: float = Field(gt=0)
+    expiry_date: Optional[date] = None
+
 
 class PurchaseOrderCreate(BaseModel):
     supplier_id: int
-    branch_id:   int
-    items:       List[PurchaseOrderItemCreate]
+    branch_id: int
+    items: List[PurchaseOrderItemCreate] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def reject_duplicate_products(self):
+        product_ids = [item.product_id for item in self.items]
+        if len(product_ids) != len(set(product_ids)):
+            raise ValueError("Duplicate products are not allowed in one purchase order")
+        return self
+
+
+class PurchaseReceiptItemCreate(BaseModel):
+    po_item_id: int
+    quantity: int = Field(gt=0)
+    expiry_date: Optional[date] = None
+
+
+class PurchaseReceiptCreate(BaseModel):
+    items: List[PurchaseReceiptItemCreate] = Field(min_length=1)
+    notes: Optional[str] = Field(default=None, max_length=500)
+
+    @model_validator(mode="after")
+    def validate_receipt(self):
+        item_ids = [item.po_item_id for item in self.items]
+        if len(item_ids) != len(set(item_ids)):
+            raise ValueError("Duplicate purchase-order items are not allowed in one receipt")
+        if self.notes is not None:
+            self.notes = self.notes.strip() or None
+        return self
+
 
 class PurchaseOrderResponse(BaseModel):
-    po_id:       int
+    po_id: int
     supplier_id: int
-    order_date:  datetime
-    status:      str
+    branch_id: int
+    order_date: datetime
+    status: str
     model_config = ConfigDict(from_attributes=True)
 
 

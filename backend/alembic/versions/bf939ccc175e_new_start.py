@@ -208,7 +208,7 @@ def upgrade() -> None:
     sa.PrimaryKeyConstraint('sale_item_id')
     )
     op.create_index(op.f('ix_sale_items_sale_item_id'), 'sale_items', ['sale_item_id'], unique=False)
-    op.drop_table('playing_with_neon')
+    op.execute("DROP TABLE IF EXISTS playing_with_neon")
     # ### end Alembic commands ###
 
 

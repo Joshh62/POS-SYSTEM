@@ -256,13 +256,18 @@ class PurchaseOrder(Base):
     __tablename__ = "purchase_orders"
 
     po_id       = Column(Integer, primary_key=True, index=True)
-    supplier_id = Column(Integer, ForeignKey("suppliers.supplier_id"))
-    branch_id   = Column(Integer, ForeignKey("branches.branch_id"))
+    business_id = Column(Integer, ForeignKey("businesses.business_id"), nullable=True, index=True)
+    supplier_id = Column(Integer, ForeignKey("suppliers.supplier_id"), nullable=False)
+    branch_id   = Column(Integer, ForeignKey("branches.branch_id"), nullable=False)
     order_date  = Column(DateTime, default=datetime.utcnow, index=True)
-    status      = Column(String, default="pending")
+    status      = Column(String(24), nullable=False, default="pending")
 
     supplier = relationship("Supplier", back_populates="purchase_orders")
+    branch   = relationship("Branch")
+    business = relationship("Business")
     items    = relationship("PurchaseOrderItem", back_populates="purchase_order",
+                            cascade="all, delete-orphan")
+    receipts = relationship("PurchaseReceipt", back_populates="purchase_order",
                             cascade="all, delete-orphan")
 
 
@@ -270,15 +275,63 @@ class PurchaseOrder(Base):
 class PurchaseOrderItem(Base):
     __tablename__ = "purchase_order_items"
 
-    po_item_id     = Column(Integer, primary_key=True, index=True)
-    po_id          = Column(Integer, ForeignKey("purchase_orders.po_id"))
-    product_id     = Column(Integer, ForeignKey("products.product_id"))
-    quantity       = Column(Integer)
-    unit_cost      = Column(Numeric(12, 2))
-    expiry_date    = Column(sa.Date(), nullable=True)
+    po_item_id  = Column(Integer, primary_key=True, index=True)
+    po_id       = Column(Integer, ForeignKey("purchase_orders.po_id", ondelete="CASCADE"), nullable=False)
+    product_id  = Column(Integer, ForeignKey("products.product_id"), nullable=False)
+    quantity    = Column(Integer, nullable=False)
+    unit_cost   = Column(Numeric(12, 2), nullable=False)
+    expiry_date = Column(sa.Date(), nullable=True)
 
     purchase_order = relationship("PurchaseOrder", back_populates="items")
     product        = relationship("Product")
+
+    __table_args__ = (
+        CheckConstraint("quantity > 0", name="ck_purchase_order_items_quantity_positive"),
+        CheckConstraint("unit_cost > 0", name="ck_purchase_order_items_unit_cost_positive"),
+        UniqueConstraint("po_id", "product_id", name="uq_purchase_order_item_product"),
+    )
+
+
+# -------------------- PURCHASE RECEIPT --------------------
+class PurchaseReceipt(Base):
+    __tablename__ = "purchase_receipts"
+
+    receipt_id  = Column(Integer, primary_key=True, index=True)
+    po_id       = Column(Integer, ForeignKey("purchase_orders.po_id", ondelete="CASCADE"), nullable=False, index=True)
+    business_id = Column(Integer, ForeignKey("businesses.business_id"), nullable=False, index=True)
+    branch_id   = Column(Integer, ForeignKey("branches.branch_id"), nullable=False)
+    user_id     = Column(Integer, ForeignKey("users.user_id"), nullable=False)
+    received_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    notes       = Column(String(500), nullable=True)
+
+    purchase_order = relationship("PurchaseOrder", back_populates="receipts")
+    business = relationship("Business")
+    branch = relationship("Branch")
+    user = relationship("User")
+    items = relationship("PurchaseReceiptItem", back_populates="receipt",
+                         cascade="all, delete-orphan")
+
+
+class PurchaseReceiptItem(Base):
+    __tablename__ = "purchase_receipt_items"
+
+    receipt_item_id = Column(Integer, primary_key=True, index=True)
+    receipt_id      = Column(Integer, ForeignKey("purchase_receipts.receipt_id", ondelete="CASCADE"), nullable=False, index=True)
+    po_item_id      = Column(Integer, ForeignKey("purchase_order_items.po_item_id"), nullable=False, index=True)
+    product_id      = Column(Integer, ForeignKey("products.product_id"), nullable=False)
+    quantity        = Column(Integer, nullable=False)
+    unit_cost       = Column(Numeric(12, 2), nullable=False)
+    expiry_date     = Column(sa.Date(), nullable=True)
+
+    receipt = relationship("PurchaseReceipt", back_populates="items")
+    purchase_order_item = relationship("PurchaseOrderItem")
+    product = relationship("Product")
+
+    __table_args__ = (
+        CheckConstraint("quantity > 0", name="ck_purchase_receipt_items_quantity_positive"),
+        CheckConstraint("unit_cost > 0", name="ck_purchase_receipt_items_unit_cost_positive"),
+        UniqueConstraint("receipt_id", "po_item_id", name="uq_purchase_receipt_item_per_receipt"),
+    )
 
 
 # -------------------- INVENTORY BATCH --------------------
@@ -289,6 +342,7 @@ class InventoryBatch(Base):
     product_id    = Column(Integer, ForeignKey("products.product_id"), nullable=False)
     branch_id     = Column(Integer, ForeignKey("branches.branch_id"),  nullable=False)
     po_id         = Column(Integer, ForeignKey("purchase_orders.po_id"), nullable=True)
+    receipt_id    = Column(Integer, ForeignKey("purchase_receipts.receipt_id"), nullable=True, index=True)
     quantity      = Column(Integer, nullable=False)
     expiry_date   = Column(sa.Date(), nullable=True)
     received_date = Column(sa.Date(), server_default=sa.func.current_date())
@@ -315,6 +369,7 @@ class InventoryMovement(Base):
     branch_id     = Column(Integer, ForeignKey("branches.branch_id"))
     movement_type = Column(String)
     reference_id  = Column(Integer)
+    purchase_receipt_id = Column(Integer, ForeignKey("purchase_receipts.receipt_id"), nullable=True, index=True)
     quantity      = Column(Integer)
     movement_date = Column(DateTime, default=datetime.utcnow, index=True)
 

@@ -58,7 +58,7 @@ def upgrade():
     # any writer—not only this API—that would cumulatively refund more units
     # than were sold or attach an item to the wrong sale.
     op.execute("""
-        CREATE FUNCTION enforce_refund_item_quantity() RETURNS trigger AS $$
+        CREATE OR REPLACE FUNCTION enforce_refund_item_quantity() RETURNS trigger AS $$
         DECLARE
             sold_quantity integer;
             target_sale_id integer;
