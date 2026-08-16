@@ -1,6 +1,6 @@
 """add manual inventory adjustment and restock assurance
 
-Revision ID: 0021_add_inventory_adjustment_assurance
+Revision ID: 0021_inventory_adjustment_guard
 Revises: 0020_add_purchase_receipt_ledger
 Create Date: 2026-08-16
 """
@@ -8,7 +8,7 @@ from alembic import op
 import sqlalchemy as sa
 
 
-revision = "0021_add_inventory_adjustment_assurance"
+revision = "0021_inventory_adjustment_guard"
 down_revision = "0020_add_purchase_receipt_ledger"
 branch_labels = None
 depends_on = None
