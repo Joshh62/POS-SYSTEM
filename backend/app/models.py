@@ -104,6 +104,7 @@ class BranchInventory(Base):
 
     __table_args__ = (
         UniqueConstraint("branch_id", "product_id", name="uix_branch_product"),
+        CheckConstraint("stock_quantity >= 0", name="ck_branch_inventory_nonnegative_stock"),
     )
 
 
@@ -382,12 +383,30 @@ class StockAdjustment(Base):
     __tablename__ = "stock_adjustments"
 
     adjustment_id   = Column(Integer, primary_key=True)
-    product_id      = Column(Integer, ForeignKey("products.product_id"))
-    quantity        = Column(Integer)
-    reason          = Column(String)
+    product_id      = Column(Integer, ForeignKey("products.product_id"), nullable=False)
+    branch_id       = Column(Integer, ForeignKey("branches.branch_id"), nullable=False, index=True)
+    user_id         = Column(Integer, ForeignKey("users.user_id"), nullable=False, index=True)
+    quantity        = Column(Integer, nullable=False)
+    before_quantity = Column(Integer, nullable=False)
+    after_quantity  = Column(Integer, nullable=False)
+    reason          = Column(String, nullable=False)
     adjustment_date = Column(DateTime, default=datetime.utcnow)
 
     product = relationship("Product")
+    branch = relationship("Branch")
+    user = relationship("User")
+
+    __table_args__ = (
+        CheckConstraint("quantity <> 0", name="ck_stock_adjustments_nonzero_quantity"),
+        CheckConstraint("before_quantity >= 0", name="ck_stock_adjustments_nonnegative_before"),
+        CheckConstraint("after_quantity >= 0", name="ck_stock_adjustments_nonnegative_after"),
+        CheckConstraint(
+            "branch_id IS NOT NULL AND user_id IS NOT NULL "
+            "AND before_quantity IS NOT NULL AND after_quantity IS NOT NULL "
+            "AND reason IS NOT NULL AND length(trim(reason)) > 0",
+            name="ck_stock_adjustments_evidence_complete",
+        ),
+    )
 
 
 # -------------------- STOCK TRANSFER --------------------
