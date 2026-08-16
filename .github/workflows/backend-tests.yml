@@ -9,11 +9,26 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: profittrack_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d profittrack_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     defaults:
       run:
         working-directory: backend
     env:
-      DATABASE_URL: postgresql://user:password@localhost/posdb
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/profittrack_test
+      TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/profittrack_test
       SECRET_KEY: ci-only-test-secret-not-for-production
       PYTHONPATH: ${{ github.workspace }}/backend
     steps:

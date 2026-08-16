@@ -2,6 +2,8 @@ from fastapi.responses import StreamingResponse
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from datetime import datetime, date
+from decimal import Decimal, ROUND_HALF_UP
+from sqlalchemy import func
 import pytz
 import io
 import os
@@ -489,59 +491,207 @@ def generate_invoice(sale_id: int, db: Session = Depends(get_db)):
 @router.post("/{sale_id}/refund")
 def refund_sale(
     sale_id: int,
-    reason: str,
+    refund_request: schemas.RefundCreate,
     db: Session = Depends(get_db),
     user=Depends(require_role(["admin", "manager"]))
 ):
-    sale = db.query(models.Sale).filter(models.Sale.sale_id == sale_id).first()
-    if not sale:
-        raise HTTPException(status_code=404, detail="Sale not found")
-    if sale.status == "refunded":
-        raise HTTPException(status_code=400, detail="Sale already refunded")
-
-    branch_id = sale.branch_id
-    items     = db.query(models.SaleItem).filter(models.SaleItem.sale_id == sale_id).all()
-
     try:
-        item_names = []
-        for item in items:
-            inventory = db.query(models.BranchInventory).filter(
-                models.BranchInventory.product_id == item.product_id,
-                models.BranchInventory.branch_id  == branch_id
-            ).first()
-            if inventory:
-                inventory.stock_quantity += item.quantity
+        # The sale row is the concurrency boundary. PostgreSQL serializes all
+        # refunds for one sale here before cumulative quantities are checked.
+        sale = (
+            db.query(models.Sale)
+            .filter(models.Sale.sale_id == sale_id)
+            .with_for_update()
+            .first()
+        )
+        if not sale:
+            raise HTTPException(status_code=404, detail="Sale not found")
 
-            product = db.query(models.Product).filter(
-                models.Product.product_id == item.product_id
-            ).first()
-            if product:
-                item_names.append(f"{product.product_name} x{item.quantity}")
+        # Authorize before revealing status or refund history.
+        branch_id = _resolve_sale_branch(user, sale.branch_id, db)
+        if sale.status == "refunded":
+            raise HTTPException(status_code=409, detail="Sale already fully refunded")
 
+        requested = {
+            item.sale_item_id: item.quantity
+            for item in refund_request.items
+        }
+        sale_items = (
+            db.query(models.SaleItem)
+            .filter(
+                models.SaleItem.sale_id == sale_id,
+                models.SaleItem.sale_item_id.in_(requested),
+            )
+            .with_for_update()
+            .all()
+        )
+        if len(sale_items) != len(requested):
+            raise HTTPException(
+                status_code=404,
+                detail="One or more sale items do not belong to this sale",
+            )
+
+        all_sale_items = (
+            db.query(models.SaleItem)
+            .filter(models.SaleItem.sale_id == sale_id)
+            .all()
+        )
+        if not all_sale_items or any(item.quantity <= 0 for item in all_sale_items):
+            raise HTTPException(
+                status_code=409,
+                detail="Sale contains no valid refundable quantities",
+            )
+
+        refunded_rows = (
+            db.query(
+                models.RefundItem.sale_item_id,
+                func.sum(models.RefundItem.quantity),
+            )
+            .join(models.Refund, models.Refund.refund_id == models.RefundItem.refund_id)
+            .filter(models.Refund.sale_id == sale_id)
+            .group_by(models.RefundItem.sale_item_id)
+            .all()
+        )
+        refunded_by_item = {
+            sale_item_id: int(quantity)
+            for sale_item_id, quantity in refunded_rows
+        }
+
+        for item in sale_items:
+            already_refunded = refunded_by_item.get(item.sale_item_id, 0)
+            if requested[item.sale_item_id] > item.quantity - already_refunded:
+                raise HTTPException(
+                    status_code=409,
+                    detail=f"Refund quantity exceeds remaining quantity for sale item {item.sale_item_id}",
+                )
+
+        gross_sale_total = sum(
+            Decimal(str(item.subtotal)) for item in all_sale_items
+        )
+        if gross_sale_total <= 0:
+            raise HTTPException(status_code=409, detail="Sale has no refundable value")
+
+        prior_refund_total = Decimal(str(
+            db.query(func.coalesce(func.sum(models.Refund.amount), 0))
+            .filter(models.Refund.sale_id == sale_id)
+            .scalar()
+        ))
+        sale_total = Decimal(str(sale.total_amount))
+        requested_gross = sum(
+            Decimal(str(item.unit_price)) * requested[item.sale_item_id]
+            for item in sale_items
+        )
+        if requested_gross <= 0:
+            raise HTTPException(status_code=409, detail="Requested items have no refundable value")
+
+        resulting_quantities = dict(refunded_by_item)
+        for item in sale_items:
+            resulting_quantities[item.sale_item_id] = (
+                resulting_quantities.get(item.sale_item_id, 0)
+                + requested[item.sale_item_id]
+            )
+        fully_refunded = all(
+            resulting_quantities.get(item.sale_item_id, 0) == item.quantity
+            for item in all_sale_items
+        )
+
+        if fully_refunded:
+            refund_amount = sale_total - prior_refund_total
+        else:
+            refund_amount = (
+                sale_total * requested_gross / gross_sale_total
+            ).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
+        if refund_amount <= 0 or prior_refund_total + refund_amount > sale_total:
+            raise HTTPException(status_code=409, detail="Refund amount exceeds remaining sale value")
+
+        refund = models.Refund(
+            sale_id=sale_id,
+            user_id=user.user_id,
+            branch_id=branch_id,
+            reason=refund_request.reason,
+            amount=refund_amount,
+        )
+        db.add(refund)
+        db.flush()
+
+        evidence_items = []
+        allocated_amount = Decimal("0.00")
+        for index, item in enumerate(sale_items):
+            quantity = requested[item.sale_item_id]
+            if index == len(sale_items) - 1:
+                line_amount = refund_amount - allocated_amount
+            else:
+                line_amount = (
+                    refund_amount
+                    * (Decimal(str(item.unit_price)) * quantity)
+                    / requested_gross
+                ).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+                allocated_amount += line_amount
+
+            inventory = (
+                db.query(models.BranchInventory)
+                .filter(
+                    models.BranchInventory.product_id == item.product_id,
+                    models.BranchInventory.branch_id == branch_id,
+                )
+                .with_for_update()
+                .first()
+            )
+            if not inventory:
+                raise HTTPException(
+                    status_code=409,
+                    detail=(
+                        "Cannot refund sale because inventory record is missing "
+                        f"for product {item.product_id} in branch {branch_id}"
+                    ),
+                )
+
+            inventory.stock_quantity += quantity
+            db.add(models.RefundItem(
+                refund_id=refund.refund_id,
+                sale_item_id=item.sale_item_id,
+                product_id=item.product_id,
+                quantity=quantity,
+                unit_price=item.unit_price,
+                amount=line_amount,
+            ))
             db.add(models.InventoryMovement(
                 product_id=item.product_id,
                 branch_id=branch_id,
                 movement_type="REFUND",
-                reference_id=sale_id,
-                quantity=item.quantity,
-                movement_date=now_lagos()
+                reference_id=refund.refund_id,
+                quantity=quantity,
+                movement_date=now_lagos(),
             ))
+            evidence_items.append(f"sale_item={item.sale_item_id} quantity={quantity}")
 
-        db.add(models.Refund(sale_id=sale_id, reason=reason, amount=sale.total_amount))
-        sale.status = "refunded"
+        sale.status = "refunded" if fully_refunded else "partially_refunded"
 
-        write_audit(
-            db,
+        # Refund audit evidence is mandatory and shares the same transaction.
+        db.add(models.AuditLog(
             user_id=user.user_id,
             action="REFUND",
-            table="sales",
-            record_id=sale_id,
-            description=f"Refund on Sale #{sale_id} — ₦{float(sale.total_amount):,.2f} — Reason: {reason} — Items: {', '.join(item_names)}",
-        )
+            table_name="refunds",
+            record_id=refund.refund_id,
+            description=(
+                f"Refund #{refund.refund_id} on Sale #{sale_id} — "
+                f"₦{refund_amount:,.2f} — Reason: {refund_request.reason} — "
+                f"Items: {', '.join(evidence_items)}"
+            ),
+        ))
 
         db.commit()
-        return {"message": "Sale refunded successfully"}
+        return {
+            "message": "Sale refund recorded successfully",
+            "refund_id": refund.refund_id,
+            "amount": float(refund_amount),
+            "sale_status": sale.status,
+        }
 
+    except HTTPException:
+        db.rollback()
+        raise
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))

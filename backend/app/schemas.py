@@ -1,4 +1,4 @@
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from datetime import datetime
 from typing import List, Optional
 
@@ -192,3 +192,26 @@ class BusinessResponse(BaseModel):
     is_active:   bool
     plan:        str
     model_config = ConfigDict(from_attributes=True)
+
+
+# ---------------------------
+# REFUND
+# ---------------------------
+class RefundItemCreate(BaseModel):
+    sale_item_id: int = Field(gt=0)
+    quantity: int = Field(gt=0)
+
+
+class RefundCreate(BaseModel):
+    reason: str = Field(min_length=1, max_length=500)
+    items: List[RefundItemCreate] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def reject_duplicate_sale_items(self):
+        sale_item_ids = [item.sale_item_id for item in self.items]
+        if len(sale_item_ids) != len(set(sale_item_ids)):
+            raise ValueError("Each sale item may appear only once per refund")
+        self.reason = self.reason.strip()
+        if not self.reason:
+            raise ValueError("Refund reason must not be blank")
+        return self
