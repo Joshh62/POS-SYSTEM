@@ -76,15 +76,53 @@ class SaleResponse(BaseModel):
 # ---------------------------
 # INVENTORY
 # ---------------------------
+class InventoryRestockCreate(BaseModel):
+    product_id: int = Field(gt=0)
+    branch_id: int = Field(gt=0)
+    quantity: int = Field(gt=0)
+    expiry_date: Optional[date] = None
+    notes: Optional[str] = Field(default=None, max_length=500)
+
+    @model_validator(mode="after")
+    def normalize_notes(self):
+        if self.notes is not None:
+            self.notes = self.notes.strip() or None
+        return self
+
+
+class InventoryAdjustmentRequest(BaseModel):
+    product_id: int = Field(gt=0)
+    quantity: int
+    reason: str = Field(min_length=1, max_length=500)
+    branch_id: Optional[int] = Field(default=None, gt=0)
+
+    @model_validator(mode="after")
+    def validate_adjustment(self):
+        self.reason = self.reason.strip()
+        if not self.reason:
+            raise ValueError("reason must not be blank")
+        if self.quantity == 0:
+            raise ValueError("quantity must not be zero")
+        return self
+
+
+class InventoryReorderLevelUpdate(BaseModel):
+    product_id: int = Field(gt=0)
+    branch_id: int = Field(gt=0)
+    reorder_level: int = Field(ge=0)
+    expiry_alert_days: Optional[int] = Field(default=None, ge=0)
+
+
 class RestockRequest(BaseModel):
     product_id: int
-    branch_id:  int
-    quantity:   int
+    branch_id: int
+    quantity: int
+
 
 class RestockResponse(BaseModel):
     product_id: int
-    branch_id:  int
-    new_stock:  int
+    branch_id: int
+    new_stock: int
     model_config = ConfigDict(from_attributes=True)
 
 
