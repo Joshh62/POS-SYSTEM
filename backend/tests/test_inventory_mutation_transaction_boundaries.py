@@ -119,6 +119,7 @@ def seed(db):
     )
     db.add_all([inv1, inv2, other_inv])
     db.flush()
+    db.commit()
 
     actor = SimpleNamespace(
         user_id=user.user_id,
