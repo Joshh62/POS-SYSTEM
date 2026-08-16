@@ -1,6 +1,6 @@
 from datetime import datetime
 import sqlalchemy as sa
-from sqlalchemy import Column, DateTime, Integer, String, Numeric, ForeignKey, Boolean, UniqueConstraint, Date
+from sqlalchemy import Column, DateTime, Integer, String, Numeric, ForeignKey, Boolean, UniqueConstraint, CheckConstraint, Date
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import relationship
 from app.database import Base
@@ -201,12 +201,38 @@ class Refund(Base):
     __tablename__ = "refunds"
 
     refund_id   = Column(Integer, primary_key=True)
-    sale_id     = Column(Integer, ForeignKey("sales.sale_id"))
+    sale_id     = Column(Integer, ForeignKey("sales.sale_id"), nullable=False, index=True)
+    user_id     = Column(Integer, ForeignKey("users.user_id"), nullable=True)
+    branch_id   = Column(Integer, ForeignKey("branches.branch_id"), nullable=True)
     refund_date = Column(DateTime, default=datetime.utcnow)
-    reason      = Column(String)
-    amount      = Column(Numeric(12, 2))
+    reason      = Column(String(500), nullable=False)
+    amount      = Column(Numeric(12, 2), nullable=False)
 
     sale = relationship("Sale", back_populates="refunds")
+    user = relationship("User")
+    branch = relationship("Branch")
+    items = relationship("RefundItem", back_populates="refund", cascade="all, delete-orphan")
+
+
+class RefundItem(Base):
+    __tablename__ = "refund_items"
+
+    refund_item_id = Column(Integer, primary_key=True)
+    refund_id      = Column(Integer, ForeignKey("refunds.refund_id", ondelete="CASCADE"), nullable=False, index=True)
+    sale_item_id   = Column(Integer, ForeignKey("sale_items.sale_item_id"), nullable=False, index=True)
+    product_id     = Column(Integer, ForeignKey("products.product_id"), nullable=False)
+    quantity       = Column(Integer, nullable=False)
+    unit_price     = Column(Numeric(12, 2), nullable=False)
+    amount         = Column(Numeric(12, 2), nullable=False)
+
+    refund = relationship("Refund", back_populates="items")
+    sale_item = relationship("SaleItem")
+    product = relationship("Product")
+
+    __table_args__ = (
+        CheckConstraint("quantity > 0", name="ck_refund_items_quantity_positive"),
+        UniqueConstraint("refund_id", "sale_item_id", name="uq_refund_item_per_refund"),
+    )
 
 
 # -------------------- SUPPLIER --------------------
@@ -349,7 +375,11 @@ class Expense(Base):
     category     = Column(String(100), nullable=False)
     amount       = Column(Numeric(12, 2), nullable=False)
     description  = Column(String(500), nullable=True)
-    expense_date = Column(Date, nullable=False, server_default="CURRENT_DATE")
+    expense_date = Column(
+        Date,
+        nullable=False,
+        server_default=sa.text("CURRENT_DATE"),
+    )
     created_at   = Column(DateTime, default=datetime.utcnow)
 
     branch   = relationship("Branch")
