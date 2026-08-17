@@ -1,5 +1,10 @@
 # Deployment Guide — POS System
 
+> Production releases must follow
+> [`docs/operations/profittrack-production-release-runbook.md`](docs/operations/profittrack-production-release-runbook.md)
+> and its smoke checklist. The commands below are historical setup guidance,
+> not authorization to migrate or deploy production directly.
+
 ## Step 1 — Set up the database on Neon.tech (free)
 
 1. Go to neon.tech → Sign up free

@@ -24,7 +24,7 @@ else:
 # ── Imports ───────────────────────────────────────────────────────────────────
 import time
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, Depends
+from fastapi import FastAPI, Depends, Response, status
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from sqlalchemy import text
@@ -32,6 +32,7 @@ from sqlalchemy import text
 from app.routers import sales, products, inventory, reports, expenses
 from app.routers import auth, customers, suppliers, purchases, category
 from app.database import get_db, SessionLocal
+from app.dependencies import require_role
 from app.routers import debts
 from app.routers import businesses
 from app.routers import admin_tools
@@ -99,30 +100,37 @@ app.include_router(analytics.router)
 app.include_router(payments.router)
 
 # ── Health check ──────────────────────────────────────────────────────────────
+@app.api_route("/live", methods=["GET", "HEAD"], tags=["System"])
+def liveness_check():
+    """Process-only check for load balancers and container supervisors."""
+    return {"status": "ok", "service": "profittrack-api", "version": "1.0.0"}
+
+
 @app.api_route("/health", methods=["GET", "HEAD"], tags=["System"])
-def health_check():
-    """
-    Health check for UptimeRobot and internal monitoring.
-    Tests database connectivity. Always returns HTTP 200.
-    """
+def health_check(response: Response):
+    """Database-aware readiness check that does not disclose failure details."""
     start = time.time()
+    db = None
     try:
         db = SessionLocal()
         db.execute(text("SELECT 1"))
-        db.close()
-        db_status  = "ok"
+        db_status = "ok"
         db_latency = round((time.time() - start) * 1000, 1)
-    except Exception as e:
-        db_status  = f"error: {str(e)}"
+    except Exception:
+        response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+        db_status = "unavailable"
         db_latency = None
+    finally:
+        if db is not None:
+            db.close()
 
     return {
-        "status":        "ok" if db_status == "ok" else "degraded",
-        "database":      db_status,
+        "status": "ok" if db_status == "ok" else "unavailable",
+        "database": db_status,
         "db_latency_ms": db_latency,
-        "timestamp":     time.time(),
-        "service":       "profittrack-api",
-        "version":       "1.0.0",
+        "timestamp": time.time(),
+        "service": "profittrack-api",
+        "version": "1.0.0",
     }
 
 # ── Root ──────────────────────────────────────────────────────────────────────
@@ -132,7 +140,11 @@ def root():
 
 # ── WhatsApp report trigger ───────────────────────────────────────────────────
 @app.post("/reports/send-whatsapp", tags=["Reports"])
-def trigger_whatsapp_report(db: Session = Depends(get_db)):
+def trigger_whatsapp_report(
+    db: Session = Depends(get_db),
+    _user=Depends(require_role([])),
+):
+    """Manually trigger the platform-wide report run (superadmin only)."""
     from app.whatsapp_report import send_whatsapp_report
     sid = send_whatsapp_report(db)
     return {"message": "Report sent", "sid": sid}
