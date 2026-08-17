@@ -105,6 +105,7 @@ def seed(db, *, destination_inventory=True):
             ),
         ])
     db.flush()
+    db.commit()
     actor = SimpleNamespace(
         user_id=user.user_id, role="manager",
         branch_id=source_branch.branch_id, business_id=business.business_id,
@@ -182,6 +183,7 @@ def test_scope_insufficient_stock_and_replay_are_blocked(db):
             db, seeded,
             {"product_id": seeded.p1.product_id, "quantity": 1},
             source=seeded.destination.branch_id,
+            destination=seeded.source.branch_id,
         )
     assert source_scope.value.status_code == 403
     with pytest.raises(HTTPException) as product_scope:
