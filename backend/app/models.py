@@ -479,6 +479,9 @@ class Debt(Base):
     description  = Column(String(500), nullable=True)
     due_date     = Column(Date, nullable=True)
     status       = Column(String(20), nullable=False, default="open")
+    written_off_amount = Column(Numeric(12, 2), nullable=False, default=0)
+    written_off_at     = Column(DateTime, nullable=True)
+    written_off_by     = Column(Integer, ForeignKey("users.user_id"), nullable=True)
     created_at   = Column(DateTime, default=datetime.utcnow)
     updated_at   = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -516,7 +519,12 @@ class CustomerLedgerEntry(Base):
     entry_type   = Column(String(10), nullable=False)   # debit | credit
     amount       = Column(Numeric(12, 2), nullable=False)
     description  = Column(String(500), nullable=True)
-    reference_id = Column(Integer, nullable=True)       # sale_id if from checkout
+    reference_id = Column(Integer, nullable=True)       # legacy external reference
+    source_type  = Column(String(30), nullable=True)     # legacy rows may be unclassified
+    debt_id      = Column(Integer, ForeignKey("debts.debt_id"), nullable=True, index=True)
+    debt_payment_id = Column(Integer, ForeignKey("debt_payments.payment_id"), nullable=True, index=True)
+    reversal_of_entry_id = Column(Integer, ForeignKey("customer_ledger_entries.entry_id"), nullable=True, index=True)
+    payment_method = Column(String(50), nullable=True)
     due_date     = Column(Date, nullable=True)           # on debit entries only
     created_at   = Column(DateTime, default=datetime.utcnow)
 
