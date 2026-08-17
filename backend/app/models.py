@@ -371,6 +371,8 @@ class InventoryMovement(Base):
     movement_type = Column(String)
     reference_id  = Column(Integer)
     purchase_receipt_id = Column(Integer, ForeignKey("purchase_receipts.receipt_id"), nullable=True, index=True)
+    stock_transfer_id = Column(Integer, ForeignKey("stock_transfers.transfer_id"), nullable=True, index=True)
+    stock_transfer_item_id = Column(Integer, ForeignKey("stock_transfer_items.transfer_item_id"), nullable=True, index=True)
     quantity      = Column(Integer)
     movement_date = Column(DateTime, default=datetime.utcnow, index=True)
 
@@ -413,13 +415,77 @@ class StockAdjustment(Base):
 class StockTransfer(Base):
     __tablename__ = "stock_transfers"
 
-    transfer_id   = Column(Integer, primary_key=True)
-    from_branch   = Column(Integer, ForeignKey("branches.branch_id"))
-    to_branch     = Column(Integer, ForeignKey("branches.branch_id"))
-    transfer_date = Column(DateTime, default=datetime.utcnow)
+    transfer_id = Column(Integer, primary_key=True)
+    business_id = Column(Integer, ForeignKey("businesses.business_id"), nullable=False, index=True)
+    from_branch = Column(Integer, ForeignKey("branches.branch_id"), nullable=False, index=True)
+    to_branch = Column(Integer, ForeignKey("branches.branch_id"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.user_id"), nullable=False, index=True)
+    idempotency_key = Column(String(100), nullable=False, index=True)
+    status = Column(String(20), nullable=False, default="completed")
+    notes = Column(String(500), nullable=True)
+    transfer_date = Column(DateTime, default=datetime.utcnow, nullable=False)
 
+    business = relationship("Business")
     from_branch_rel = relationship("Branch", foreign_keys=[from_branch])
-    to_branch_rel   = relationship("Branch", foreign_keys=[to_branch])
+    to_branch_rel = relationship("Branch", foreign_keys=[to_branch])
+    user = relationship("User")
+    items = relationship(
+        "StockTransferItem",
+        back_populates="transfer",
+        cascade="all, delete-orphan",
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "business_id", "idempotency_key",
+            name="uq_stock_transfers_business_idempotency",
+        ),
+        CheckConstraint("from_branch <> to_branch", name="ck_stock_transfers_distinct_branches"),
+        CheckConstraint("status = 'completed'", name="ck_stock_transfers_completed_status"),
+        CheckConstraint(
+            "length(trim(idempotency_key)) > 0",
+            name="ck_stock_transfers_idempotency_key_not_blank",
+        ),
+    )
+
+
+class StockTransferItem(Base):
+    __tablename__ = "stock_transfer_items"
+
+    transfer_item_id = Column(Integer, primary_key=True)
+    transfer_id = Column(
+        Integer,
+        ForeignKey("stock_transfers.transfer_id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    product_id = Column(Integer, ForeignKey("products.product_id"), nullable=False, index=True)
+    quantity = Column(Integer, nullable=False)
+    source_before = Column(Integer, nullable=False)
+    source_after = Column(Integer, nullable=False)
+    destination_before = Column(Integer, nullable=False)
+    destination_after = Column(Integer, nullable=False)
+
+    transfer = relationship("StockTransfer", back_populates="items")
+    product = relationship("Product")
+
+    __table_args__ = (
+        UniqueConstraint("transfer_id", "product_id", name="uq_stock_transfer_item_product"),
+        CheckConstraint("quantity > 0", name="ck_stock_transfer_items_positive_quantity"),
+        CheckConstraint(
+            "source_before >= 0 AND source_after >= 0 "
+            "AND destination_before >= 0 AND destination_after >= 0",
+            name="ck_stock_transfer_items_nonnegative_snapshots",
+        ),
+        CheckConstraint(
+            "source_after = source_before - quantity",
+            name="ck_stock_transfer_items_exact_source",
+        ),
+        CheckConstraint(
+            "destination_after = destination_before + quantity",
+            name="ck_stock_transfer_items_exact_destination",
+        ),
+    )
 
 
 # -------------------- AUDIT LOG --------------------

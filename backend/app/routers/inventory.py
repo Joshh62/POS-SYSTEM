@@ -591,3 +591,156 @@ def adjust_stock(
         db.rollback()
         raise HTTPException(status_code=500, detail="Stock adjustment failed") from exc
 
+
+
+# ── INTER-BRANCH TRANSFER ────────────────────────────────────────────────────
+@router.post("/transfer")
+def transfer_stock(
+    data: schemas.StockTransferCreate,
+    db: Session = Depends(get_db),
+    user=Depends(require_role(["admin", "manager"])),
+):
+    try:
+        source_branch = _authorize_branch(user, data.from_branch, db)
+        existing = db.query(models.StockTransfer).filter(
+            models.StockTransfer.business_id == source_branch.business_id,
+            models.StockTransfer.idempotency_key == data.idempotency_key,
+        ).first()
+        if existing:
+            raise HTTPException(status_code=409, detail="Transfer request already processed")
+
+        destination_branch = db.query(models.Branch).filter(
+            models.Branch.branch_id == data.to_branch
+        ).first()
+        if not destination_branch:
+            raise HTTPException(status_code=404, detail="Destination branch not found")
+        if source_branch.branch_id == destination_branch.branch_id:
+            raise HTTPException(status_code=400, detail="Source and destination branches must differ")
+        if source_branch.business_id != destination_branch.business_id:
+            raise HTTPException(status_code=403, detail="Destination branch is outside the source business")
+        if user.role != SUPERADMIN_ROLE and destination_branch.business_id != user.business_id:
+            raise HTTPException(status_code=403, detail="Destination branch is outside your business")
+
+        plan = []
+        for item in sorted(data.items, key=lambda row: row.product_id):
+            product = _authorize_product(item.product_id, source_branch, db)
+            if product.business_id != destination_branch.business_id:
+                raise HTTPException(status_code=403, detail="Product is outside the destination business")
+
+            locked_rows = db.query(models.BranchInventory).filter(
+                models.BranchInventory.product_id == item.product_id,
+                models.BranchInventory.branch_id.in_(
+                    [source_branch.branch_id, destination_branch.branch_id]
+                ),
+            ).order_by(models.BranchInventory.branch_id).with_for_update().all()
+            by_branch = {row.branch_id: row for row in locked_rows}
+            source = by_branch.get(source_branch.branch_id)
+            if not source:
+                raise HTTPException(status_code=409, detail="Source inventory record is missing")
+            if source.stock_quantity < item.quantity:
+                raise HTTPException(status_code=409, detail="Insufficient source inventory")
+            destination = by_branch.get(destination_branch.branch_id)
+            plan.append((item, source, destination))
+
+        transfer = models.StockTransfer(
+            business_id=source_branch.business_id,
+            from_branch=source_branch.branch_id,
+            to_branch=destination_branch.branch_id,
+            user_id=user.user_id,
+            idempotency_key=data.idempotency_key,
+            status="completed",
+            notes=data.notes,
+            transfer_date=now_lagos(),
+        )
+        db.add(transfer)
+        db.flush()
+
+        response_items = []
+        for item, source, destination in plan:
+            if destination is None:
+                destination = models.BranchInventory(
+                    branch_id=destination_branch.branch_id,
+                    product_id=item.product_id,
+                    stock_quantity=0,
+                )
+                db.add(destination)
+                db.flush()
+
+            source_before = source.stock_quantity
+            destination_before = destination.stock_quantity
+            source_after = source_before - item.quantity
+            destination_after = destination_before + item.quantity
+            source.stock_quantity = source_after
+            destination.stock_quantity = destination_after
+
+            transfer_item = models.StockTransferItem(
+                transfer_id=transfer.transfer_id,
+                product_id=item.product_id,
+                quantity=item.quantity,
+                source_before=source_before,
+                source_after=source_after,
+                destination_before=destination_before,
+                destination_after=destination_after,
+            )
+            db.add(transfer_item)
+            db.flush()
+
+            movement_time = now_lagos()
+            db.add_all([
+                models.InventoryMovement(
+                    product_id=item.product_id,
+                    branch_id=source_branch.branch_id,
+                    movement_type="TRANSFER_OUT",
+                    reference_id=transfer.transfer_id,
+                    stock_transfer_id=transfer.transfer_id,
+                    stock_transfer_item_id=transfer_item.transfer_item_id,
+                    quantity=-item.quantity,
+                    movement_date=movement_time,
+                ),
+                models.InventoryMovement(
+                    product_id=item.product_id,
+                    branch_id=destination_branch.branch_id,
+                    movement_type="TRANSFER_IN",
+                    reference_id=transfer.transfer_id,
+                    stock_transfer_id=transfer.transfer_id,
+                    stock_transfer_item_id=transfer_item.transfer_item_id,
+                    quantity=item.quantity,
+                    movement_date=movement_time,
+                ),
+            ])
+            response_items.append({
+                "transfer_item_id": transfer_item.transfer_item_id,
+                "product_id": item.product_id,
+                "quantity": item.quantity,
+                "source_before": source_before,
+                "source_after": source_after,
+                "destination_before": destination_before,
+                "destination_after": destination_after,
+            })
+
+        db.add(models.AuditLog(
+            user_id=user.user_id,
+            action="INVENTORY_TRANSFER",
+            table_name="stock_transfers",
+            record_id=transfer.transfer_id,
+            description=(
+                f"Transferred {len(response_items)} product line(s) from branch "
+                f"{source_branch.branch_id} to branch {destination_branch.branch_id}"
+            ),
+        ))
+        db.commit()
+        return {
+            "transfer_id": transfer.transfer_id,
+            "status": transfer.status,
+            "from_branch": source_branch.branch_id,
+            "to_branch": destination_branch.branch_id,
+            "items": response_items,
+        }
+    except HTTPException as exc:
+        _rollback_http(db, exc)
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Transfer conflicts with current inventory data") from exc
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(status_code=500, detail="Stock transfer failed") from exc
