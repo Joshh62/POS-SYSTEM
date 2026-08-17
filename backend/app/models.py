@@ -490,6 +490,13 @@ class Debt(Base):
     user     = relationship("User")
     payments = relationship("DebtPayment", back_populates="debt", cascade="all, delete-orphan")
 
+    __table_args__ = (
+        CheckConstraint("total_amount > 0", name="ck_debts_total_positive"),
+        CheckConstraint("amount_paid >= 0 AND amount_paid <= total_amount", name="ck_debts_paid_range"),
+        CheckConstraint("balance >= 0 AND balance = total_amount - amount_paid", name="ck_debts_balance"),
+        CheckConstraint("status IN ('open','partial','paid','written_off')", name="ck_debts_status_model"),
+    )
+
 
 # -------------------- DEBT PAYMENT --------------------
 class DebtPayment(Base):
@@ -505,6 +512,10 @@ class DebtPayment(Base):
 
     debt = relationship("Debt", back_populates="payments")
     user = relationship("User")
+
+    __table_args__ = (
+        CheckConstraint("amount > 0", name="ck_debt_payments_positive_model"),
+    )
 
 
 # -------------------- CUSTOMER LEDGER ENTRY --------------------
@@ -531,6 +542,11 @@ class CustomerLedgerEntry(Base):
     customer = relationship("Customer", back_populates="ledger_entries")
     branch   = relationship("Branch")
     user     = relationship("User")
+
+    __table_args__ = (
+        CheckConstraint("amount > 0", name="ck_ledger_amount_positive_model"),
+        CheckConstraint("entry_type IN ('debit','credit')", name="ck_ledger_entry_type_model"),
+    )
  
 
 # -------------------- CUSTOMER LOYALTY --------------------

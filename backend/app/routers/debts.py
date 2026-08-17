@@ -42,10 +42,14 @@ def _scope(q, user, branch_id: Optional[int] = None):
     if user.role == SUPERADMIN_ROLE:
         if branch_id:
             q = q.filter(models.Debt.branch_id == branch_id)
-    else:
-        q = q.filter(models.Debt.business_id == user.business_id)
-        if branch_id:
-            q = q.filter(models.Debt.branch_id == branch_id)
+        return q
+    q = q.filter(models.Debt.business_id == user.business_id)
+    if user.role == "manager":
+        if branch_id and branch_id != user.branch_id:
+            raise HTTPException(status_code=403, detail="Not authorized for this branch")
+        return q.filter(models.Debt.branch_id == user.branch_id)
+    if branch_id:
+        q = q.filter(models.Debt.branch_id == branch_id)
     return q
 
 
@@ -335,6 +339,8 @@ def get_debt(
         raise HTTPException(status_code=404, detail="Debt not found")
     if user.role != SUPERADMIN_ROLE and debt.business_id != user.business_id:
         raise HTTPException(status_code=403, detail="Not authorized")
+    if user.role == "manager" and debt.branch_id != user.branch_id:
+        raise HTTPException(status_code=403, detail="Not authorized for this branch")
     return _debt_dict(debt, db)
 
 
@@ -430,6 +436,8 @@ def get_debt_payments(
         raise HTTPException(status_code=404, detail="Debt not found")
     if user.role != SUPERADMIN_ROLE and debt.business_id != user.business_id:
         raise HTTPException(status_code=403, detail="Not authorized")
+    if user.role == "manager" and debt.branch_id != user.branch_id:
+        raise HTTPException(status_code=403, detail="Not authorized for this branch")
 
     payments = db.query(models.DebtPayment).filter(
         models.DebtPayment.debt_id == debt_id

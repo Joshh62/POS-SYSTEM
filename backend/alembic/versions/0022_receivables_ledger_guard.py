@@ -71,6 +71,8 @@ def upgrade():
            CHECK (amount > 0) NOT VALID""",
         """ALTER TABLE customer_ledger_entries ADD CONSTRAINT ck_ledger_entry_type
            CHECK (entry_type IN ('debit','credit')) NOT VALID""",
+        """ALTER TABLE customer_ledger_entries ADD CONSTRAINT ck_ledger_source_required
+           CHECK (source_type IS NOT NULL) NOT VALID""",
         """ALTER TABLE customer_ledger_entries ADD CONSTRAINT ck_ledger_source_type
            CHECK (source_type IS NULL OR source_type IN
              ('debt','debt_payment','debt_writeoff','manual_debit',
@@ -154,6 +156,7 @@ def downgrade():
     op.execute("DROP FUNCTION IF EXISTS enforce_debt_payment_total()")
     for name, table in (
         ("ck_ledger_source_type", "customer_ledger_entries"),
+        ("ck_ledger_source_required", "customer_ledger_entries"),
         ("ck_ledger_entry_type", "customer_ledger_entries"),
         ("ck_ledger_amount_positive", "customer_ledger_entries"),
         ("ck_debt_payments_positive", "debt_payments"),
