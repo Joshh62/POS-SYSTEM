@@ -521,10 +521,29 @@ class Expense(Base):
         server_default=sa.text("CURRENT_DATE"),
     )
     created_at   = Column(DateTime, default=datetime.utcnow)
+    status       = Column(String(20), nullable=False, default="active")
+    reversed_at  = Column(DateTime, nullable=True)
+    reversed_by  = Column(Integer, ForeignKey("users.user_id"), nullable=True)
+    reversal_reason = Column(String(500), nullable=True)
 
     branch   = relationship("Branch")
-    user     = relationship("User")
+    user     = relationship("User", foreign_keys=[user_id])
+    reversing_user = relationship("User", foreign_keys=[reversed_by])
     business = relationship("Business")
+
+    __table_args__ = (
+        CheckConstraint("amount > 0", name="ck_expense_amount_positive"),
+        CheckConstraint(
+            "status IN ('active','reversed')", name="ck_expense_status"
+        ),
+        CheckConstraint(
+            "(status='active' AND reversed_at IS NULL AND reversed_by IS NULL "
+            "AND reversal_reason IS NULL) OR "
+            "(status='reversed' AND reversed_at IS NOT NULL AND reversed_by IS NOT NULL "
+            "AND reversal_reason IS NOT NULL)",
+            name="ck_expense_reversal_evidence",
+        ),
+    )
 
 
 # ── ADD these two classes to the END of models.py ────────────────────────────

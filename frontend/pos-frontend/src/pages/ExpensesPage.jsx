@@ -88,13 +88,17 @@ export default function ExpensesPage() {
     } finally { setFormLoading(false); }
   };
 
-  // ── Delete expense ────────────────────────────────────────────────────────
+  // ── Reverse expense ───────────────────────────────────────────────────────
   const handleDelete = async (id) => {
+    const reason = window.prompt("Reason for reversing this expense:");
+    if (!reason || reason.trim().length < 3) return;
     try {
-      await api.delete(`/expenses/${id}`);
+      await api.delete(`/expenses/${id}`, { params: { reason: reason.trim() } });
       setDeletingId(null);
       fetchAll();
-    } catch { alert("Failed to delete expense."); }
+    } catch (err) {
+      alert(err.response?.data?.detail || "Failed to reverse expense.");
+    }
   };
 
   const fmt = (v) => `₦${parseFloat(v || 0).toLocaleString("en-NG", { minimumFractionDigits: 2 })}`;
@@ -208,7 +212,7 @@ export default function ExpensesPage() {
                           <button onClick={() => setDeletingId(null)} style={ghostBtn}>Cancel</button>
                         </div>
                       ) : (
-                        <button onClick={() => setDeletingId(exp.expense_id)} style={ghostBtn}>Delete</button>
+                        <button onClick={() => setDeletingId(exp.expense_id)} style={ghostBtn}>Reverse</button>
                       )}
                     </td>
                   )}
