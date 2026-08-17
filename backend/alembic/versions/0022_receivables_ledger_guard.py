@@ -15,38 +15,116 @@ depends_on = None
 
 
 def upgrade():
-    op.add_column("debts", sa.Column("written_off_amount", sa.Numeric(12, 2), nullable=False, server_default="0"))
-    op.add_column("debts", sa.Column("written_off_at", sa.DateTime(), nullable=True))
-    op.add_column("debts", sa.Column("written_off_by", sa.Integer(), nullable=True))
-    op.create_foreign_key("fk_debts_written_off_by", "debts", "users", ["written_off_by"], ["user_id"])
+    bind = op.get_bind()
+    inspector = sa.inspect(bind)
+    tables = set(inspector.get_table_names())
 
-    op.add_column("customer_ledger_entries", sa.Column("source_type", sa.String(30), nullable=True))
-    op.add_column("customer_ledger_entries", sa.Column("debt_id", sa.Integer(), nullable=True))
-    op.add_column("customer_ledger_entries", sa.Column("debt_payment_id", sa.Integer(), nullable=True))
-    op.add_column("customer_ledger_entries", sa.Column("reversal_of_entry_id", sa.Integer(), nullable=True))
-    op.add_column("customer_ledger_entries", sa.Column("payment_method", sa.String(50), nullable=True))
-    op.create_foreign_key("fk_ledger_debt", "customer_ledger_entries", "debts", ["debt_id"], ["debt_id"])
-    op.create_foreign_key("fk_ledger_debt_payment", "customer_ledger_entries", "debt_payments", ["debt_payment_id"], ["payment_id"])
-    op.create_foreign_key("fk_ledger_reversal", "customer_ledger_entries", "customer_ledger_entries", ["reversal_of_entry_id"], ["entry_id"])
-    op.create_index("ix_customer_ledger_entries_debt_id", "customer_ledger_entries", ["debt_id"])
-    op.create_index("ix_customer_ledger_entries_debt_payment_id", "customer_ledger_entries", ["debt_payment_id"])
-    op.create_index("ix_customer_ledger_entries_reversal_of", "customer_ledger_entries", ["reversal_of_entry_id"])
-    op.create_index(
-        "uq_ledger_debt_origin", "customer_ledger_entries", ["debt_id"],
-        unique=True, postgresql_where=sa.text("source_type = 'debt'"),
+    # Migration 0009 intentionally removed these tables, but the application
+    # later restored their ORM models without restoring the Alembic chain.
+    # Create them only when absent; existing installations keep their rows.
+    debts_created = "debts" not in tables
+    if debts_created:
+        op.create_table(
+            "debts",
+            sa.Column("debt_id", sa.Integer(), primary_key=True),
+            sa.Column("business_id", sa.Integer(), sa.ForeignKey("businesses.business_id"), nullable=False),
+            sa.Column("branch_id", sa.Integer(), sa.ForeignKey("branches.branch_id"), nullable=False),
+            sa.Column("customer_id", sa.Integer(), sa.ForeignKey("customers.customer_id"), nullable=False),
+            sa.Column("user_id", sa.Integer(), sa.ForeignKey("users.user_id"), nullable=False),
+            sa.Column("sale_id", sa.Integer(), sa.ForeignKey("sales.sale_id"), nullable=True),
+            sa.Column("total_amount", sa.Numeric(12, 2), nullable=False),
+            sa.Column("amount_paid", sa.Numeric(12, 2), nullable=False, server_default="0"),
+            sa.Column("balance", sa.Numeric(12, 2), nullable=False),
+            sa.Column("description", sa.String(500), nullable=True),
+            sa.Column("due_date", sa.Date(), nullable=True),
+            sa.Column("status", sa.String(20), nullable=False, server_default="open"),
+            sa.Column("written_off_amount", sa.Numeric(12, 2), nullable=False, server_default="0"),
+            sa.Column("written_off_at", sa.DateTime(), nullable=True),
+            sa.Column("written_off_by", sa.Integer(), sa.ForeignKey("users.user_id"), nullable=True),
+            sa.Column("created_at", sa.DateTime(), nullable=False, server_default=sa.func.now()),
+            sa.Column("updated_at", sa.DateTime(), nullable=False, server_default=sa.func.now()),
+        )
+        tables.add("debts")
+    else:
+        debt_columns = {column["name"] for column in inspector.get_columns("debts")}
+        if "written_off_amount" not in debt_columns:
+            op.add_column("debts", sa.Column(
+                "written_off_amount", sa.Numeric(12, 2),
+                nullable=False, server_default="0",
+            ))
+        if "written_off_at" not in debt_columns:
+            op.add_column("debts", sa.Column("written_off_at", sa.DateTime(), nullable=True))
+        if "written_off_by" not in debt_columns:
+            op.add_column("debts", sa.Column("written_off_by", sa.Integer(), nullable=True))
+            op.create_foreign_key(
+                "fk_debts_written_off_by", "debts", "users",
+                ["written_off_by"], ["user_id"],
+            )
+
+    inspector = sa.inspect(bind)
+    if "debt_payments" not in set(inspector.get_table_names()):
+        op.create_table(
+            "debt_payments",
+            sa.Column("payment_id", sa.Integer(), primary_key=True),
+            sa.Column("debt_id", sa.Integer(), sa.ForeignKey("debts.debt_id"), nullable=False),
+            sa.Column("user_id", sa.Integer(), sa.ForeignKey("users.user_id"), nullable=False),
+            sa.Column("amount", sa.Numeric(12, 2), nullable=False),
+            sa.Column("payment_method", sa.String(50), nullable=False, server_default="cash"),
+            sa.Column("notes", sa.String(500), nullable=True),
+            sa.Column("created_at", sa.DateTime(), nullable=False, server_default=sa.func.now()),
+        )
+
+    inspector = sa.inspect(bind)
+    ledger_columns = {
+        column["name"]
+        for column in inspector.get_columns("customer_ledger_entries")
+    }
+    if "source_type" not in ledger_columns:
+        op.add_column("customer_ledger_entries", sa.Column("source_type", sa.String(30), nullable=True))
+    if "debt_id" not in ledger_columns:
+        op.add_column("customer_ledger_entries", sa.Column("debt_id", sa.Integer(), nullable=True))
+        op.create_foreign_key(
+            "fk_ledger_debt", "customer_ledger_entries", "debts",
+            ["debt_id"], ["debt_id"],
+        )
+    if "debt_payment_id" not in ledger_columns:
+        op.add_column("customer_ledger_entries", sa.Column("debt_payment_id", sa.Integer(), nullable=True))
+        op.create_foreign_key(
+            "fk_ledger_debt_payment", "customer_ledger_entries", "debt_payments",
+            ["debt_payment_id"], ["payment_id"],
+        )
+    if "reversal_of_entry_id" not in ledger_columns:
+        op.add_column("customer_ledger_entries", sa.Column("reversal_of_entry_id", sa.Integer(), nullable=True))
+        op.create_foreign_key(
+            "fk_ledger_reversal", "customer_ledger_entries",
+            "customer_ledger_entries", ["reversal_of_entry_id"], ["entry_id"],
+        )
+    if "payment_method" not in ledger_columns:
+        op.add_column("customer_ledger_entries", sa.Column("payment_method", sa.String(50), nullable=True))
+
+    inspector = sa.inspect(bind)
+    existing_indexes = {
+        index["name"]
+        for index in inspector.get_indexes("customer_ledger_entries")
+    }
+    index_specs = (
+        ("ix_customer_ledger_entries_debt_id", ["debt_id"], False, None),
+        ("ix_customer_ledger_entries_debt_payment_id", ["debt_payment_id"], False, None),
+        ("ix_customer_ledger_entries_reversal_of", ["reversal_of_entry_id"], False, None),
+        ("uq_ledger_debt_origin", ["debt_id"], True, "source_type = 'debt'"),
+        ("uq_ledger_debt_payment_origin", ["debt_payment_id"], True, "debt_payment_id IS NOT NULL"),
+        ("uq_ledger_debt_writeoff", ["debt_id"], True, "source_type = 'debt_writeoff'"),
+        ("uq_ledger_entry_reversal", ["reversal_of_entry_id"], True, "reversal_of_entry_id IS NOT NULL"),
     )
-    op.create_index(
-        "uq_ledger_debt_payment_origin", "customer_ledger_entries", ["debt_payment_id"],
-        unique=True, postgresql_where=sa.text("debt_payment_id IS NOT NULL"),
-    )
-    op.create_index(
-        "uq_ledger_debt_writeoff", "customer_ledger_entries", ["debt_id"],
-        unique=True, postgresql_where=sa.text("source_type = 'debt_writeoff'"),
-    )
-    op.create_index(
-        "uq_ledger_entry_reversal", "customer_ledger_entries", ["reversal_of_entry_id"],
-        unique=True, postgresql_where=sa.text("reversal_of_entry_id IS NOT NULL"),
-    )
+    for name, columns, unique, predicate in index_specs:
+        if name not in existing_indexes:
+            options = {}
+            if predicate:
+                options["postgresql_where"] = sa.text(predicate)
+            op.create_index(
+                name, "customer_ledger_entries", columns,
+                unique=unique, **options,
+            )
 
     # Historical rows are not declared reconciled. NOT VALID constraints still
     # protect all newly inserted or updated records.
