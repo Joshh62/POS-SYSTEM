@@ -45,7 +45,9 @@ def _resolve_branch(user, branch_id_param: Optional[int]) -> Optional[int]:
 
 def _get_expense_total(db, user, branch_id: Optional[int]) -> float:
     """Get total expenses for the current business/branch scope."""
-    q = db.query(func.sum(models.Expense.amount))
+    q = db.query(func.sum(models.Expense.amount)).filter(
+        models.Expense.status == "active"
+    )
     if user.role == SUPERADMIN_ROLE:
         if branch_id:
             q = q.filter(models.Expense.branch_id == branch_id)
@@ -192,7 +194,7 @@ def profit_report(
     eq = db.query(
         models.Expense.category,
         func.sum(models.Expense.amount).label("total"),
-    )
+    ).filter(models.Expense.status == "active")
     if user.role != SUPERADMIN_ROLE:
         eq = eq.filter(models.Expense.business_id == user.business_id)
     if resolved:

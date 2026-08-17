@@ -169,8 +169,8 @@ export const getExpenseSummary = async (params = {}) =>
 export const createExpense = async (data) =>
   (await api.post("/expenses/", data)).data;
 
-export const deleteExpense = async (id) =>
-  (await api.delete(`/expenses/${id}`)).data;
+export const deleteExpense = async (id, reason) =>
+  (await api.delete(`/expenses/${id}`, { params: { reason } })).data;
 
 export const getExpenseCategories = async () =>
   (await api.get("/expenses/categories")).data;
