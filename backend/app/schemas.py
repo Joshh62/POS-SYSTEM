@@ -284,3 +284,33 @@ class RefundCreate(BaseModel):
         if not self.reason:
             raise ValueError("Refund reason must not be blank")
         return self
+
+
+# ---------------------------
+# INTER-BRANCH STOCK TRANSFER
+# ---------------------------
+class StockTransferItemCreate(BaseModel):
+    product_id: int = Field(gt=0)
+    quantity: int = Field(gt=0)
+
+
+class StockTransferCreate(BaseModel):
+    from_branch: int = Field(gt=0)
+    to_branch: int = Field(gt=0)
+    idempotency_key: str = Field(min_length=1, max_length=100)
+    notes: Optional[str] = Field(default=None, max_length=500)
+    items: List[StockTransferItemCreate] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def validate_transfer(self):
+        if self.from_branch == self.to_branch:
+            raise ValueError("Source and destination branches must differ")
+        product_ids = [item.product_id for item in self.items]
+        if len(product_ids) != len(set(product_ids)):
+            raise ValueError("Each product may appear only once per transfer")
+        self.idempotency_key = self.idempotency_key.strip()
+        if not self.idempotency_key:
+            raise ValueError("Idempotency key must not be blank")
+        if self.notes is not None:
+            self.notes = self.notes.strip() or None
+        return self
