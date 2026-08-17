@@ -487,7 +487,8 @@ class Debt(Base):
 
     customer = relationship("Customer")
     branch   = relationship("Branch")
-    user     = relationship("User")
+    user     = relationship("User", foreign_keys=[user_id])
+    written_off_user = relationship("User", foreign_keys=[written_off_by])
     payments = relationship("DebtPayment", back_populates="debt", cascade="all, delete-orphan")
 
     __table_args__ = (
