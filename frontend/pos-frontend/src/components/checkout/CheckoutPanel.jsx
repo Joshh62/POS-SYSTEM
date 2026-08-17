@@ -146,8 +146,7 @@ export default function CheckoutPanel({ onClose, onSuccess }) {
       payment_method: paymentMethod === "charge_to_account" ? "credit" : paymentMethod,
       customer_id:    selectedCustomer?.customer_id || null,
       items:          getCartPayload(),
-      // Note: discount is applied to total displayed, sale records effective total
-      ...(redeemPreview ? { discount: redeemPreview.discount_amount } : {}),
+      loyalty_points_redeemed: redeemPreview ? redeemPoints : 0,
     };
 
     try {
@@ -168,60 +167,10 @@ export default function CheckoutPanel({ onClose, onSuccess }) {
 
       const result = await createSale(salePayload);
 
-      let pointsEarned   = 0;
-      let pointsRedeemed = 0;
-      let newBalance     = loyalty?.points_balance || 0;
-
-      // ── Redeem points if requested ────────────────────────────────────────
-      if (redeemPoints > 0 && redeemPreview && selectedCustomer) {
-        try {
-          const redeemRes = await api.post("/loyalty/redeem", {
-            customer_id: selectedCustomer.customer_id,
-            points:      redeemPoints,
-            sale_id:     result.sale_id,
-          });
-          pointsRedeemed = redeemPoints;
-          newBalance     = redeemRes.data.points_remaining;
-
-          // Send WhatsApp notification
-          if (selectedCustomer.phone) {
-            _sendLoyaltyWhatsApp(selectedCustomer, "redeem", {
-              points: redeemPoints,
-              discount: redeemPreview.discount_amount,
-              remaining: redeemRes.data.points_remaining,
-              remainingValue: redeemRes.data.points_value,
-            }).catch(() => {});
-          }
-        } catch (redeemErr) {
-          console.error("[Loyalty] Redeem failed:", redeemErr);
-        }
-      }
-
-      // ── Earn points (only on direct sales, not credit) ────────────────────
-      if (selectedCustomer && paymentMethod !== "charge_to_account") {
-        try {
-          const earnRes = await api.post("/loyalty/earn", null, {
-            params: {
-              customer_id:  selectedCustomer.customer_id,
-              sale_amount:  effectiveTotal,
-              sale_id:      result.sale_id,
-            },
-          });
-          pointsEarned = earnRes.data.points_earned;
-          newBalance   = earnRes.data.points_balance;
-
-          // Send WhatsApp notification
-          if (selectedCustomer.phone && pointsEarned > 0) {
-            _sendLoyaltyWhatsApp(selectedCustomer, "earn", {
-              points:  pointsEarned,
-              balance: earnRes.data.points_balance,
-              value:   earnRes.data.points_value,
-            }).catch(() => {});
-          }
-        } catch (earnErr) {
-          console.error("[Loyalty] Earn failed:", earnErr);
-        }
-      }
+      // Loyalty redemption and earning are committed atomically with the sale.
+      const pointsEarned   = result.points_earned || 0;
+      const pointsRedeemed = result.points_redeemed || 0;
+      const newBalance     = result.loyalty_balance ?? (loyalty?.points_balance || 0);
 
       // ── Charge to account — create ledger debit ───────────────────────────
       if (paymentMethod === "charge_to_account" && selectedCustomer) {

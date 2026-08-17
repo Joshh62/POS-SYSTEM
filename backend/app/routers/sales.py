@@ -16,6 +16,7 @@ from io import BytesIO as BytesIO_logo
 from app import models, schemas
 from app.database import get_db
 from app.dependencies import require_role, get_current_user, SUPERADMIN_ROLE
+from app.utils.loyalty_service import apply_sale_loyalty
 
 router = APIRouter(prefix="/sales", tags=["Sales"])
 
@@ -97,8 +98,13 @@ def create_sale(
     customer_id  = sale.customer_id if sale.customer_id else None
     total_amount = 0.0
 
-    # Loyalty discount — validated as non-negative float
-    discount = max(0.0, float(sale.discount or 0))
+    # Raw monetary discounts were previously trusted from the client. Loyalty
+    # value is now calculated and posted inside this transaction.
+    if float(sale.discount or 0) != 0:
+        raise HTTPException(
+            status_code=400,
+            detail="Direct discount input is not accepted; submit loyalty points instead",
+        )
 
     try:
         new_sale = models.Sale(
@@ -159,9 +165,32 @@ def create_sale(
                 movement_date=now_lagos()
             ))
 
-        # ── Apply loyalty discount ────────────────────────────────────────────
-        discount         = min(discount, total_amount)   # cap at total
-        discounted_total = round(max(0.0, total_amount - discount), 2)
+        loyalty_result = {
+            "discount": Decimal("0.00"),
+            "earned": 0,
+            "redeemed": 0,
+        }
+        if customer_id or sale.loyalty_points_redeemed:
+            branch = db.query(models.Branch).filter(
+                models.Branch.branch_id == branch_id
+            ).first()
+            if not branch:
+                raise HTTPException(status_code=404, detail="Sale branch not found")
+            business = db.query(models.Business).filter(
+                models.Business.business_id == branch.business_id
+            ).first()
+            if not business:
+                raise HTTPException(status_code=404, detail="Sale business not found")
+            loyalty_result = apply_sale_loyalty(
+                db,
+                sale=new_sale,
+                gross_total=total_amount,
+                points_to_redeem=sale.loyalty_points_redeemed,
+                business=business,
+                user_id=current_user.user_id,
+            )
+        discount = float(loyalty_result["discount"])
+        discounted_total = round(total_amount - discount, 2)
 
         new_sale.total_amount = discounted_total
         new_sale.discount     = round(discount, 2)       # store on sale record
@@ -187,6 +216,9 @@ def create_sale(
             "status":                   new_sale.status,
             "discount":                 float(new_sale.discount),
             "subtotal_before_discount": round(total_amount, 2),
+            "points_redeemed":          loyalty_result["redeemed"],
+            "points_earned":            loyalty_result["earned"],
+            "loyalty_balance":          loyalty_result.get("balance"),
         }
 
     except HTTPException:

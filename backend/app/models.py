@@ -626,12 +626,29 @@ class CustomerLoyalty(Base):
     points_balance    = Column(Integer, nullable=False, default=0)
     lifetime_earned   = Column(Integer, nullable=False, default=0)
     lifetime_redeemed = Column(Integer, nullable=False, default=0)
+    lifetime_expired  = Column(Integer, nullable=False, default=0)
     last_activity_at  = Column(DateTime, default=datetime.utcnow)
     created_at        = Column(DateTime, default=datetime.utcnow)
 
     customer     = relationship("Customer")
     transactions = relationship("LoyaltyTransaction", back_populates="loyalty",
                                 cascade="all, delete-orphan")
+
+    __table_args__ = (
+        UniqueConstraint(
+            "business_id", "customer_id",
+            name="uq_customer_loyalty_business_customer",
+        ),
+        CheckConstraint(
+            "points_balance >= 0 AND lifetime_earned >= 0 "
+            "AND lifetime_redeemed >= 0 AND lifetime_expired >= 0",
+            name="ck_customer_loyalty_nonnegative_totals",
+        ),
+        CheckConstraint(
+            "points_balance = lifetime_earned - lifetime_redeemed - lifetime_expired",
+            name="ck_customer_loyalty_exact_balance",
+        ),
+    )
 
 
 # -------------------- LOYALTY TRANSACTION --------------------
@@ -646,9 +663,34 @@ class LoyaltyTransaction(Base):
     tx_type     = Column(String(10), nullable=False)   # earn | redeem | expire
     points      = Column(Integer, nullable=False)
     sale_id     = Column(Integer, ForeignKey("sales.sale_id"), nullable=True)
+    balance_before = Column(Integer, nullable=False)
+    balance_after = Column(Integer, nullable=False)
+    rate_snapshot = Column(Numeric(12, 4), nullable=True)
+    monetary_amount = Column(Numeric(12, 2), nullable=False, default=0)
     description = Column(String(500), nullable=True)
     created_at  = Column(DateTime, default=datetime.utcnow)
 
     loyalty  = relationship("CustomerLoyalty", back_populates="transactions")
     customer = relationship("Customer")
     user     = relationship("User")
+
+    __table_args__ = (
+        CheckConstraint(
+            "tx_type IN ('earn','redeem','expire')",
+            name="ck_loyalty_transactions_type",
+        ),
+        CheckConstraint(
+            "(tx_type='earn' AND points > 0) "
+            "OR (tx_type IN ('redeem','expire') AND points < 0)",
+            name="ck_loyalty_transactions_points_sign",
+        ),
+        CheckConstraint(
+            "balance_before >= 0 AND balance_after >= 0 "
+            "AND balance_after = balance_before + points",
+            name="ck_loyalty_transactions_exact_balance",
+        ),
+        CheckConstraint(
+            "monetary_amount >= 0",
+            name="ck_loyalty_transactions_nonnegative_amount",
+        ),
+    )
