@@ -62,6 +62,7 @@ class SaleCreate(BaseModel):
     payment_method: str
     items:          List[SaleItemCreate]
     discount:       Optional[float] = 0   # loyalty points discount in naira
+    loyalty_points_redeemed: int = Field(default=0, ge=0)
 
 class SaleResponse(BaseModel):
     sale_id:      int
