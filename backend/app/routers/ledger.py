@@ -1,9 +1,11 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import func
+from sqlalchemy.exc import IntegrityError
 from pydantic import BaseModel
 from typing import Optional
 from datetime import date, datetime, timedelta
+from decimal import Decimal
 
 from app.database import get_db
 from app import models
@@ -66,6 +68,35 @@ def _check_credit_limit(db, customer, additional_debit: float):
         )
 
 
+def _money(value) -> Decimal:
+    return Decimal(str(value)).quantize(Decimal("0.01"))
+
+
+def _resolve_branch(db, user, requested_branch_id):
+    branch_id = user.branch_id if user.role not in (SUPERADMIN_ROLE, "admin") else (requested_branch_id or user.branch_id)
+    if not branch_id:
+        raise HTTPException(status_code=400, detail="A branch is required")
+    branch = db.query(models.Branch).filter(models.Branch.branch_id == branch_id).first()
+    if not branch:
+        raise HTTPException(status_code=404, detail="Branch not found")
+    if user.role != SUPERADMIN_ROLE and branch.business_id != user.business_id:
+        raise HTTPException(status_code=403, detail="Not authorized for this branch")
+    if user.role not in (SUPERADMIN_ROLE, "admin") and branch_id != user.branch_id:
+        raise HTTPException(status_code=403, detail="Not authorized for this branch")
+    return branch
+
+
+def _commit_or_rollback(db):
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Ledger transaction conflicts with existing evidence") from exc
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(status_code=500, detail="Ledger transaction failed") from exc
+
+
 # ── Get ledger for a customer ─────────────────────────────────────────────────
 @router.get("/customer/{customer_id}")
 def get_customer_ledger(
@@ -122,53 +153,64 @@ def add_debit(
     db: Session = Depends(get_db),
     user=Depends(require_role(["admin", "manager"]))
 ):
-    customer = _get_customer(db, data.customer_id, user)
-
-    if not customer.credit_enabled:
-        raise HTTPException(status_code=400, detail="Customer is not credit-enabled")
-
-    if data.amount <= 0:
+    amount = _money(data.amount)
+    if amount <= 0:
         raise HTTPException(status_code=400, detail="Amount must be greater than zero")
+    try:
+        customer = db.query(models.Customer).filter(
+            models.Customer.customer_id == data.customer_id
+        ).with_for_update().first()
+        if not customer:
+            raise HTTPException(status_code=404, detail="Customer not found")
+        if user.role != SUPERADMIN_ROLE and customer.business_id != user.business_id:
+            raise HTTPException(status_code=403, detail="Not authorized")
+        if not customer.credit_enabled:
+            raise HTTPException(status_code=400, detail="Customer is not credit-enabled")
+        branch = _resolve_branch(db, user, data.branch_id)
+        if customer.business_id != branch.business_id:
+            raise HTTPException(status_code=403, detail="Customer is outside the authorised business")
 
-    _check_credit_limit(db, customer, data.amount)
+        if data.reference_id:
+            sale = db.query(models.Sale).filter(models.Sale.sale_id == data.reference_id).first()
+            if not sale:
+                raise HTTPException(status_code=404, detail="Referenced sale not found")
+            if sale.branch_id != branch.branch_id:
+                raise HTTPException(status_code=403, detail="Referenced sale is outside the authorised branch")
+            if sale.customer_id and sale.customer_id != customer.customer_id:
+                raise HTTPException(status_code=409, detail="Referenced sale belongs to another customer")
 
-    branch_id = user.branch_id if user.role == "manager" else (data.branch_id or user.branch_id)
-
-    # Auto-calculate due date if not provided
-    due_date = data.due_date or (date.today() + timedelta(days=customer.credit_due_days))
-
-    entry = models.CustomerLedgerEntry(
-        business_id  = user.business_id,
-        branch_id    = branch_id,
-        customer_id  = data.customer_id,
-        user_id      = user.user_id,
-        entry_type   = "debit",
-        amount       = data.amount,
-        description  = data.description or "Goods purchased on credit",
-        reference_id = data.reference_id,
-        due_date     = due_date,
-    )
-    db.add(entry)
-
-    db.add(models.AuditLog(
-        user_id=user.user_id,
-        action="CREATE",
-        table_name="customer_ledger_entries",
-        record_id=0,
-        description=f"Debit ₦{data.amount:,.2f} for {customer.full_name} — due {due_date}",
-    ))
-
-    db.commit()
-    db.refresh(entry)
-
-    return {
-        "entry_id":   entry.entry_id,
-        "entry_type": "debit",
-        "amount":     float(entry.amount),
-        "due_date":   str(entry.due_date),
-        "balance":    _get_balance(db, data.customer_id),
-        "message":    f"Debit of ₦{data.amount:,.2f} recorded. Due: {due_date}",
-    }
+        _check_credit_limit(db, customer, float(amount))
+        due_date = data.due_date or (date.today() + timedelta(days=customer.credit_due_days))
+        entry = models.CustomerLedgerEntry(
+            business_id=branch.business_id,
+            branch_id=branch.branch_id,
+            customer_id=data.customer_id,
+            user_id=user.user_id,
+            entry_type="debit",
+            amount=amount,
+            description=data.description or "Manual account charge",
+            reference_id=data.reference_id,
+            source_type="manual_debit",
+            due_date=due_date,
+        )
+        db.add(entry)
+        db.flush()
+        db.add(models.AuditLog(
+            user_id=user.user_id,
+            action="CREATE",
+            table_name="customer_ledger_entries",
+            record_id=entry.entry_id,
+            description=f"Manual debit {amount} for customer #{customer.customer_id}",
+        ))
+        _commit_or_rollback(db)
+        db.refresh(entry)
+        return {"message": "Debit entry added", "entry_id": entry.entry_id, "new_balance": _get_balance(db, customer.customer_id)}
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(status_code=500, detail="Ledger debit failed") from exc
 
 
 # ── Add credit entry (payment received) ──────────────────────────────────────
@@ -176,56 +218,60 @@ def add_debit(
 def add_credit(
     data: CreditEntry,
     db: Session = Depends(get_db),
-    user=Depends(get_current_user)   # all roles
+    user=Depends(get_current_user)
 ):
-    customer = _get_customer(db, data.customer_id, user)
-
-    if not customer.credit_enabled:
-        raise HTTPException(status_code=400, detail="Customer is not credit-enabled")
-
-    if data.amount <= 0:
+    amount = _money(data.amount)
+    if amount <= 0:
         raise HTTPException(status_code=400, detail="Amount must be greater than zero")
-
     if data.payment_method not in PAYMENT_METHODS:
         raise HTTPException(status_code=400, detail=f"Invalid payment method. Use: {', '.join(PAYMENT_METHODS)}")
+    try:
+        customer = db.query(models.Customer).filter(
+            models.Customer.customer_id == data.customer_id
+        ).with_for_update().first()
+        if not customer:
+            raise HTTPException(status_code=404, detail="Customer not found")
+        if user.role != SUPERADMIN_ROLE and customer.business_id != user.business_id:
+            raise HTTPException(status_code=403, detail="Not authorized")
+        if not customer.credit_enabled:
+            raise HTTPException(status_code=400, detail="Customer is not credit-enabled")
+        branch = _resolve_branch(db, user, data.branch_id)
+        if customer.business_id != branch.business_id:
+            raise HTTPException(status_code=403, detail="Customer is outside the authorised business")
+        current_balance = _money(_get_balance(db, customer.customer_id))
+        if amount > current_balance:
+            raise HTTPException(status_code=409, detail="Payment exceeds the outstanding ledger balance")
 
-    branch_id = user.branch_id if hasattr(user, "branch_id") else (data.branch_id or 1)
-
-    entry = models.CustomerLedgerEntry(
-        business_id  = user.business_id,
-        branch_id    = branch_id,
-        customer_id  = data.customer_id,
-        user_id      = user.user_id,
-        entry_type   = "credit",
-        amount       = data.amount,
-        description  = data.description or f"Payment received via {data.payment_method}",
-        due_date     = None,
-    )
-    db.add(entry)
-
-    new_balance = _get_balance(db, data.customer_id) - data.amount
-
-    db.add(models.AuditLog(
-        user_id=user.user_id,
-        action="UPDATE",
-        table_name="customer_ledger_entries",
-        record_id=0,
-        description=f"Payment ₦{data.amount:,.2f} from {customer.full_name} via {data.payment_method} — new balance ₦{new_balance:,.2f}",
-    ))
-
-    db.commit()
-    db.refresh(entry)
-
-    final_balance = _get_balance(db, data.customer_id)
-
-    return {
-        "entry_id":    entry.entry_id,
-        "entry_type":  "credit",
-        "amount":      float(entry.amount),
-        "balance":     final_balance,
-        "status":      "credit" if final_balance < 0 else ("clear" if final_balance == 0 else "owing"),
-        "message":     f"Payment of ₦{data.amount:,.2f} recorded. {'Account cleared!' if final_balance <= 0 else f'Remaining balance: ₦{final_balance:,.2f}'}",
-    }
+        entry = models.CustomerLedgerEntry(
+            business_id=branch.business_id,
+            branch_id=branch.branch_id,
+            customer_id=data.customer_id,
+            user_id=user.user_id,
+            entry_type="credit",
+            amount=amount,
+            description=data.description or f"Manual payment via {data.payment_method}",
+            source_type="manual_payment",
+            payment_method=data.payment_method,
+        )
+        db.add(entry)
+        db.flush()
+        new_balance = current_balance - amount
+        db.add(models.AuditLog(
+            user_id=user.user_id,
+            action="CREATE",
+            table_name="customer_ledger_entries",
+            record_id=entry.entry_id,
+            description=f"Manual payment {amount} for customer #{customer.customer_id}; balance {new_balance}",
+        ))
+        _commit_or_rollback(db)
+        db.refresh(entry)
+        return {"message": "Payment recorded", "entry_id": entry.entry_id, "new_balance": float(new_balance)}
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(status_code=500, detail="Ledger payment failed") from exc
 
 
 # ── Write off a debit entry — admin only ──────────────────────────────────────
@@ -235,43 +281,55 @@ def write_off_entry(
     db: Session = Depends(get_db),
     user=Depends(require_role(["admin"]))
 ):
-    entry = db.query(models.CustomerLedgerEntry).filter(
-        models.CustomerLedgerEntry.entry_id == entry_id
-    ).first()
-    if not entry:
-        raise HTTPException(status_code=404, detail="Entry not found")
-    if entry.entry_type != "debit":
-        raise HTTPException(status_code=400, detail="Can only write off debit entries")
-    if user.role != SUPERADMIN_ROLE and entry.business_id != user.business_id:
-        raise HTTPException(status_code=403, detail="Not authorized")
+    try:
+        entry = db.query(models.CustomerLedgerEntry).filter(
+            models.CustomerLedgerEntry.entry_id == entry_id
+        ).with_for_update().first()
+        if not entry:
+            raise HTTPException(status_code=404, detail="Entry not found")
+        if entry.entry_type != "debit":
+            raise HTTPException(status_code=400, detail="Can only write off debit entries")
+        if entry.source_type in ("debt", "debt_payment", "debt_writeoff"):
+            raise HTTPException(status_code=409, detail="Debt-linked entries must be changed through debt operations")
+        if user.role != SUPERADMIN_ROLE and entry.business_id != user.business_id:
+            raise HTTPException(status_code=403, detail="Not authorized")
+        duplicate = db.query(models.CustomerLedgerEntry).filter(
+            models.CustomerLedgerEntry.reversal_of_entry_id == entry_id
+        ).first()
+        if duplicate:
+            raise HTTPException(status_code=409, detail="Entry has already been reversed or written off")
+        current_balance = _money(_get_balance(db, entry.customer_id))
+        if _money(entry.amount) > current_balance:
+            raise HTTPException(status_code=409, detail="Write-off exceeds the outstanding ledger balance")
 
-    # Write off = add a credit entry equal to the debit amount
-    customer = db.query(models.Customer).filter(
-        models.Customer.customer_id == entry.customer_id
-    ).first()
-
-    write_off = models.CustomerLedgerEntry(
-        business_id  = entry.business_id,
-        branch_id    = entry.branch_id,
-        customer_id  = entry.customer_id,
-        user_id      = user.user_id,
-        entry_type   = "credit",
-        amount       = entry.amount,
-        description  = f"Write-off of debit entry #{entry_id}",
-        reference_id = entry_id,
-    )
-    db.add(write_off)
-
-    db.add(models.AuditLog(
-        user_id=user.user_id,
-        action="DELETE",
-        table_name="customer_ledger_entries",
-        record_id=entry_id,
-        description=f"Debit entry #{entry_id} written off for {customer.full_name if customer else 'customer'} — ₦{float(entry.amount):,.2f}",
-    ))
-
-    db.commit()
-    return {"message": f"Entry #{entry_id} written off", "amount": float(entry.amount)}
+        write_off = models.CustomerLedgerEntry(
+            business_id=entry.business_id,
+            branch_id=entry.branch_id,
+            customer_id=entry.customer_id,
+            user_id=user.user_id,
+            entry_type="credit",
+            amount=entry.amount,
+            description=f"Write-off of ledger entry #{entry_id}",
+            source_type="writeoff",
+            reversal_of_entry_id=entry_id,
+        )
+        db.add(write_off)
+        db.flush()
+        db.add(models.AuditLog(
+            user_id=user.user_id,
+            action="UPDATE",
+            table_name="customer_ledger_entries",
+            record_id=write_off.entry_id,
+            description=f"Ledger debit #{entry_id} written off by entry #{write_off.entry_id}",
+        ))
+        _commit_or_rollback(db)
+        return {"message": f"Entry #{entry_id} written off", "amount": float(entry.amount), "write_off_entry_id": write_off.entry_id}
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(status_code=500, detail="Ledger write-off failed") from exc
 
 
 # ── Delete a debit entry — admin only ────────────────────────────────────────
@@ -281,29 +339,51 @@ def delete_entry(
     db: Session = Depends(get_db),
     user=Depends(require_role(["admin"]))
 ):
-    entry = db.query(models.CustomerLedgerEntry).filter(
-        models.CustomerLedgerEntry.entry_id == entry_id
-    ).first()
-    if not entry:
-        raise HTTPException(status_code=404, detail="Entry not found")
-    if user.role != SUPERADMIN_ROLE and entry.business_id != user.business_id:
-        raise HTTPException(status_code=403, detail="Not authorized")
+    """Preserve financial history by posting an opposite reversal entry."""
+    try:
+        entry = db.query(models.CustomerLedgerEntry).filter(
+            models.CustomerLedgerEntry.entry_id == entry_id
+        ).with_for_update().first()
+        if not entry:
+            raise HTTPException(status_code=404, detail="Entry not found")
+        if user.role != SUPERADMIN_ROLE and entry.business_id != user.business_id:
+            raise HTTPException(status_code=403, detail="Not authorized")
+        if entry.source_type in ("debt", "debt_payment", "debt_writeoff"):
+            raise HTTPException(status_code=409, detail="Debt-linked entries must be changed through debt operations")
+        duplicate = db.query(models.CustomerLedgerEntry).filter(
+            models.CustomerLedgerEntry.reversal_of_entry_id == entry_id
+        ).first()
+        if duplicate:
+            raise HTTPException(status_code=409, detail="Entry has already been reversed")
 
-    customer = db.query(models.Customer).filter(
-        models.Customer.customer_id == entry.customer_id
-    ).first()
-
-    db.add(models.AuditLog(
-        user_id=user.user_id,
-        action="DELETE",
-        table_name="customer_ledger_entries",
-        record_id=entry_id,
-        description=f"Entry #{entry_id} deleted for {customer.full_name if customer else 'customer'} — {entry.entry_type} ₦{float(entry.amount):,.2f}",
-    ))
-
-    db.delete(entry)
-    db.commit()
-    return {"message": f"Entry #{entry_id} deleted"}
+        reversal = models.CustomerLedgerEntry(
+            business_id=entry.business_id,
+            branch_id=entry.branch_id,
+            customer_id=entry.customer_id,
+            user_id=user.user_id,
+            entry_type="credit" if entry.entry_type == "debit" else "debit",
+            amount=entry.amount,
+            description=f"Reversal of ledger entry #{entry_id}",
+            source_type="reversal",
+            reversal_of_entry_id=entry_id,
+        )
+        db.add(reversal)
+        db.flush()
+        db.add(models.AuditLog(
+            user_id=user.user_id,
+            action="UPDATE",
+            table_name="customer_ledger_entries",
+            record_id=reversal.entry_id,
+            description=f"Ledger entry #{entry_id} reversed by immutable entry #{reversal.entry_id}",
+        ))
+        _commit_or_rollback(db)
+        return {"message": f"Entry #{entry_id} reversed", "reversal_entry_id": reversal.entry_id}
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(status_code=500, detail="Ledger reversal failed") from exc
 
 
 # ── Credit accounts summary (for Reports page) ────────────────────────────────

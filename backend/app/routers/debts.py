@@ -1,9 +1,11 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import func
+from sqlalchemy.exc import IntegrityError
 from pydantic import BaseModel
 from typing import Optional
 from datetime import date, datetime
+from decimal import Decimal
 
 from app.database import get_db
 from app import models
@@ -40,11 +42,90 @@ def _scope(q, user, branch_id: Optional[int] = None):
     if user.role == SUPERADMIN_ROLE:
         if branch_id:
             q = q.filter(models.Debt.branch_id == branch_id)
-    else:
-        q = q.filter(models.Debt.business_id == user.business_id)
-        if branch_id:
-            q = q.filter(models.Debt.branch_id == branch_id)
+        return q
+    q = q.filter(models.Debt.business_id == user.business_id)
+    if user.role == "manager":
+        if branch_id and branch_id != user.branch_id:
+            raise HTTPException(status_code=403, detail="Not authorized for this branch")
+        return q.filter(models.Debt.branch_id == user.branch_id)
+    if branch_id:
+        q = q.filter(models.Debt.branch_id == branch_id)
     return q
+
+
+def _money(value) -> Decimal:
+    return Decimal(str(value)).quantize(Decimal("0.01"))
+
+
+def _resolve_branch(db, user, requested_branch_id: Optional[int]):
+    branch_id = user.branch_id if user.role == "manager" else (requested_branch_id or user.branch_id)
+    if not branch_id:
+        raise HTTPException(status_code=400, detail="A branch is required")
+    branch = db.query(models.Branch).filter(models.Branch.branch_id == branch_id).first()
+    if not branch:
+        raise HTTPException(status_code=404, detail="Branch not found")
+    if user.role != SUPERADMIN_ROLE and branch.business_id != user.business_id:
+        raise HTTPException(status_code=403, detail="Not authorized for this branch")
+    if user.role not in (SUPERADMIN_ROLE, "admin") and branch_id != user.branch_id:
+        raise HTTPException(status_code=403, detail="Not authorized for this branch")
+    return branch
+
+
+def _resolve_customer(db, user, business_id: int, customer_id: Optional[int], new_customer):
+    if bool(customer_id) == bool(new_customer):
+        raise HTTPException(status_code=400, detail="Provide exactly one of customer_id or new_customer")
+    if customer_id:
+        customer = db.query(models.Customer).filter(
+            models.Customer.customer_id == customer_id
+        ).first()
+        if not customer:
+            raise HTTPException(status_code=404, detail="Customer not found")
+        if customer.business_id != business_id:
+            raise HTTPException(status_code=403, detail="Customer is outside the authorised business")
+        return customer
+
+    name = (new_customer.full_name or "").strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Customer name is required")
+    phone = (new_customer.phone or "").strip() or None
+    if phone:
+        existing = db.query(models.Customer).filter(models.Customer.phone == phone).first()
+        if existing:
+            if existing.business_id != business_id:
+                raise HTTPException(status_code=409, detail="Customer phone is unavailable")
+            return existing
+    customer = models.Customer(
+        business_id=business_id,
+        full_name=name,
+        phone=phone,
+        credit_enabled=True,
+    )
+    db.add(customer)
+    db.flush()
+    return customer
+
+
+def _ledger_balance(db, customer_id: int) -> Decimal:
+    debits = db.query(func.sum(models.CustomerLedgerEntry.amount)).filter(
+        models.CustomerLedgerEntry.customer_id == customer_id,
+        models.CustomerLedgerEntry.entry_type == "debit",
+    ).scalar() or 0
+    credits = db.query(func.sum(models.CustomerLedgerEntry.amount)).filter(
+        models.CustomerLedgerEntry.customer_id == customer_id,
+        models.CustomerLedgerEntry.entry_type == "credit",
+    ).scalar() or 0
+    return _money(debits) - _money(credits)
+
+
+def _commit_or_rollback(db):
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Receivables transaction conflicts with existing evidence") from exc
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(status_code=500, detail="Receivables transaction failed") from exc
 
 
 def _debt_dict(debt, db):
@@ -140,96 +221,110 @@ def create_debt(
     db: Session = Depends(get_db),
     user=Depends(require_role(["admin", "manager"]))
 ):
-    if data.total_amount <= 0:
+    total = _money(data.total_amount)
+    initial_paid = _money(data.amount_paid)
+    if total <= 0:
         raise HTTPException(status_code=400, detail="Total amount must be greater than zero")
+    if initial_paid < 0 or initial_paid > total:
+        raise HTTPException(status_code=400, detail="Initial payment must be between zero and total amount")
 
-    if data.amount_paid < 0:
-        raise HTTPException(status_code=400, detail="Amount paid cannot be negative")
+    try:
+        branch = _resolve_branch(db, user, data.branch_id)
+        customer = _resolve_customer(
+            db, user, branch.business_id, data.customer_id, data.new_customer
+        )
+        customer.credit_enabled = True
 
-    if data.amount_paid > data.total_amount:
-        raise HTTPException(status_code=400, detail="Amount paid cannot exceed total amount")
+        if data.sale_id:
+            sale = db.query(models.Sale).filter(models.Sale.sale_id == data.sale_id).first()
+            if not sale:
+                raise HTTPException(status_code=404, detail="Sale not found")
+            if sale.branch_id != branch.branch_id:
+                raise HTTPException(status_code=403, detail="Sale is outside the authorised branch")
+            if sale.customer_id and sale.customer_id != customer.customer_id:
+                raise HTTPException(status_code=409, detail="Sale and debt customer do not match")
+            duplicate = db.query(models.Debt).filter(models.Debt.sale_id == data.sale_id).first()
+            if duplicate:
+                raise HTTPException(status_code=409, detail="A debt already exists for this sale")
 
-    # ── Resolve or create customer ────────────────────────────────────────────
-    customer_id = data.customer_id
+        if customer.credit_limit:
+            projected = _ledger_balance(db, customer.customer_id) + total
+            if projected > _money(customer.credit_limit):
+                raise HTTPException(status_code=409, detail="Customer credit limit would be exceeded")
 
-    if not customer_id:
-        if not data.new_customer:
-            raise HTTPException(status_code=400, detail="Provide customer_id or new_customer details")
-
-        # Check if customer with same phone already exists
-        if data.new_customer.phone:
-            existing = db.query(models.Customer).filter(
-                models.Customer.phone == data.new_customer.phone
-            ).first()
-            if existing:
-                customer_id = existing.customer_id
-            else:
-                new_cust = models.Customer(
-                    full_name=data.new_customer.full_name,
-                    phone=data.new_customer.phone,
-                )
-                db.add(new_cust)
-                db.flush()
-                customer_id = new_cust.customer_id
-        else:
-            new_cust = models.Customer(full_name=data.new_customer.full_name)
-            db.add(new_cust)
-            db.flush()
-            customer_id = new_cust.customer_id
-
-    # Determine branch
-    branch_id = user.branch_id if user.role == "manager" else (data.branch_id or user.branch_id)
-
-    # Calculate balance and status
-    balance = data.total_amount - data.amount_paid
-    if balance <= 0:
-        status = "paid"
-    elif data.amount_paid > 0:
-        status = "partial"
-    else:
-        status = "open"
-
-    debt = models.Debt(
-        business_id=user.business_id,
-        branch_id=branch_id,
-        customer_id=customer_id,
-        user_id=user.user_id,
-        sale_id=data.sale_id,
-        total_amount=data.total_amount,
-        amount_paid=data.amount_paid,
-        balance=balance,
-        description=data.description,
-        due_date=data.due_date,
-        status=status,
-    )
-    db.add(debt)
-    db.flush()
-
-    # If there was an initial payment, record it
-    if data.amount_paid > 0:
-        db.add(models.DebtPayment(
-            debt_id=debt.debt_id,
+        debt = models.Debt(
+            business_id=branch.business_id,
+            branch_id=branch.branch_id,
+            customer_id=customer.customer_id,
             user_id=user.user_id,
-            amount=data.amount_paid,
-            payment_method="cash",
-            notes="Initial payment at time of debt creation",
+            sale_id=data.sale_id,
+            total_amount=total,
+            amount_paid=Decimal("0.00"),
+            balance=total,
+            description=data.description,
+            due_date=data.due_date,
+            status="open",
+        )
+        db.add(debt)
+        db.flush()
+
+        db.add(models.CustomerLedgerEntry(
+            business_id=branch.business_id,
+            branch_id=branch.branch_id,
+            customer_id=customer.customer_id,
+            user_id=user.user_id,
+            entry_type="debit",
+            amount=total,
+            description=data.description or f"Debt #{debt.debt_id}",
+            reference_id=data.sale_id,
+            source_type="debt",
+            debt_id=debt.debt_id,
+            due_date=data.due_date,
         ))
 
-    # Audit log
-    customer = db.query(models.Customer).filter(
-        models.Customer.customer_id == customer_id
-    ).first()
-    db.add(models.AuditLog(
-        user_id=user.user_id,
-        action="CREATE",
-        table_name="debts",
-        record_id=debt.debt_id,
-        description=f"Debt created for {customer.full_name if customer else 'customer'} — ₦{data.total_amount:,.2f} total, ₦{data.amount_paid:,.2f} paid, ₦{balance:,.2f} outstanding",
-    ))
+        if initial_paid > 0:
+            payment = models.DebtPayment(
+                debt_id=debt.debt_id,
+                user_id=user.user_id,
+                amount=initial_paid,
+                payment_method="cash",
+                notes="Initial payment at debt creation",
+            )
+            db.add(payment)
+            db.flush()
+            db.add(models.CustomerLedgerEntry(
+                business_id=branch.business_id,
+                branch_id=branch.branch_id,
+                customer_id=customer.customer_id,
+                user_id=user.user_id,
+                entry_type="credit",
+                amount=initial_paid,
+                description=f"Initial payment for debt #{debt.debt_id}",
+                source_type="debt_payment",
+                debt_id=debt.debt_id,
+                debt_payment_id=payment.payment_id,
+                payment_method="cash",
+            ))
+            debt.amount_paid = initial_paid
+            debt.balance = total - initial_paid
+            debt.status = "paid" if debt.balance == 0 else "partial"
 
-    db.commit()
-    db.refresh(debt)
-    return _debt_dict(debt, db)
+        db.add(models.AuditLog(
+            user_id=user.user_id,
+            action="CREATE",
+            table_name="debts",
+            record_id=debt.debt_id,
+            description=f"Debt created for customer #{customer.customer_id}; total {total}; paid {initial_paid}; balance {debt.balance}",
+        ))
+        _commit_or_rollback(db)
+        db.refresh(debt)
+        return _debt_dict(debt, db)
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(status_code=500, detail="Debt creation failed") from exc
 
 
 # ── Get single debt ───────────────────────────────────────────────────────────
@@ -244,6 +339,8 @@ def get_debt(
         raise HTTPException(status_code=404, detail="Debt not found")
     if user.role != SUPERADMIN_ROLE and debt.business_id != user.business_id:
         raise HTTPException(status_code=403, detail="Not authorized")
+    if user.role == "manager" and debt.branch_id != user.branch_id:
+        raise HTTPException(status_code=403, detail="Not authorized for this branch")
     return _debt_dict(debt, db)
 
 
@@ -253,74 +350,78 @@ def record_payment(
     debt_id: int,
     data: DebtPaymentCreate,
     db: Session = Depends(get_db),
-    user=Depends(get_current_user)   # all roles — cashier, manager, admin
+    user=Depends(get_current_user)
 ):
-    if data.amount <= 0:
+    amount = _money(data.amount)
+    if amount <= 0:
         raise HTTPException(status_code=400, detail="Payment amount must be greater than zero")
-
     if data.payment_method not in PAYMENT_METHODS:
         raise HTTPException(status_code=400, detail=f"Invalid payment method. Use: {', '.join(PAYMENT_METHODS)}")
 
-    debt = db.query(models.Debt).filter(models.Debt.debt_id == debt_id).first()
-    if not debt:
-        raise HTTPException(status_code=404, detail="Debt not found")
-
-    # Scope check — cashier must be in the same business
-    if user.role != SUPERADMIN_ROLE:
-        if debt.business_id != user.business_id:
+    try:
+        debt = db.query(models.Debt).filter(
+            models.Debt.debt_id == debt_id
+        ).with_for_update().first()
+        if not debt:
+            raise HTTPException(status_code=404, detail="Debt not found")
+        if user.role != SUPERADMIN_ROLE and debt.business_id != user.business_id:
             raise HTTPException(status_code=403, detail="Not authorized")
+        if user.role not in (SUPERADMIN_ROLE, "admin") and debt.branch_id != user.branch_id:
+            raise HTTPException(status_code=403, detail="Not authorized for this branch")
+        if debt.status in ("paid", "written_off"):
+            raise HTTPException(status_code=409, detail=f"Cannot pay a {debt.status} debt")
+        if amount > _money(debt.balance):
+            raise HTTPException(status_code=409, detail="Payment exceeds the outstanding balance")
 
-    if debt.status in ("paid", "written_off"):
-        raise HTTPException(
-            status_code=400,
-            detail=f"Cannot record payment on a {debt.status} debt"
+        payment = models.DebtPayment(
+            debt_id=debt_id,
+            user_id=user.user_id,
+            amount=amount,
+            payment_method=data.payment_method,
+            notes=data.notes,
         )
+        db.add(payment)
+        db.flush()
 
-    # Cap payment at remaining balance
-    actual_amount = min(data.amount, float(debt.balance))
+        debt.amount_paid = _money(debt.amount_paid) + amount
+        debt.balance = _money(debt.total_amount) - _money(debt.amount_paid)
+        debt.status = "paid" if debt.balance == 0 else "partial"
+        debt.updated_at = datetime.utcnow()
 
-    payment = models.DebtPayment(
-        debt_id=debt_id,
-        user_id=user.user_id,
-        amount=actual_amount,
-        payment_method=data.payment_method,
-        notes=data.notes,
-    )
-    db.add(payment)
-
-    # Update debt totals
-    new_paid    = float(debt.amount_paid) + actual_amount
-    new_balance = float(debt.total_amount) - new_paid
-
-    debt.amount_paid = new_paid
-    debt.balance     = max(new_balance, 0)
-    debt.updated_at  = datetime.utcnow()
-
-    if debt.balance <= 0:
-        debt.status = "paid"
-    elif new_paid > 0:
-        debt.status = "partial"
-
-    # Audit log
-    customer = db.query(models.Customer).filter(
-        models.Customer.customer_id == debt.customer_id
-    ).first()
-    db.add(models.AuditLog(
-        user_id=user.user_id,
-        action="UPDATE",
-        table_name="debts",
-        record_id=debt_id,
-        description=f"Payment of ₦{actual_amount:,.2f} recorded for {customer.full_name if customer else 'customer'} — balance now ₦{debt.balance:,.2f}",
-    ))
-
-    db.commit()
-    db.refresh(debt)
-    return {
-        "message":     "Payment recorded successfully",
-        "debt":        _debt_dict(debt, db),
-        "payment_id":  payment.payment_id,
-        "amount_paid": actual_amount,
-    }
+        db.add(models.CustomerLedgerEntry(
+            business_id=debt.business_id,
+            branch_id=debt.branch_id,
+            customer_id=debt.customer_id,
+            user_id=user.user_id,
+            entry_type="credit",
+            amount=amount,
+            description=f"Payment for debt #{debt_id}",
+            source_type="debt_payment",
+            debt_id=debt_id,
+            debt_payment_id=payment.payment_id,
+            payment_method=data.payment_method,
+        ))
+        db.add(models.AuditLog(
+            user_id=user.user_id,
+            action="UPDATE",
+            table_name="debts",
+            record_id=debt_id,
+            description=f"Payment #{payment.payment_id} of {amount} recorded; balance {debt.balance}",
+        ))
+        _commit_or_rollback(db)
+        db.refresh(debt)
+        return {
+            "message": "Payment recorded successfully",
+            "debt": _debt_dict(debt, db),
+            "payment_id": payment.payment_id,
+            "amount_paid": float(amount),
+        }
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(status_code=500, detail="Debt payment failed") from exc
 
 
 # ── Payment history for a debt ────────────────────────────────────────────────
@@ -335,6 +436,8 @@ def get_debt_payments(
         raise HTTPException(status_code=404, detail="Debt not found")
     if user.role != SUPERADMIN_ROLE and debt.business_id != user.business_id:
         raise HTTPException(status_code=403, detail="Not authorized")
+    if user.role == "manager" and debt.branch_id != user.branch_id:
+        raise HTTPException(status_code=403, detail="Not authorized for this branch")
 
     payments = db.query(models.DebtPayment).filter(
         models.DebtPayment.debt_id == debt_id
@@ -360,30 +463,53 @@ def write_off_debt(
     db: Session = Depends(get_db),
     user=Depends(require_role(["admin"]))
 ):
-    debt = db.query(models.Debt).filter(models.Debt.debt_id == debt_id).first()
-    if not debt:
-        raise HTTPException(status_code=404, detail="Debt not found")
-    if user.role != SUPERADMIN_ROLE and debt.business_id != user.business_id:
-        raise HTTPException(status_code=403, detail="Not authorized")
-    if debt.status == "paid":
-        raise HTTPException(status_code=400, detail="Cannot write off a paid debt")
+    try:
+        debt = db.query(models.Debt).filter(
+            models.Debt.debt_id == debt_id
+        ).with_for_update().first()
+        if not debt:
+            raise HTTPException(status_code=404, detail="Debt not found")
+        if user.role != SUPERADMIN_ROLE and debt.business_id != user.business_id:
+            raise HTTPException(status_code=403, detail="Not authorized")
+        if debt.status in ("paid", "written_off"):
+            raise HTTPException(status_code=409, detail=f"Cannot write off a {debt.status} debt")
 
-    debt.status     = "written_off"
-    debt.updated_at = datetime.utcnow()
+        residual = _money(debt.balance)
+        if residual <= 0:
+            raise HTTPException(status_code=409, detail="Debt has no outstanding balance")
 
-    customer = db.query(models.Customer).filter(
-        models.Customer.customer_id == debt.customer_id
-    ).first()
-    db.add(models.AuditLog(
-        user_id=user.user_id,
-        action="UPDATE",
-        table_name="debts",
-        record_id=debt_id,
-        description=f"Debt written off for {customer.full_name if customer else 'customer'} — ₦{float(debt.balance):,.2f} outstanding",
-    ))
+        db.add(models.CustomerLedgerEntry(
+            business_id=debt.business_id,
+            branch_id=debt.branch_id,
+            customer_id=debt.customer_id,
+            user_id=user.user_id,
+            entry_type="credit",
+            amount=residual,
+            description=f"Write-off of debt #{debt_id}",
+            source_type="debt_writeoff",
+            debt_id=debt_id,
+        ))
+        debt.status = "written_off"
+        debt.written_off_amount = residual
+        debt.written_off_at = datetime.utcnow()
+        debt.written_off_by = user.user_id
+        debt.updated_at = debt.written_off_at
 
-    db.commit()
-    return {"message": "Debt written off", "debt_id": debt_id}
+        db.add(models.AuditLog(
+            user_id=user.user_id,
+            action="UPDATE",
+            table_name="debts",
+            record_id=debt_id,
+            description=f"Outstanding balance {residual} written off with immutable ledger credit",
+        ))
+        _commit_or_rollback(db)
+        return {"message": "Debt written off", "debt_id": debt_id, "amount": float(residual)}
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(status_code=500, detail="Debt write-off failed") from exc
 
 
 # ── Search customers (for debt creation form) ─────────────────────────────────
@@ -393,7 +519,10 @@ def search_customers(
     db: Session = Depends(get_db),
     user=Depends(require_role(["admin", "manager"]))
 ):
-    results = db.query(models.Customer).filter(
+    query = db.query(models.Customer)
+    if user.role != SUPERADMIN_ROLE:
+        query = query.filter(models.Customer.business_id == user.business_id)
+    results = query.filter(
         (models.Customer.full_name.ilike(f"%{q}%")) |
         (models.Customer.phone.ilike(f"%{q}%"))
     ).limit(10).all()
