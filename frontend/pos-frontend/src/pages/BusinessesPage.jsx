@@ -3,6 +3,23 @@ import api from "../api/api";
 
 const PLAN_OPTIONS = ["solo", "starter", "business", "enterprise"];
 
+const ACTIVITY_STYLES = {
+  active_7d:   { label: "Sales in 7d",     bg: "#EAF3DE", color: "#3B6D11" },
+  active_30d:  { label: "Sales in 30d",    bg: "#E6F1FB", color: "#185FA5" },
+  inactive_30d:{ label: "No sales · 30d",  bg: "#FAEEDA", color: "#854F0B" },
+  no_sales:    { label: "No sales yet",    bg: "#F1EFE8", color: "#5F5E5A" },
+};
+
+const formatActivityDate = (value) => {
+  if (!value) return "No sale recorded";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "No sale recorded";
+  return `Last sale ${date.toLocaleString([], {
+    year: "numeric", month: "short", day: "numeric",
+    hour: "2-digit", minute: "2-digit",
+  })}`;
+};
+
 const FEATURE_LABELS = {
   expiry_tracking:  { label: "Expiry tracking",   desc: "Batch expiry dates and alerts in Inventory" },
   loyalty_program:  { label: "Loyalty program",   desc: "Customer loyalty points and rewards" },
@@ -129,7 +146,15 @@ export default function BusinessesPage() {
     <div style={{ padding: "16px 24px", overflowY: "auto", height: "100%", boxSizing: "border-box" }}>
 
       {/* Header */}
-      <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 16 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, marginBottom: 16 }}>
+        <div>
+          <div style={{ fontSize: 13, fontWeight: 600, color: "var(--color-text-primary)" }}>
+            Tenant activity
+          </div>
+          <div style={{ fontSize: 11, color: "var(--color-text-tertiary)", marginTop: 2 }}>
+            Aggregate sale activity only — no customer, product, cashier or revenue details.
+          </div>
+        </div>
         <button onClick={() => setShowForm(true)} style={primaryBtn}>+ New business</button>
       </div>
 
@@ -139,6 +164,14 @@ export default function BusinessesPage() {
       {/* Business cards */}
       {!loading && businesses.map(biz => {
         const pc = planColor(biz.plan);
+        const activity = biz.activity || {
+          status: "no_sales",
+          total_sales: 0,
+          sales_last_7_days: 0,
+          sales_last_30_days: 0,
+          last_sale_at: null,
+        };
+        const activityStyle = ACTIVITY_STYLES[activity.status] || ACTIVITY_STYLES.no_sales;
         return (
           <div key={biz.business_id} style={bizCard}>
             {/* Top row */}
@@ -149,9 +182,12 @@ export default function BusinessesPage() {
                   {biz.owner_name || "—"} · {biz.phone || "—"} · {biz.address || "—"}
                 </div>
               </div>
-              <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+              <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}>
+                <span style={{ fontSize: 11, fontWeight: 500, padding: "2px 8px", borderRadius: 20, background: activityStyle.bg, color: activityStyle.color }}>
+                  {activityStyle.label}
+                </span>
                 <span style={{ fontSize: 11, fontWeight: 500, padding: "2px 8px", borderRadius: 20, background: biz.is_active ? "#EAF3DE" : "#FCEBEB", color: biz.is_active ? "#3B6D11" : "#A32D2D" }}>
-                  {biz.is_active ? "Active" : "Inactive"}
+                  {biz.is_active ? "Enabled" : "Disabled"}
                 </span>
                 <span style={{ fontSize: 11, fontWeight: 500, padding: "2px 8px", borderRadius: 20, background: pc.bg, color: pc.color, textTransform: "capitalize" }}>
                   {biz.plan}
@@ -160,7 +196,7 @@ export default function BusinessesPage() {
             </div>
 
             {/* Stats row */}
-            <div style={{ display: "flex", gap: 16, marginBottom: 12 }}>
+            <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 12 }}>
               <div style={statItem}>
                 <div style={statVal}>{biz.branch_count}</div>
                 <div style={statLabel}>branches</div>
@@ -177,6 +213,22 @@ export default function BusinessesPage() {
                 <div style={statVal}>{biz.max_branches === -1 ? "∞" : biz.max_branches}</div>
                 <div style={statLabel}>branch limit</div>
               </div>
+              <div style={statItem}>
+                <div style={statVal}>{activity.sales_last_7_days}</div>
+                <div style={statLabel}>sales · 7d</div>
+              </div>
+              <div style={statItem}>
+                <div style={statVal}>{activity.sales_last_30_days}</div>
+                <div style={statLabel}>sales · 30d</div>
+              </div>
+              <div style={statItem}>
+                <div style={statVal}>{activity.total_sales}</div>
+                <div style={statLabel}>sales · all</div>
+              </div>
+            </div>
+
+            <div style={{ fontSize: 11, color: "var(--color-text-tertiary)", marginTop: -5, marginBottom: 12 }}>
+              {formatActivityDate(activity.last_sale_at)}
             </div>
 
             {/* Feature flags summary */}
