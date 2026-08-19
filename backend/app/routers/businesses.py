@@ -1,9 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from sqlalchemy.orm import Session
-from sqlalchemy import func
+from sqlalchemy import case, func
 from pydantic import BaseModel
 from typing import Optional, Dict
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from app.database import get_db
 from app import models
@@ -91,34 +91,111 @@ def _configure_cloudinary():
     )
 
 
-# ── List businesses (superadmin) ──────────────────────────────────────────────
+# ── List businesses with privacy-minimized activity (superadmin) ──────────────
 @router.get("/")
 def list_businesses(db: Session = Depends(get_db), user=Depends(require_role([]))):
+    """
+    Return tenant administration data plus aggregate operational activity.
+
+    Activity monitoring is deliberately privacy-minimized: only sale counts,
+    last-sale time and a coarse activity state are exposed. No customer,
+    product, cashier, payment-method, line-item or revenue detail is returned.
+    """
     if user.role != SUPERADMIN_ROLE:
         raise HTTPException(status_code=403, detail="Superadmin only")
 
-    businesses = db.query(models.Business).order_by(models.Business.created_at.desc()).all()
+    now = datetime.utcnow()
+    seven_days_ago = now - timedelta(days=7)
+    thirty_days_ago = now - timedelta(days=30)
+
+    sales_activity = (
+        db.query(
+            models.Branch.business_id.label("business_id"),
+            func.count(models.Sale.sale_id).label("total_sales"),
+            func.sum(case(
+                (models.Sale.sale_date >= seven_days_ago, 1),
+                else_=0,
+            )).label("sales_last_7_days"),
+            func.sum(case(
+                (models.Sale.sale_date >= thirty_days_ago, 1),
+                else_=0,
+            )).label("sales_last_30_days"),
+            func.max(models.Sale.sale_date).label("last_sale_at"),
+        )
+        .join(
+            models.Sale,
+            models.Sale.branch_id == models.Branch.branch_id,
+        )
+        .group_by(models.Branch.business_id)
+        .subquery()
+    )
+
+    business_rows = (
+        db.query(
+            models.Business,
+            sales_activity.c.total_sales,
+            sales_activity.c.sales_last_7_days,
+            sales_activity.c.sales_last_30_days,
+            sales_activity.c.last_sale_at,
+        )
+        .outerjoin(
+            sales_activity,
+            sales_activity.c.business_id == models.Business.business_id,
+        )
+        .order_by(models.Business.created_at.desc())
+        .all()
+    )
+
     result = []
-    for b in businesses:
-        branch_count = db.query(models.Branch).filter(models.Branch.business_id == b.business_id).count()
-        user_count   = db.query(models.User).filter(models.User.business_id == b.business_id).count()
-        limits       = PLAN_LIMITS.get(b.plan, PLAN_LIMITS["starter"])
+    for b, total_sales, sales_7d, sales_30d, last_sale_at in business_rows:
+        total_sales = int(total_sales or 0)
+        sales_7d = int(sales_7d or 0)
+        sales_30d = int(sales_30d or 0)
+
+        if sales_7d:
+            activity_status = "active_7d"
+        elif sales_30d:
+            activity_status = "active_30d"
+        elif total_sales:
+            activity_status = "inactive_30d"
+        else:
+            activity_status = "no_sales"
+
+        branch_count = db.query(models.Branch).filter(
+            models.Branch.business_id == b.business_id
+        ).count()
+        user_count = db.query(models.User).filter(
+            models.User.business_id == b.business_id
+        ).count()
+        limits = PLAN_LIMITS.get(b.plan, PLAN_LIMITS["starter"])
+
         result.append({
-            "business_id":   b.business_id,
-            "name":          b.name,
-            "address":       b.address,
-            "phone":         b.phone,
-            "owner_name":    b.owner_name,
-            "is_active":     b.is_active,
-            "created_at":    b.created_at,
-            "plan":          b.plan,
-            "max_users":     limits["max_users"],
-            "max_branches":  limits["max_branches"],
-            "branch_count":  branch_count,
-            "user_count":    user_count,
-            "features":      get_features(b.features),
+            "business_id": b.business_id,
+            "name": b.name,
+            "address": b.address,
+            "phone": b.phone,
+            "owner_name": b.owner_name,
+            "is_active": b.is_active,
+            "created_at": b.created_at,
+            "plan": b.plan,
+            "max_users": limits["max_users"],
+            "max_branches": limits["max_branches"],
+            "branch_count": branch_count,
+            "user_count": user_count,
+            "features": get_features(b.features),
             "subscription_status": b.subscription_status,
-            "deletion_requested_at": b.deletion_requested_at if hasattr(b, "deletion_requested_at") else None,
+            "deletion_requested_at": (
+                b.deletion_requested_at
+                if hasattr(b, "deletion_requested_at")
+                else None
+            ),
+            "activity": {
+                "status": activity_status,
+                "total_sales": total_sales,
+                "sales_last_7_days": sales_7d,
+                "sales_last_30_days": sales_30d,
+                "last_sale_at": last_sale_at,
+            },
         })
     return result
 
