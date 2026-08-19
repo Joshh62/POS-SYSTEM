@@ -4,8 +4,8 @@ import api from "../api/api";
 const PLAN_OPTIONS = ["solo", "starter", "business", "enterprise"];
 
 const ACTIVITY_STYLES = {
-  active_7d:   { label: "Active · 7d",     bg: "#EAF3DE", color: "#3B6D11" },
-  active_30d:  { label: "Active · 30d",    bg: "#E6F1FB", color: "#185FA5" },
+  active_7d:   { label: "Sales in 7d",     bg: "#EAF3DE", color: "#3B6D11" },
+  active_30d:  { label: "Sales in 30d",    bg: "#E6F1FB", color: "#185FA5" },
   inactive_30d:{ label: "No sales · 30d",  bg: "#FAEEDA", color: "#854F0B" },
   no_sales:    { label: "No sales yet",    bg: "#F1EFE8", color: "#5F5E5A" },
 };
@@ -196,7 +196,7 @@ export default function BusinessesPage() {
             </div>
 
             {/* Stats row */}
-            <div style={{ display: "flex", gap: 16, marginBottom: 12 }}>
+            <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 12 }}>
               <div style={statItem}>
                 <div style={statVal}>{biz.branch_count}</div>
                 <div style={statLabel}>branches</div>
