@@ -49,6 +49,7 @@ def seed(db):
     quiet_business = models.Business(
         name="Quiet Tenant",
         plan="business",
+        created_at=now - timedelta(days=10),
     )
     db.add_all([active_business, quiet_business])
     db.flush()
@@ -108,6 +109,14 @@ def seed(db):
             status="completed",
             sale_date=now - timedelta(days=40),
         ),
+        models.Sale(
+            user_id=quiet_user.user_id,
+            branch_id=quiet_branch.branch_id,
+            payment_method="cash",
+            total_amount=999,
+            status="voided",
+            sale_date=now - timedelta(days=1),
+        ),
     ])
     db.flush()
     return active_business, quiet_business
@@ -155,6 +164,26 @@ def test_activity_is_aggregate_exact_and_tenant_isolated(db):
     }
 
 
+def test_adoption_lifecycle_and_follow_up_are_bounded_and_exact(db):
+    active_business, quiet_business = seed(db)
+
+    result = businesses.list_businesses(db, actor("superadmin"))
+    by_id = {row["business_id"]: row for row in result}
+
+    active = by_id[active_business.business_id]["adoption"]
+    assert active["stage"] == "first_value"
+    assert active["setup_ready"] is True
+    assert active["first_value_at"] is not None
+    assert active["commercial_follow_up"] == "none"
+
+    quiet = by_id[quiet_business.business_id]["adoption"]
+    assert quiet["stage"] == "setup_ready"
+    assert quiet["setup_ready"] is True
+    assert quiet["tenant_age_days"] >= 7
+    assert quiet["first_value_at"] is None
+    assert quiet["commercial_follow_up"] == "onboarding_follow_up"
+
+
 def test_activity_response_excludes_transaction_and_customer_detail(db):
     seed(db)
 
@@ -181,3 +210,13 @@ def test_activity_response_excludes_transaction_and_customer_detail(db):
             "sales_last_30_days",
             "last_sale_at",
         }
+        assert set(business["adoption"]) == {
+            "stage",
+            "registered_at",
+            "tenant_age_days",
+            "setup_ready",
+            "first_value_at",
+            "commercial_follow_up",
+        }
+        assert forbidden.isdisjoint(business["activity"])
+        assert forbidden.isdisjoint(business["adoption"])
