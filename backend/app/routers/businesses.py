@@ -97,9 +97,10 @@ def list_businesses(db: Session = Depends(get_db), user=Depends(require_role([])
     """
     Return tenant administration data plus aggregate operational activity.
 
-    Activity monitoring is deliberately privacy-minimized: only sale counts,
-    last-sale time and a coarse activity state are exposed. No customer,
-    product, cashier, payment-method, line-item or revenue detail is returned.
+    Monitoring is deliberately privacy-minimized: only tenant age, branch/user
+    setup, completed-sale counts, first/last completed-sale times, coarse
+    lifecycle stage and follow-up state are exposed. No customer, product,
+    cashier, payment-method, line-item or revenue detail is returned.
     """
     if user.role != SUPERADMIN_ROLE:
         raise HTTPException(status_code=403, detail="Superadmin only")
@@ -120,12 +121,14 @@ def list_businesses(db: Session = Depends(get_db), user=Depends(require_role([])
                 (models.Sale.sale_date >= thirty_days_ago, 1),
                 else_=0,
             )).label("sales_last_30_days"),
+            func.min(models.Sale.sale_date).label("first_sale_at"),
             func.max(models.Sale.sale_date).label("last_sale_at"),
         )
         .join(
             models.Sale,
             models.Sale.branch_id == models.Branch.branch_id,
         )
+        .filter(models.Sale.status == "completed")
         .group_by(models.Branch.business_id)
         .subquery()
     )
@@ -136,6 +139,7 @@ def list_businesses(db: Session = Depends(get_db), user=Depends(require_role([])
             sales_activity.c.total_sales,
             sales_activity.c.sales_last_7_days,
             sales_activity.c.sales_last_30_days,
+            sales_activity.c.first_sale_at,
             sales_activity.c.last_sale_at,
         )
         .outerjoin(
@@ -147,7 +151,9 @@ def list_businesses(db: Session = Depends(get_db), user=Depends(require_role([])
     )
 
     result = []
-    for b, total_sales, sales_7d, sales_30d, last_sale_at in business_rows:
+    for (
+        b, total_sales, sales_7d, sales_30d, first_sale_at, last_sale_at
+    ) in business_rows:
         total_sales = int(total_sales or 0)
         sales_7d = int(sales_7d or 0)
         sales_30d = int(sales_30d or 0)
@@ -168,6 +174,24 @@ def list_businesses(db: Session = Depends(get_db), user=Depends(require_role([])
             models.User.business_id == b.business_id
         ).count()
         limits = PLAN_LIMITS.get(b.plan, PLAN_LIMITS["starter"])
+        tenant_age_days = max((now - b.created_at).days, 0) if b.created_at else 0
+        setup_ready = branch_count > 0 and user_count > 0
+
+        if total_sales:
+            adoption_stage = "first_value"
+        elif setup_ready:
+            adoption_stage = "setup_ready"
+        else:
+            adoption_stage = "registered"
+
+        if sales_30d:
+            follow_up = "none"
+        elif total_sales:
+            follow_up = "reactivation_follow_up"
+        elif tenant_age_days >= 7:
+            follow_up = "onboarding_follow_up"
+        else:
+            follow_up = "monitor_new"
 
         result.append({
             "business_id": b.business_id,
@@ -189,6 +213,14 @@ def list_businesses(db: Session = Depends(get_db), user=Depends(require_role([])
                 if hasattr(b, "deletion_requested_at")
                 else None
             ),
+            "adoption": {
+                "stage": adoption_stage,
+                "registered_at": b.created_at,
+                "tenant_age_days": tenant_age_days,
+                "setup_ready": setup_ready,
+                "first_value_at": first_sale_at,
+                "commercial_follow_up": follow_up,
+            },
             "activity": {
                 "status": activity_status,
                 "total_sales": total_sales,
