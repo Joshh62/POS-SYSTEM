@@ -17,7 +17,9 @@ release record.
    build.
 2. Review the migrations between the production revision and repository head.
 3. Confirm directly in Neon that an appropriate recovery mechanism or restore
-   point exists and record only its non-sensitive reference and time.
+   point exists and record only its non-sensitive reference and time. Recovery
+   execution must follow
+   [the non-production restore verification runbook](profittrack-nonproduction-restore-test.md).
 4. Confirm an approved maintenance window, responsible operator, monitoring
    access, and rollback decision-maker.
 5. Run the read-only preflight against production from a controlled terminal:
@@ -62,4 +64,6 @@ or financial/inventory behavior is inconsistent. Preserve logs without secrets
 or personal data, declare an incident, and use the pre-agreed recovery decision.
 Prefer a reviewed roll-forward when safe. Use Neon recovery/restore only after
 assessing writes since the restore point; do not improvise destructive SQL or
-blindly downgrade Alembic in production.
+blindly downgrade Alembic in production. Validate recovery procedures only on
+an isolated point-in-time branch under the
+[non-production restore verification runbook](profittrack-nonproduction-restore-test.md).
