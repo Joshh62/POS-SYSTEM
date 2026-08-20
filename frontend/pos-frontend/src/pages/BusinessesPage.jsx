@@ -10,6 +10,19 @@ const ACTIVITY_STYLES = {
   no_sales:    { label: "No sales yet",    bg: "#F1EFE8", color: "#5F5E5A" },
 };
 
+const ADOPTION_STYLES = {
+  registered:  { label: "Registered",  bg: "#F1EFE8", color: "#5F5E5A" },
+  setup_ready: { label: "Setup ready", bg: "#E6F1FB", color: "#185FA5" },
+  first_value: { label: "First value", bg: "#EAF3DE", color: "#3B6D11" },
+};
+
+const FOLLOW_UP_LABELS = {
+  none: "No follow-up due",
+  monitor_new: "Monitor onboarding",
+  onboarding_follow_up: "Onboarding follow-up",
+  reactivation_follow_up: "Reactivation follow-up",
+};
+
 const formatActivityDate = (value) => {
   if (!value) return "No sale recorded";
   const date = new Date(value);
@@ -142,6 +155,18 @@ export default function BusinessesPage() {
     return { bg: "#F1EFE8", color: "#5F5E5A" };
   };
 
+  const adoptionSummary = businesses.reduce((summary, biz) => {
+    const adoption = biz.adoption || {};
+    summary.registered += 1;
+    if (adoption.setup_ready) summary.setupReady += 1;
+    if (adoption.first_value_at) summary.firstValue += 1;
+    if ((biz.activity?.sales_last_30_days || 0) > 0) summary.recentlyActive += 1;
+    if (["onboarding_follow_up", "reactivation_follow_up"].includes(adoption.commercial_follow_up)) {
+      summary.followUp += 1;
+    }
+    return summary;
+  }, { registered: 0, setupReady: 0, firstValue: 0, recentlyActive: 0, followUp: 0 });
+
   return (
     <div style={{ padding: "16px 24px", overflowY: "auto", height: "100%", boxSizing: "border-box" }}>
 
@@ -161,6 +186,23 @@ export default function BusinessesPage() {
       {error   && <div style={errorBox}>{error}</div>}
       {loading && <div style={centreMsg}>Loading businesses...</div>}
 
+      {!loading && (
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 16 }}>
+          {[
+            ["Registered", adoptionSummary.registered],
+            ["Setup ready", adoptionSummary.setupReady],
+            ["First value", adoptionSummary.firstValue],
+            ["Active · 30d", adoptionSummary.recentlyActive],
+            ["Follow-up due", adoptionSummary.followUp],
+          ].map(([label, value]) => (
+            <div key={label} style={statItem}>
+              <div style={statVal}>{value}</div>
+              <div style={statLabel}>{label}</div>
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* Business cards */}
       {!loading && businesses.map(biz => {
         const pc = planColor(biz.plan);
@@ -171,7 +213,14 @@ export default function BusinessesPage() {
           sales_last_30_days: 0,
           last_sale_at: null,
         };
+        const adoption = biz.adoption || {
+          stage: "registered",
+          setup_ready: false,
+          first_value_at: null,
+          commercial_follow_up: "monitor_new",
+        };
         const activityStyle = ACTIVITY_STYLES[activity.status] || ACTIVITY_STYLES.no_sales;
+        const adoptionStyle = ADOPTION_STYLES[adoption.stage] || ADOPTION_STYLES.registered;
         return (
           <div key={biz.business_id} style={bizCard}>
             {/* Top row */}
@@ -183,6 +232,9 @@ export default function BusinessesPage() {
                 </div>
               </div>
               <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}>
+                <span style={{ fontSize: 11, fontWeight: 500, padding: "2px 8px", borderRadius: 20, background: adoptionStyle.bg, color: adoptionStyle.color }}>
+                  {adoptionStyle.label}
+                </span>
                 <span style={{ fontSize: 11, fontWeight: 500, padding: "2px 8px", borderRadius: 20, background: activityStyle.bg, color: activityStyle.color }}>
                   {activityStyle.label}
                 </span>
@@ -228,7 +280,7 @@ export default function BusinessesPage() {
             </div>
 
             <div style={{ fontSize: 11, color: "var(--color-text-tertiary)", marginTop: -5, marginBottom: 12 }}>
-              {formatActivityDate(activity.last_sale_at)}
+              {formatActivityDate(activity.last_sale_at)} · {FOLLOW_UP_LABELS[adoption.commercial_follow_up] || "Review"}
             </div>
 
             {/* Feature flags summary */}
