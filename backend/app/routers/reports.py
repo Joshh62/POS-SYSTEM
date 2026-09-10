@@ -340,7 +340,10 @@ def dashboard(
     q_sales = _branch_filter(q_sales, Sale, user, resolved)
     q_txns  = _branch_filter(q_txns,  Sale, user, resolved)
 
-    total_products = db.query(func.count(Product.product_id)).scalar()
+    product_query = db.query(func.count(Product.product_id))
+    if user.role != SUPERADMIN_ROLE:
+        product_query = product_query.filter(Product.business_id == user.business_id)
+    total_products = product_query.scalar()
 
     return {
         "today_sales":              q_sales.scalar() or 0,
@@ -448,37 +451,49 @@ def get_low_stock(
 # ── Sales volume ──────────────────────────────────────────────────────────────
 @router.get("/sales-volume")
 def sales_volume(
+    branch_id: Optional[int] = Query(None),
     db: Session = Depends(get_db),
     user=Depends(require_role(["admin", "manager"]))
 ):
+    query = (
+        db.query(func.sum(SaleItem.quantity))
+        .join(Sale, Sale.sale_id == SaleItem.sale_id)
+        .filter(Sale.status == "completed")
+    )
+    query = _branch_filter(query, Sale, user, _resolve_branch(user, branch_id))
     return {
-        "items_sold": (
-            db.query(func.sum(SaleItem.quantity))
-            .join(Sale, Sale.sale_id == SaleItem.sale_id)
-            .filter(Sale.status == "completed")
-            .scalar() or 0
-        )
+        "items_sold": query.scalar() or 0
     }
 
 
 # ── Inventory value ───────────────────────────────────────────────────────────
 @router.get("/inventory-value")
-def inventory_value(db: Session = Depends(get_db)):
-    value = (
+def inventory_value(
+    branch_id: Optional[int] = Query(None),
+    db: Session = Depends(get_db),
+    user=Depends(require_role(["admin", "manager"])),
+):
+    query = (
         db.query(func.sum(Product.cost_price * models.BranchInventory.stock_quantity))
         .join(models.BranchInventory, Product.product_id == models.BranchInventory.product_id)
-        .scalar()
     )
-    return {"total_inventory_value": value or 0}
+    query = _branch_filter(
+        query,
+        models.BranchInventory,
+        user,
+        _resolve_branch(user, branch_id),
+    )
+    return {"total_inventory_value": query.scalar() or 0}
 
 
 # ── Inventory history ─────────────────────────────────────────────────────────
 @router.get("/inventory-history")
 def inventory_history(
+    branch_id: Optional[int] = Query(None),
     db: Session = Depends(get_db),
     user=Depends(require_role(["admin", "manager"]))
 ):
-    movements = (
+    query = (
         db.query(
             Product.product_name,
             models.InventoryMovement.movement_type,
@@ -487,9 +502,14 @@ def inventory_history(
             models.InventoryMovement.movement_date,
         )
         .join(models.InventoryMovement, Product.product_id == models.InventoryMovement.product_id)
-        .order_by(models.InventoryMovement.movement_date.desc())
-        .all()
     )
+    query = _branch_filter(
+        query,
+        models.InventoryMovement,
+        user,
+        _resolve_branch(user, branch_id),
+    )
+    movements = query.order_by(models.InventoryMovement.movement_date.desc()).all()
     return [
         {
             "product":       m.product_name,
