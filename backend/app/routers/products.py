@@ -71,6 +71,14 @@ def create_product(
     if existing:
         raise HTTPException(status_code=400, detail="Barcode already exists in your product catalog")
 
+    if product.category_id:
+        category = db.query(models.Category).filter(
+            models.Category.category_id == product.category_id,
+            models.Category.business_id == current_user.business_id,
+        ).first()
+        if not category:
+            raise HTTPException(status_code=404, detail="Category not found")
+
     supplier_id = getattr(product, "supplier_id", None)
     if supplier_id:
         supplier = db.query(models.Supplier).filter(
@@ -191,6 +199,14 @@ def update_product(
     if current_user.role != SUPERADMIN_ROLE and existing.business_id != current_user.business_id:
         raise HTTPException(status_code=403, detail="Not authorized")
 
+    if product.category_id:
+        category = db.query(models.Category).filter(
+            models.Category.category_id == product.category_id,
+            models.Category.business_id == current_user.business_id,
+        ).first()
+        if not category:
+            raise HTTPException(status_code=404, detail="Category not found")
+
     changes = []
     if existing.product_name != product.product_name:
         changes.append(f"name: '{existing.product_name}' → '{product.product_name}'")
@@ -282,10 +298,14 @@ def import_products(
         if not name: return None
         name = str(name).strip()
         cat = db.query(models.Category).filter(
-            models.Category.category_name.ilike(name)
+            models.Category.business_id == current_user.business_id,
+            models.Category.category_name.ilike(name),
         ).first()
         if not cat:
-            cat = models.Category(category_name=name)
+            cat = models.Category(
+                business_id=current_user.business_id,
+                category_name=name,
+            )
             db.add(cat); db.flush()
         return cat.category_id
 

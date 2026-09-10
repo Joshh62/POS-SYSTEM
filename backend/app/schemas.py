@@ -11,6 +11,7 @@ class CategoryCreate(BaseModel):
 
 class CategoryResponse(BaseModel):
     category_id:   int
+    business_id:   int
     category_name: str
     model_config = ConfigDict(from_attributes=True)
 

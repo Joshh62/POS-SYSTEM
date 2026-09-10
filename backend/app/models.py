@@ -36,16 +36,23 @@ class Business(Base):
     
     branches = relationship("Branch", back_populates="business")
     users    = relationship("User",   back_populates="business")
+    categories = relationship("Category", back_populates="business")
 
 # -------------------- CATEGORY --------------------
 class Category(Base):
     __tablename__ = "categories"
 
     category_id   = Column(Integer, primary_key=True, index=True)
-    category_name = Column(String, unique=True, nullable=False)
+    business_id   = Column(Integer, ForeignKey("businesses.business_id"), nullable=False, index=True)
+    category_name = Column(String, nullable=False)
     created_at    = Column(DateTime, default=datetime.utcnow)
 
+    business = relationship("Business", back_populates="categories")
     products = relationship("Product", back_populates="category")
+
+    __table_args__ = (
+        UniqueConstraint("business_id", "category_name", name="uq_categories_business_name"),
+    )
 
 
 # -------------------- PRODUCT --------------------
@@ -56,7 +63,7 @@ class Product(Base):
     business_id   = Column(Integer, ForeignKey("businesses.business_id"), nullable=True)
     supplier_id   = Column(Integer, ForeignKey("suppliers.supplier_id"), nullable=True)
     product_name  = Column(String, nullable=False)
-    barcode       = Column(String, unique=True, index=True)
+    barcode       = Column(String, index=True)
     category_id   = Column(Integer, ForeignKey("categories.category_id"))
     cost_price    = Column(Numeric(12, 2))
     selling_price = Column(Numeric(12, 2))
@@ -67,6 +74,10 @@ class Product(Base):
     movements  = relationship("InventoryMovement", back_populates="product")
     sale_items = relationship("SaleItem", back_populates="product")
     inventory  = relationship("BranchInventory", back_populates="product")
+
+    __table_args__ = (
+        UniqueConstraint("business_id", "barcode", name="uq_products_business_barcode"),
+    )
 
 
 # -------------------- BRANCH --------------------
@@ -115,7 +126,7 @@ class Customer(Base):
     customer_id    = Column(Integer, primary_key=True, index=True)
     business_id    = Column(Integer, ForeignKey("businesses.business_id"), nullable=True)
     full_name      = Column(String, nullable=False)
-    phone          = Column(String, unique=True)
+    phone          = Column(String)
     email          = Column(String)
     address        = Column(String)
     credit_enabled = Column(Boolean, default=False, nullable=False)
@@ -127,6 +138,10 @@ class Customer(Base):
     sales           = relationship("Sale", back_populates="customer")
     ledger_entries  = relationship("CustomerLedgerEntry", back_populates="customer",
                                    cascade="all, delete-orphan")
+
+    __table_args__ = (
+        UniqueConstraint("business_id", "phone", name="uq_customers_business_phone"),
+    )
 
 
 # -------------------- USER --------------------

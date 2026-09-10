@@ -120,7 +120,8 @@ def create_customer(
 ):
     if data.phone:
         existing = db.query(models.Customer).filter(
-            models.Customer.phone == data.phone
+            models.Customer.business_id == user.business_id,
+            models.Customer.phone == data.phone,
         ).first()
         if existing:
             raise HTTPException(status_code=400, detail="A customer with this phone number already exists")
@@ -153,6 +154,15 @@ def update_customer(
         raise HTTPException(status_code=404, detail="Customer not found")
     if user.role != SUPERADMIN_ROLE and customer.business_id != user.business_id:
         raise HTTPException(status_code=403, detail="Not authorized")
+
+    if data.phone and data.phone != customer.phone:
+        duplicate = db.query(models.Customer).filter(
+            models.Customer.business_id == customer.business_id,
+            models.Customer.phone == data.phone,
+            models.Customer.customer_id != customer.customer_id,
+        ).first()
+        if duplicate:
+            raise HTTPException(status_code=400, detail="A customer with this phone number already exists")
 
     for k, v in data.dict(exclude_none=True).items():
         setattr(customer, k, v)
