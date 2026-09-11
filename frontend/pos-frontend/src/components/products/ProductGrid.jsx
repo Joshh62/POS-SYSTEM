@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { getProducts } from "../../api/api";
 import ProductCard from "./ProductCard";
 import { useBranch } from "../../context/BranchContext";
@@ -13,6 +13,7 @@ export default function ProductGrid({ externalSearch = false, readOnly = false }
   const [searchInput, setSearchInput] = useState("");
   const [loading, setLoading]         = useState(false);
   const [error, setError]             = useState(null);
+  const requestRef = useRef(0);
 
   const LIMIT = 20;
 
@@ -31,22 +32,26 @@ export default function ProductGrid({ externalSearch = false, readOnly = false }
   }, [searchInput]);
 
   const fetchProducts = useCallback(async () => {
+    const requestId = ++requestRef.current;
+    setProducts([]); setTotal(0);
     if (user.role === "superadmin" && !activeBusinessId) {
       setProducts([]); setTotal(0); setError("Select a business branch to view its products."); return;
     }
     setLoading(true);
     setError(null);
     try {
-      const result = await getProducts(page, LIMIT, search);
+      const result = await getProducts(page, LIMIT, search, activeBusinessId);
+      if (requestId !== requestRef.current) return;
       // ✅ Null-safe: handles unexpected shapes from cold-start or network blip
       setProducts(result?.data ?? []);
       setTotal(result?.total ?? 0);
     } catch {
+      if (requestId !== requestRef.current) return;
       setError("Failed to load products. Retrying...");
       // ✅ Auto-clear the error message after 4s so it doesn't stay stuck
       setTimeout(() => setError(null), 4000);
     } finally {
-      setLoading(false);
+      if (requestId === requestRef.current) setLoading(false);
     }
   }, [page, search, activeBusinessId]);
 

@@ -12,7 +12,7 @@ import { useBranch } from "../context/BranchContext";
 export default function POS({ onScanResult }) {
   const user = JSON.parse(localStorage.getItem("user") || "{}");
   const isSuperadmin = user.role === "superadmin";
-  const { activeBranchId } = useBranch();
+  const { activeBranchId, activeBusinessId } = useBranch();
   const [showCheckout, setShowCheckout] = useState(false);
   const [scanFeedback, setScanFeedback] = useState(null);
   const [showCart,     setShowCart]     = useState(false);
@@ -40,7 +40,7 @@ export default function POS({ onScanResult }) {
       setScanFeedback({ type: "success", message: `Added: ${product.product_name}` });
     } catch {
       if (!navigator.onLine) {
-        const cached  = getCachedProducts();
+        const cached  = getCachedProducts(activeBusinessId);
         const product = cached?.find(p => p.barcode === barcode);
         if (product) {
           addToCart(product);
@@ -53,7 +53,7 @@ export default function POS({ onScanResult }) {
       }
     }
     setTimeout(() => setScanFeedback(null), 2500);
-  }, [addToCart, onScanResult, isSuperadmin]);
+  }, [addToCart, onScanResult, isSuperadmin, activeBusinessId]);
 
   // ── Global USB/Bluetooth scanner hook ─────────────────────────────────────
   useBarcodeScanner(handleScan);

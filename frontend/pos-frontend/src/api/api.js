@@ -72,8 +72,9 @@ export const changePassword = async (currentPassword, newPassword) => (
 ).data;
 
 // ── PRODUCTS ──────────────────────────────────────────────────────────────────
-export const getProducts = async (page = 1, limit = 20, search = "") => {
-  const params = { page, limit, ...getActiveBusinessParam() };
+export const getProducts = async (page = 1, limit = 20, search = "", businessId = null) => {
+  const businessParam = businessId ? { business_id: businessId } : getActiveBusinessParam();
+  const params = { page, limit, ...businessParam };
   if (search) params.search = search;
  
   return withRetry(async () => {
@@ -83,14 +84,14 @@ export const getProducts = async (page = 1, limit = 20, search = "") => {
       // Cache the first page (no search) for offline use
       // Only cache full unfiltered product list — not search results
       if (page === 1 && !search && result?.data) {
-        cacheProducts(result.data);
+        cacheProducts(result.data, businessId);
       }
  
       return result;
     } catch (err) {
       // If offline and we have a cache, return cached data
       if (!navigator.onLine || !err.response) {
-        const cached = getCachedProducts();
+        const cached = getCachedProducts(businessId);
         if (cached) {
           console.log("[api] Returning cached products (offline)");
           return {

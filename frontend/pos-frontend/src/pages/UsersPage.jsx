@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import api from "../api/api";
 import { getPlanInfo, changePassword } from "../api/api";
 import { useBranch } from "../context/BranchContext";
@@ -29,6 +29,8 @@ export default function UsersPage() {
   const [branches, setBranches] = useState([]);
   const [loading,  setLoading]  = useState(true);
   const [error,    setError]    = useState(null);
+  const requestRef = useRef(0);
+  const branchRequestRef = useRef(0);
   const [showForm, setShowForm] = useState(false);
 
   const [planInfo,    setPlanInfo]    = useState(null);
@@ -55,28 +57,35 @@ export default function UsersPage() {
   branches.forEach(b => { branchMap[b.branch_id] = b.branch_name || b.name || `Branch ${b.branch_id}`; });
 
   const fetchUsers = async () => {
+    const requestId = ++requestRef.current;
+    setUsers([]);
     if (isSuperadmin && !activeBusinessId) {
       setUsers([]); setError("Select a business branch to view its users."); setLoading(false); return;
     }
     setLoading(true); setError(null);
     try {
       const res = await api.get("/auth/users", { params: { business_id: activeBusinessId || undefined } });
+      if (requestId !== requestRef.current) return;
       setUsers(res.data);
-    } catch { setError("Could not load users."); }
-    finally { setLoading(false); }
+    } catch { if (requestId === requestRef.current) setError("Could not load users."); }
+    finally { if (requestId === requestRef.current) setLoading(false); }
   };
 
   const fetchBranches = async () => {
+    const requestId = ++branchRequestRef.current;
+    setBranches([]);
     try {
       const targetBusinessId = isSuperadmin ? activeBusinessId : currentUser.business_id;
       if (!targetBusinessId) { setBranches([]); return; }
       const res = await api.get(`/businesses/${targetBusinessId}/branches`);
+      if (requestId !== branchRequestRef.current) return;
       setBranches(Array.isArray(res.data) ? res.data : []);
     } catch {
       try {
         const res2 = await api.get("/businesses/my/branches");
+        if (requestId !== branchRequestRef.current) return;
         setBranches(Array.isArray(res2.data) ? res2.data : []);
-      } catch { setBranches([]); }
+      } catch { if (requestId === branchRequestRef.current) setBranches([]); }
     }
   };
 

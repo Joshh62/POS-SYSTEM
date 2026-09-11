@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import api from "../api/api";
 import { useBranch } from "../context/BranchContext";
 
@@ -11,6 +11,8 @@ export default function CustomersPage() {
   const [customers,   setCustomers]   = useState([]);
   const [loading,     setLoading]     = useState(true);
   const [error,       setError]       = useState(null);
+  const requestRef = useRef(0);
+  const detailRequestRef = useRef(0);
   const [search,      setSearch]      = useState("");
   const [creditOnly,  setCreditOnly]  = useState(false);
 
@@ -46,15 +48,19 @@ export default function CustomersPage() {
   const [debitError,    setDebitError]    = useState(null);
 
   const fetchCustomers = async () => {
+    const requestId = ++requestRef.current;
+    ++detailRequestRef.current;
+    setCustomers([]); setSelected(null); setLedger(null); setSales(null);
     if (user.role === "superadmin" && !activeBusinessId) {
       setCustomers([]); setError("Select a business branch to view its customers."); setLoading(false); return;
     }
     setLoading(true); setError(null);
     try {
       const res = await api.get("/customers/", { params: { search: search || undefined, credit_only: creditOnly, business_id: activeBusinessId || undefined } });
+      if (requestId !== requestRef.current) return;
       setCustomers(res.data);
-    } catch { setError("Failed to load customers."); }
-    finally { setLoading(false); }
+    } catch { if (requestId === requestRef.current) setError("Failed to load customers."); }
+    finally { if (requestId === requestRef.current) setLoading(false); }
   };
 
   useEffect(() => { fetchCustomers(); }, [creditOnly, activeBusinessId]);
@@ -77,6 +83,7 @@ export default function CustomersPage() {
 
   // ── View customer detail ──────────────────────────────────────────────────
   const viewCustomer = async (c) => {
+    const detailRequestId = ++detailRequestRef.current;
     setSelected(c);
     setDetailTab("ledger");
     setDetailLoad(true);
@@ -85,10 +92,11 @@ export default function CustomersPage() {
         c.credit_enabled ? api.get(`/ledger/customer/${c.customer_id}`) : Promise.resolve({ data: null }),
         api.get(`/customers/${c.customer_id}/sales`),
       ]);
+      if (detailRequestId !== detailRequestRef.current) return;
       setLedger(ledgerRes.data);
       setSales(salesRes.data);
-    } catch { setLedger(null); setSales(null); }
-    finally { setDetailLoad(false); }
+    } catch { if (detailRequestId === detailRequestRef.current) { setLedger(null); setSales(null); } }
+    finally { if (detailRequestId === detailRequestRef.current) setDetailLoad(false); }
   };
 
   // ── Update credit settings ────────────────────────────────────────────────
