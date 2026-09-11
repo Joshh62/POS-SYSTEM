@@ -10,7 +10,7 @@ const SHOP_NAME = import.meta.env.VITE_SHOP_NAME || "ProfitTrack POS";
 
 // Pages where the branch switcher is NOT relevant — business-level pages
 const BRANCH_SWITCHER_HIDDEN_PAGES = new Set([
-  "settings", "billing", "suppliers", "businesses", "users", "analytics",
+  "settings", "billing", "businesses",
 ]);
 
 const NAV_ITEMS = [

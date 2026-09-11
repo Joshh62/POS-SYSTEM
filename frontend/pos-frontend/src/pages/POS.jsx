@@ -7,8 +7,12 @@ import { useBarcodeScanner } from "../hooks/useBarcodeScanner";
 import { useCart } from "../context/CartContext";
 import { getProductByBarcode } from "../api/api";
 import { getCachedProducts } from "../utils/offlineQueue";
+import { useBranch } from "../context/BranchContext";
 
 export default function POS({ onScanResult }) {
+  const user = JSON.parse(localStorage.getItem("user") || "{}");
+  const isSuperadmin = user.role === "superadmin";
+  const { activeBranchId } = useBranch();
   const [showCheckout, setShowCheckout] = useState(false);
   const [scanFeedback, setScanFeedback] = useState(null);
   const [showCart,     setShowCart]     = useState(false);
@@ -25,6 +29,10 @@ export default function POS({ onScanResult }) {
 
   // ── Shared scan handler (USB scanner hook + search input Enter) ────────────
   const handleScan = useCallback(async (barcode) => {
+    if (isSuperadmin) {
+      setScanFeedback({ type: "error", message: "Superadmin POS access is read-only." });
+      return;
+    }
     onScanResult?.(barcode);
     try {
       const product = await getProductByBarcode(barcode);
@@ -45,7 +53,7 @@ export default function POS({ onScanResult }) {
       }
     }
     setTimeout(() => setScanFeedback(null), 2500);
-  }, [addToCart, onScanResult]);
+  }, [addToCart, onScanResult, isSuperadmin]);
 
   // ── Global USB/Bluetooth scanner hook ─────────────────────────────────────
   useBarcodeScanner(handleScan);
@@ -54,6 +62,7 @@ export default function POS({ onScanResult }) {
   // If the value matches a barcode: add to cart, clear field, reset grid.
   // If no barcode match: do nothing — name search results stay visible.
   const handleSearchKeyDown = useCallback(async (e) => {
+    if (isSuperadmin) return;
     if (e.key !== "Enter") return;
     const val = e.target.value.trim();
     if (!val) return;
@@ -67,7 +76,22 @@ export default function POS({ onScanResult }) {
       // Not a barcode match — leave search results showing
     }
     setTimeout(() => setScanFeedback(null), 2500);
-  }, [addToCart]);
+  }, [addToCart, isSuperadmin]);
+
+  if (isSuperadmin) {
+    return (
+      <div style={{ display: "flex", flexDirection: "column", height: "100%", padding: 16, gap: 12 }}>
+        <div style={{ padding: "10px 12px", borderRadius: 8, background: "var(--color-background-secondary)", color: "var(--color-text-secondary)", fontSize: 13 }}>
+          {activeBranchId
+            ? "Superadmin view is read-only. Sign in as a tenant operator to record sales."
+            : "Select a business branch to inspect its POS catalog. Superadmin cannot record sales."}
+        </div>
+        <div style={{ flex: 1, overflow: "hidden" }}>
+          <ProductGrid externalSearch readOnly />
+        </div>
+      </div>
+    );
+  }
 
   // ── MOBILE LAYOUT ──────────────────────────────────────────────────────────
   if (isMobile) {

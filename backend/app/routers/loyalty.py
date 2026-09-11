@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from app import models
 from app.database import get_db
-from app.dependencies import get_current_user, require_role
+from app.dependencies import get_current_user, require_role, require_tenant_role
 from app.utils.loyalty_service import (
     INACTIVITY_MONTHS,
     discount_for,
@@ -223,7 +223,7 @@ def get_loyalty_settings(
 def update_loyalty_settings(
     data: LoyaltySettingsUpdate,
     db: Session = Depends(get_db),
-    user=Depends(require_role(["admin"])),
+    user=Depends(require_tenant_role(["admin"])),
 ):
     try:
         business = _business(db, user)
@@ -260,7 +260,7 @@ def update_loyalty_settings(
 @router.post("/expire-stale")
 def expire_stale_points_batch(
     db: Session = Depends(get_db),
-    user=Depends(require_role(["admin"])),
+    user=Depends(require_tenant_role(["admin"])),
 ):
     try:
         cutoff = datetime.utcnow() - timedelta(days=INACTIVITY_MONTHS * 30)

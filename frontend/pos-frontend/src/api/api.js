@@ -35,6 +35,13 @@ export const getActiveBranchParam = () => {
   } catch { return {}; }
 };
 
+export const getActiveBusinessParam = () => {
+  try {
+    const id = localStorage.getItem("activeBusinessId");
+    return id ? { business_id: parseInt(id) } : {};
+  } catch { return {}; }
+};
+
 const withRetry = async (fn, retries = 1, delayMs = 2000) => {
   try {
     return await fn();
@@ -66,7 +73,7 @@ export const changePassword = async (currentPassword, newPassword) => (
 
 // ── PRODUCTS ──────────────────────────────────────────────────────────────────
 export const getProducts = async (page = 1, limit = 20, search = "") => {
-  const params = { page, limit };
+  const params = { page, limit, ...getActiveBusinessParam() };
   if (search) params.search = search;
  
   return withRetry(async () => {
@@ -101,14 +108,14 @@ export const getProducts = async (page = 1, limit = 20, search = "") => {
 };
 
 export const getProductByBarcode = async (barcode) =>
-  (await api.get(`/products/barcode/${barcode}`)).data;
+  (await api.get(`/products/barcode/${barcode}`, { params: getActiveBusinessParam() })).data;
 
 export const createProduct = async (data) => (await api.post("/products/", data)).data;
 
 export const updateProduct = async (id, data) => (await api.put(`/products/${id}`, data)).data;
 
 // ── CATEGORIES ────────────────────────────────────────────────────────────────
-export const getCategories  = async () => (await api.get("/categories/")).data;
+export const getCategories  = async () => (await api.get("/categories/", { params: getActiveBusinessParam() })).data;
 export const createCategory = async (data) => (await api.post("/categories/", data)).data;
 
 // ── SALES ─────────────────────────────────────────────────────────────────────

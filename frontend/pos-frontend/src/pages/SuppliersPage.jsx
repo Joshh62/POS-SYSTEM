@@ -1,10 +1,12 @@
 import { useState, useEffect } from "react";
 import api from "../api/api";
+import { useBranch } from "../context/BranchContext";
 
 export default function SuppliersPage() {
   const user    = JSON.parse(localStorage.getItem("user") || "{}");
   const isAdmin = ["admin", "superadmin"].includes(user.role);
   const canEdit = ["admin", "manager"].includes(user.role);
+  const { activeBusinessId } = useBranch();
 
   const [suppliers,  setSuppliers]  = useState([]);
   const [loading,    setLoading]    = useState(true);
@@ -26,15 +28,18 @@ export default function SuppliersPage() {
   const [deletingId, setDeletingId] = useState(null);
 
   const fetchSuppliers = async () => {
+    if (user.role === "superadmin" && !activeBusinessId) {
+      setSuppliers([]); setError("Select a business branch to view its suppliers."); setLoading(false); return;
+    }
     setLoading(true); setError(null);
     try {
-      const res = await api.get("/suppliers/", { params: search ? { search } : {} });
+      const res = await api.get("/suppliers/", { params: { search: search || undefined, business_id: activeBusinessId || undefined } });
       setSuppliers(res.data);
     } catch { setError("Failed to load suppliers."); }
     finally { setLoading(false); }
   };
 
-  useEffect(() => { fetchSuppliers(); }, []);
+  useEffect(() => { fetchSuppliers(); }, [activeBusinessId]);
 
   const viewSupplier = async (s) => {
     setSelected(null);

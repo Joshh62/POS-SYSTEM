@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from typing import Optional
@@ -48,11 +48,16 @@ def _get_subscription_info(biz: Business) -> dict:
 # ── List users ────────────────────────────────────────────────────────────────
 @router.get("/users")
 def list_users(
+    business_id: Optional[int] = Query(None),
     db: Session = Depends(get_db),
     user=Depends(require_role(["admin"]))
 ):
     query = db.query(User)
-    if user.role != SUPERADMIN_ROLE:
+    if user.role == SUPERADMIN_ROLE:
+        if business_id is None:
+            raise HTTPException(status_code=400, detail="business_id is required for superadmin")
+        query = query.filter(User.business_id == business_id)
+    else:
         query = query.filter(User.business_id == user.business_id)
     return query.order_by(User.created_at.desc()).all()
 
@@ -244,15 +249,20 @@ def change_password(
 @router.patch("/users/{user_id}/deactivate")
 def deactivate_user(
     user_id: int,
+    business_id: Optional[int] = Query(None),
     db: Session = Depends(get_db),
     current_user=Depends(require_role(["admin"]))
 ):
     user = db.query(User).filter(User.user_id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
+    if current_user.role == SUPERADMIN_ROLE:
+        if business_id is None or user.business_id != business_id:
+            raise HTTPException(status_code=403, detail="Selected business does not own this user")
     if current_user.role != SUPERADMIN_ROLE and user.business_id != current_user.business_id:
         raise HTTPException(status_code=403, detail="Not authorized")
     user.is_active = False
+    db.add(models.AuditLog(user_id=current_user.user_id, action="DEACTIVATE", table_name="users", record_id=user_id, description="User deactivated by authorized administrator"))
     db.commit()
     return {"message": "User deactivated"}
 
@@ -260,14 +270,19 @@ def deactivate_user(
 @router.patch("/users/{user_id}/activate")
 def activate_user(
     user_id: int,
+    business_id: Optional[int] = Query(None),
     db: Session = Depends(get_db),
     current_user=Depends(require_role(["admin"]))
 ):
     user = db.query(User).filter(User.user_id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
+    if current_user.role == SUPERADMIN_ROLE:
+        if business_id is None or user.business_id != business_id:
+            raise HTTPException(status_code=403, detail="Selected business does not own this user")
     if current_user.role != SUPERADMIN_ROLE and user.business_id != current_user.business_id:
         raise HTTPException(status_code=403, detail="Not authorized")
     user.is_active = True
+    db.add(models.AuditLog(user_id=current_user.user_id, action="ACTIVATE", table_name="users", record_id=user_id, description="User activated by authorized administrator"))
     db.commit()
     return {"message": "User activated"}

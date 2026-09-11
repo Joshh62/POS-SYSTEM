@@ -1,10 +1,12 @@
 import { useState, useEffect, useCallback } from "react";
 import api from "../api/api";
+import { useBranch } from "../context/BranchContext";
 
 export default function CustomersPage() {
   const user    = JSON.parse(localStorage.getItem("user") || "{}");
   const isAdmin = ["admin", "superadmin"].includes(user.role);
   const canEdit = ["admin", "manager"].includes(user.role);
+  const { activeBusinessId } = useBranch();
 
   const [customers,   setCustomers]   = useState([]);
   const [loading,     setLoading]     = useState(true);
@@ -44,15 +46,18 @@ export default function CustomersPage() {
   const [debitError,    setDebitError]    = useState(null);
 
   const fetchCustomers = async () => {
+    if (user.role === "superadmin" && !activeBusinessId) {
+      setCustomers([]); setError("Select a business branch to view its customers."); setLoading(false); return;
+    }
     setLoading(true); setError(null);
     try {
-      const res = await api.get("/customers/", { params: { search: search || undefined, credit_only: creditOnly } });
+      const res = await api.get("/customers/", { params: { search: search || undefined, credit_only: creditOnly, business_id: activeBusinessId || undefined } });
       setCustomers(res.data);
     } catch { setError("Failed to load customers."); }
     finally { setLoading(false); }
   };
 
-  useEffect(() => { fetchCustomers(); }, [creditOnly]);
+  useEffect(() => { fetchCustomers(); }, [creditOnly, activeBusinessId]);
 
   const fmt = (v) => `₦${parseFloat(v || 0).toLocaleString("en-NG", { minimumFractionDigits: 2 })}`;
 

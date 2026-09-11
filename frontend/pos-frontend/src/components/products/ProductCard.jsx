@@ -1,6 +1,6 @@
 import { useCart } from "../../context/CartContext";
 
-export default function ProductCard({ product }) {
+export default function ProductCard({ product, readOnly = false }) {
   const { addToCart, cartItems } = useCart();
 
   const cartItem = cartItems.find((i) => i.product_id === product.product_id);
@@ -16,11 +16,11 @@ export default function ProductCard({ product }) {
         display: "flex",
         flexDirection: "column",
         gap: 6,
-        cursor: "pointer",
+        cursor: readOnly ? "default" : "pointer",
         transition: "all 0.15s ease",
         position: "relative",
       }}
-      onClick={() => addToCart(product)}
+      onClick={() => { if (!readOnly) addToCart(product); }}
       onMouseEnter={(e) => {
         e.currentTarget.style.borderColor = "var(--color-primary)";
         e.currentTarget.style.transform = "translateY(-2px)";
@@ -32,7 +32,7 @@ export default function ProductCard({ product }) {
     >
 
       {/* In-cart badge */}
-      {inCart > 0 && (
+      {!readOnly && inCart > 0 && (
         <div
           style={{
             position: "absolute",
@@ -91,7 +91,7 @@ export default function ProductCard({ product }) {
           opacity: 0.7,
         }}
       >
-        Tap to add
+        {readOnly ? "Read-only" : "Tap to add"}
       </div>
     </div>
   );

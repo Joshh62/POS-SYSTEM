@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from app import models
 from app.database import get_db
-from app.dependencies import require_role, SUPERADMIN_ROLE
+from app.dependencies import require_role, require_tenant_role, SUPERADMIN_ROLE
 
 router = APIRouter(prefix="/expenses", tags=["Expenses"])
 
@@ -131,7 +131,7 @@ def expense_summary(
 def create_expense(
     data: ExpenseCreate,
     db: Session = Depends(get_db),
-    user=Depends(require_role(["admin", "manager"])),
+    user=Depends(require_tenant_role(["admin", "manager"])),
 ):
     if data.category not in VALID_CATEGORIES:
         raise HTTPException(status_code=400, detail="Invalid expense category")
@@ -178,7 +178,7 @@ def reverse_expense(
     expense_id: int,
     reason: str = Query(..., min_length=3, max_length=500),
     db: Session = Depends(get_db),
-    user=Depends(require_role(["admin"])),
+    user=Depends(require_tenant_role(["admin"])),
 ):
     try:
         expense = db.query(models.Expense).filter(

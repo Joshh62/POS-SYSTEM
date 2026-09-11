@@ -55,6 +55,22 @@ def require_role(allowed_roles: List[str]):
     return role_checker
 
 
+def require_tenant_role(allowed_roles: List[str]):
+    """Require an operational tenant role; superadmin remains read-only."""
+    def role_checker(user: models.User = Depends(get_current_user)):
+        if user.role == SUPERADMIN_ROLE:
+            raise HTTPException(
+                status_code=403,
+                detail="Superadmin access is read-only for tenant operations",
+            )
+        if user.role not in allowed_roles:
+            raise HTTPException(status_code=403, detail="Not authorized")
+        if not user.business_id:
+            raise HTTPException(status_code=400, detail="Business scope is required")
+        return user
+    return role_checker
+
+
 def get_active_branch_id(
     user: models.User,
     branch_id_param: int = None

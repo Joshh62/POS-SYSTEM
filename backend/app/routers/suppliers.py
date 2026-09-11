@@ -6,7 +6,7 @@ from datetime import datetime
 
 from app.database import get_db
 from app import models
-from app.dependencies import require_role, get_current_user, SUPERADMIN_ROLE
+from app.dependencies import require_role, require_tenant_role, get_current_user, SUPERADMIN_ROLE
 
 router = APIRouter(prefix="/suppliers", tags=["Suppliers"])
 
@@ -28,9 +28,11 @@ class SupplierUpdate(BaseModel):
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
-def _scope(q, user):
+def _scope(q, user, business_id=None):
     if user.role == SUPERADMIN_ROLE:
-        return q
+        if business_id is None:
+            raise HTTPException(status_code=400, detail="business_id is required for superadmin")
+        return q.filter(models.Supplier.business_id == business_id)
     return q.filter(models.Supplier.business_id == user.business_id)
 
 
@@ -71,11 +73,12 @@ def _supplier_dict(s, db, include_products=False):
 @router.get("/")
 def list_suppliers(
     search: Optional[str] = Query(None),
+    business_id: Optional[int] = Query(None),
     db: Session = Depends(get_db),
     user=Depends(get_current_user)
 ):
     q = db.query(models.Supplier)
-    q = _scope(q, user)
+    q = _scope(q, user, business_id)
 
     suppliers = q.order_by(models.Supplier.supplier_name).all()
 
@@ -113,7 +116,7 @@ def get_supplier(
 def create_supplier(
     data: SupplierCreate,
     db: Session = Depends(get_db),
-    user=Depends(require_role(["admin", "manager"]))
+    user=Depends(require_tenant_role(["admin", "manager"]))
 ):
     if not data.supplier_name.strip():
         raise HTTPException(status_code=400, detail="Supplier name is required")
@@ -147,7 +150,7 @@ def update_supplier(
     supplier_id: int,
     data: SupplierUpdate,
     db: Session = Depends(get_db),
-    user=Depends(require_role(["admin", "manager"]))
+    user=Depends(require_tenant_role(["admin", "manager"]))
 ):
     supplier = db.query(models.Supplier).filter(
         models.Supplier.supplier_id == supplier_id
@@ -178,7 +181,7 @@ def update_supplier(
 def delete_supplier(
     supplier_id: int,
     db: Session = Depends(get_db),
-    user=Depends(require_role(["admin"]))
+    user=Depends(require_tenant_role(["admin"]))
 ):
     supplier = db.query(models.Supplier).filter(
         models.Supplier.supplier_id == supplier_id

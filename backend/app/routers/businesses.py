@@ -250,8 +250,14 @@ def update_business(business_id: int, data: BusinessUpdate,
         raise HTTPException(status_code=403, detail="Superadmin only")
     biz = db.query(models.Business).filter(models.Business.business_id == business_id).first()
     if not biz: raise HTTPException(status_code=404, detail="Business not found")
+    changed_fields = sorted(data.dict(exclude_none=True).keys())
     for k, v in data.dict(exclude_none=True).items():
         setattr(biz, k, v)
+    db.add(models.AuditLog(
+        user_id=user.user_id, action="UPDATE", table_name="businesses",
+        record_id=business_id,
+        description=f"Superadmin updated business controls: {', '.join(changed_fields)}",
+    ))
     db.commit(); db.refresh(biz)
     return biz
 
@@ -268,6 +274,11 @@ def update_plan(business_id: int, data: PlanUpdate,
     biz = db.query(models.Business).filter(models.Business.business_id == business_id).first()
     if not biz: raise HTTPException(status_code=404, detail="Business not found")
     old_plan = biz.plan; biz.plan = data.plan
+    db.add(models.AuditLog(
+        user_id=user.user_id, action="PLAN_CHANGE", table_name="businesses",
+        record_id=business_id,
+        description=f"Business plan changed from {old_plan} to {data.plan}",
+    ))
     db.commit(); db.refresh(biz)
     limits = PLAN_LIMITS[data.plan]
     return {"message": f"Plan updated from {old_plan} to {data.plan}",
@@ -301,6 +312,11 @@ def update_business_features(business_id: int, data: FeatureUpdate,
     biz.features = {**current, **incoming}
     from sqlalchemy.orm.attributes import flag_modified
     flag_modified(biz, "features")
+    db.add(models.AuditLog(
+        user_id=user.user_id, action="FEATURE_CHANGE", table_name="businesses",
+        record_id=business_id,
+        description=f"Business feature flags updated: {', '.join(sorted(incoming))}",
+    ))
     db.commit(); db.refresh(biz)
     return {"message": f"Features updated for {biz.name}",
             "business_id": business_id, "features": get_features(biz.features)}

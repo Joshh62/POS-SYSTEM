@@ -7,6 +7,7 @@ from app.dependencies import (
     get_active_branch_id,
     get_active_business_id,
     require_role,
+    require_tenant_role,
 )
 
 
@@ -33,6 +34,22 @@ def test_superadmin_bypasses_role_guard():
     checker = require_role(["admin"])
 
     assert checker(current) is current
+
+
+def test_superadmin_cannot_mutate_tenant_operations():
+    checker = require_tenant_role(["admin", "manager"])
+
+    with pytest.raises(HTTPException) as exc:
+        checker(user("superadmin", branch_id=None, business_id=None))
+
+    assert exc.value.status_code == 403
+    assert exc.value.detail == "Superadmin access is read-only for tenant operations"
+
+
+def test_tenant_admin_may_mutate_own_business_operations():
+    current = user("admin", branch_id=10, business_id=20)
+
+    assert require_tenant_role(["admin"])(current) is current
 
 
 def test_manager_cannot_override_assigned_branch():

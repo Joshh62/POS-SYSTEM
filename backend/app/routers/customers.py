@@ -7,7 +7,7 @@ from datetime import date, datetime, timedelta
 
 from app.database import get_db
 from app import models
-from app.dependencies import require_role, get_current_user, SUPERADMIN_ROLE
+from app.dependencies import require_role, require_tenant_role, get_current_user, SUPERADMIN_ROLE
 
 router = APIRouter(prefix="/customers", tags=["Customers"])
 
@@ -82,9 +82,11 @@ def _customer_dict(c, db, include_balance=True):
     return d
 
 
-def _scope(q, user):
+def _scope(q, user, business_id=None):
     if user.role == SUPERADMIN_ROLE:
-        return q
+        if business_id is None:
+            raise HTTPException(status_code=400, detail="business_id is required for superadmin")
+        return q.filter(models.Customer.business_id == business_id)
     return q.filter(models.Customer.business_id == user.business_id)
 
 
@@ -93,11 +95,12 @@ def _scope(q, user):
 def list_customers(
     search:         Optional[str]  = Query(None),
     credit_only:    bool           = Query(False),
+    business_id:    Optional[int]  = Query(None),
     db: Session = Depends(get_db),
     user=Depends(get_current_user)
 ):
     q = db.query(models.Customer)
-    q = _scope(q, user)
+    q = _scope(q, user, business_id)
 
     if credit_only:
         q = q.filter(models.Customer.credit_enabled == True)
@@ -116,7 +119,7 @@ def list_customers(
 def create_customer(
     data: CustomerCreate,
     db: Session = Depends(get_db),
-    user=Depends(require_role(["admin", "manager"]))
+    user=Depends(require_tenant_role(["admin", "manager"]))
 ):
     if data.phone:
         existing = db.query(models.Customer).filter(
@@ -145,7 +148,7 @@ def update_customer(
     customer_id: int,
     data: CustomerUpdate,
     db: Session = Depends(get_db),
-    user=Depends(require_role(["admin", "manager"]))
+    user=Depends(require_tenant_role(["admin", "manager"]))
 ):
     customer = db.query(models.Customer).filter(
         models.Customer.customer_id == customer_id
@@ -177,7 +180,7 @@ def update_credit_settings(
     customer_id: int,
     data: CreditSettingsUpdate,
     db: Session = Depends(get_db),
-    user=Depends(require_role(["admin"]))
+    user=Depends(require_tenant_role(["admin"]))
 ):
     customer = db.query(models.Customer).filter(
         models.Customer.customer_id == customer_id
@@ -281,6 +284,7 @@ def customer_sales_history(
 def search_customers(
     q: str = Query(..., min_length=1),
     credit_only: bool = Query(False),
+    business_id: Optional[int] = Query(None),
     db: Session = Depends(get_db),
     user=Depends(get_current_user)
 ):
@@ -288,7 +292,7 @@ def search_customers(
         (models.Customer.full_name.ilike(f"%{q}%")) |
         (models.Customer.phone.ilike(f"%{q}%"))
     )
-    query = _scope(query, user)
+    query = _scope(query, user, business_id)
     if credit_only:
         query = query.filter(models.Customer.credit_enabled == True)
 

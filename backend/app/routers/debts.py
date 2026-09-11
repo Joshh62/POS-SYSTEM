@@ -9,7 +9,7 @@ from decimal import Decimal
 
 from app.database import get_db
 from app import models
-from app.dependencies import require_role, get_current_user, SUPERADMIN_ROLE
+from app.dependencies import require_role, require_tenant_role, get_current_user, SUPERADMIN_ROLE
 
 router = APIRouter(prefix="/debts", tags=["Debts"])
 
@@ -219,7 +219,7 @@ def list_debts(
 def create_debt(
     data: DebtCreate,
     db: Session = Depends(get_db),
-    user=Depends(require_role(["admin", "manager"]))
+    user=Depends(require_tenant_role(["admin", "manager"]))
 ):
     total = _money(data.total_amount)
     initial_paid = _money(data.amount_paid)
@@ -350,7 +350,7 @@ def record_payment(
     debt_id: int,
     data: DebtPaymentCreate,
     db: Session = Depends(get_db),
-    user=Depends(get_current_user)
+    user=Depends(require_tenant_role(["admin", "manager"]))
 ):
     amount = _money(data.amount)
     if amount <= 0:
@@ -461,7 +461,7 @@ def get_debt_payments(
 def write_off_debt(
     debt_id: int,
     db: Session = Depends(get_db),
-    user=Depends(require_role(["admin"]))
+    user=Depends(require_tenant_role(["admin"]))
 ):
     try:
         debt = db.query(models.Debt).filter(

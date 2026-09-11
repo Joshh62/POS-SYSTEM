@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app import models, schemas
-from app.dependencies import get_current_user, require_role, SUPERADMIN_ROLE
+from app.dependencies import get_current_user, require_role, require_tenant_role, SUPERADMIN_ROLE
 from datetime import date, datetime
 import openpyxl
 import csv
@@ -62,7 +62,7 @@ def _product_dict(p, db):
 def create_product(
     product: schemas.ProductCreate,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(require_role(["admin", "manager"]))
+    current_user: models.User = Depends(require_tenant_role(["admin", "manager"]))
 ):
     existing = db.query(models.Product).filter(
         models.Product.barcode     == product.barcode,
@@ -131,11 +131,16 @@ def get_products(
     page:        int = 1,
     limit:       int = 20,
     supplier_id: int = None,
+    business_id: int = Query(None),
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user)
 ):
     query = db.query(models.Product)
-    if current_user.role != SUPERADMIN_ROLE:
+    if current_user.role == SUPERADMIN_ROLE:
+        if business_id is None:
+            raise HTTPException(status_code=400, detail="business_id is required for superadmin")
+        query = query.filter(models.Product.business_id == business_id)
+    else:
         query = query.filter(models.Product.business_id == current_user.business_id)
     if search:
         query = query.filter(models.Product.product_name.ilike(f"%{search}%"))
@@ -154,11 +159,16 @@ def get_products(
 @router.get("/barcode/{barcode}")
 def get_product_by_barcode(
     barcode: str,
+    business_id: int = Query(None),
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user)
 ):
     query = db.query(models.Product).filter(models.Product.barcode == barcode)
-    if current_user.role != SUPERADMIN_ROLE:
+    if current_user.role == SUPERADMIN_ROLE:
+        if business_id is None:
+            raise HTTPException(status_code=400, detail="business_id is required for superadmin")
+        query = query.filter(models.Product.business_id == business_id)
+    else:
         query = query.filter(models.Product.business_id == current_user.business_id)
     product = query.first()
     if not product:
@@ -189,7 +199,7 @@ def update_product(
     product_id: int,
     product: schemas.ProductCreate,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(require_role(["admin", "manager"]))
+    current_user: models.User = Depends(require_tenant_role(["admin", "manager"]))
 ):
     existing = db.query(models.Product).filter(
         models.Product.product_id == product_id
@@ -272,7 +282,7 @@ def download_import_template(
 def import_products(
     file: UploadFile = File(...),
     db:   Session    = Depends(get_db),
-    current_user: models.User = Depends(require_role(["admin", "manager"]))
+    current_user: models.User = Depends(require_tenant_role(["admin", "manager"]))
 ):
     """
     Import/restock products from .xlsx or .csv file.

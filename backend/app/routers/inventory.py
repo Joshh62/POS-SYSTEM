@@ -12,7 +12,7 @@ from collections import Counter
 
 from app import models, schemas
 from app.database import get_db
-from app.dependencies import require_role, get_active_branch_id, SUPERADMIN_ROLE
+from app.dependencies import require_role, require_tenant_role, get_active_branch_id, SUPERADMIN_ROLE
 
 router = APIRouter(prefix="/inventory", tags=["Inventory"])
 
@@ -216,7 +216,7 @@ def get_product_batches(
 def restock_product(
     data: schemas.InventoryRestockCreate,
     db: Session = Depends(get_db),
-    user=Depends(require_role(["admin", "manager"])),
+    user=Depends(require_tenant_role(["admin", "manager"])),
 ):
     try:
         branch = _authorize_branch(user, data.branch_id, db)
@@ -295,7 +295,7 @@ def bulk_restock(
     file: UploadFile = File(...),
     branch_id: Optional[int] = Query(None),
     db: Session = Depends(get_db),
-    user=Depends(require_role(["admin", "manager"])),
+    user=Depends(require_tenant_role(["admin", "manager"])),
 ):
     filename = (file.filename or "").lower()
     if not filename.endswith(".csv"):
@@ -460,7 +460,7 @@ def bulk_restock(
 def update_reorder_level(
     data: schemas.InventoryReorderLevelUpdate,
     db: Session = Depends(get_db),
-    user=Depends(require_role(["admin", "manager"])),
+    user=Depends(require_tenant_role(["admin", "manager"])),
 ):
     try:
         branch = _authorize_branch(user, data.branch_id, db)
@@ -511,7 +511,7 @@ def adjust_stock(
     reason: str,
     branch_id: Optional[int] = Query(None),
     db: Session = Depends(get_db),
-    user=Depends(require_role(["admin", "manager"])),
+    user=Depends(require_tenant_role(["admin", "manager"])),
 ):
     try:
         try:
@@ -598,7 +598,7 @@ def adjust_stock(
 def transfer_stock(
     data: schemas.StockTransferCreate,
     db: Session = Depends(get_db),
-    user=Depends(require_role(["admin", "manager"])),
+    user=Depends(require_tenant_role(["admin", "manager"])),
 ):
     try:
         source_branch = _authorize_branch(user, data.from_branch, db)
