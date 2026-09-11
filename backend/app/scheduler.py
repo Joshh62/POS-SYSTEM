@@ -5,11 +5,22 @@ whose report_hour matches the current Lagos time hour.
 """
 
 import asyncio
+import os
 from datetime import datetime, timedelta
 import pytz
 
 LAGOS_TZ            = pytz.timezone("Africa/Lagos")
 DELETION_GRACE_DAYS = 90
+
+
+def scheduled_whatsapp_reports_enabled() -> bool:
+    """Require an explicit opt-in before scheduling platform-wide reports."""
+    return os.getenv("WHATSAPP_SCHEDULED_REPORTS_ENABLED", "false").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
 
 
 def seconds_until(hour: int, minute: int = 0) -> float:
@@ -271,12 +282,15 @@ def _send_deletion_whatsapp(biz):
 
 def start_scheduler():
     loop = asyncio.get_event_loop()
-    loop.create_task(daily_report_loop())
+    if scheduled_whatsapp_reports_enabled():
+        loop.create_task(daily_report_loop())
+        print("[Scheduler] Started — WhatsApp reports: hourly check, per-business report_hour")
+    else:
+        print("[Scheduler] WhatsApp scheduled reports disabled")
     loop.create_task(due_date_alerts_loop())
     loop.create_task(monthly_credit_summary_loop())
     loop.create_task(monthly_points_expiry_loop())
     loop.create_task(account_deletion_cleanup_loop())
-    print("[Scheduler] Started — WhatsApp reports: hourly check, per-business report_hour")
     print("[Scheduler] Started — due date alerts at 8:00 AM Lagos")
     print("[Scheduler] Started — monthly credit summary on 1st")
     print("[Scheduler] Started — loyalty expiry on 1st")
