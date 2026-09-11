@@ -9,7 +9,7 @@ from decimal import Decimal
 
 from app.database import get_db
 from app import models
-from app.dependencies import require_role, get_current_user, SUPERADMIN_ROLE
+from app.dependencies import require_role, require_tenant_role, get_current_user, SUPERADMIN_ROLE
 
 router = APIRouter(prefix="/ledger", tags=["Customer Ledger"])
 
@@ -151,7 +151,7 @@ def get_customer_ledger(
 def add_debit(
     data: DebitEntry,
     db: Session = Depends(get_db),
-    user=Depends(require_role(["admin", "manager"]))
+    user=Depends(require_tenant_role(["admin", "manager"]))
 ):
     amount = _money(data.amount)
     if amount <= 0:
@@ -218,7 +218,7 @@ def add_debit(
 def add_credit(
     data: CreditEntry,
     db: Session = Depends(get_db),
-    user=Depends(get_current_user)
+    user=Depends(require_tenant_role(["admin", "manager"]))
 ):
     amount = _money(data.amount)
     if amount <= 0:
@@ -279,7 +279,7 @@ def add_credit(
 def write_off_entry(
     entry_id: int,
     db: Session = Depends(get_db),
-    user=Depends(require_role(["admin"]))
+    user=Depends(require_tenant_role(["admin"]))
 ):
     try:
         entry = db.query(models.CustomerLedgerEntry).filter(
@@ -337,7 +337,7 @@ def write_off_entry(
 def delete_entry(
     entry_id: int,
     db: Session = Depends(get_db),
-    user=Depends(require_role(["admin"]))
+    user=Depends(require_tenant_role(["admin"]))
 ):
     """Preserve financial history by posting an opposite reversal entry."""
     try:

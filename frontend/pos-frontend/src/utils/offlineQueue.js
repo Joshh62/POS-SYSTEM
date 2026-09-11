@@ -13,6 +13,21 @@
 const QUEUE_KEY    = "pos_offline_queue";
 const PRODUCTS_KEY = "pos_cached_products";
 
+function tenantScope() {
+  try {
+    const user = JSON.parse(localStorage.getItem("user") || "{}");
+    const businessId = user.business_id ?? localStorage.getItem("activeBusinessId");
+    return businessId ? `business-${businessId}` : null;
+  } catch {
+    return null;
+  }
+}
+
+function scopedKey(baseKey) {
+  const scope = tenantScope();
+  return scope ? `${baseKey}:${scope}` : null;
+}
+
 // ── Sync lock — prevents concurrent sync runs ─────────────────────────────────
 let isSyncing = false;
 
@@ -42,7 +57,8 @@ export function queueSale(salePayload) {
 
 export function getQueue() {
   try {
-    return JSON.parse(localStorage.getItem(QUEUE_KEY) || "[]");
+    const key = scopedKey(QUEUE_KEY);
+    return key ? JSON.parse(localStorage.getItem(key) || "[]") : [];
   } catch {
     return [];
   }
@@ -103,7 +119,9 @@ export async function syncQueue(createSaleFn) {
 
 export function cacheProducts(products) {
   try {
-    localStorage.setItem(PRODUCTS_KEY, JSON.stringify({
+    const key = scopedKey(PRODUCTS_KEY);
+    if (!key) return;
+    localStorage.setItem(key, JSON.stringify({
       cached_at: new Date().toISOString(),
       data:      products,
     }));
@@ -114,7 +132,9 @@ export function cacheProducts(products) {
 
 export function getCachedProducts() {
   try {
-    const raw = localStorage.getItem(PRODUCTS_KEY);
+    const key = scopedKey(PRODUCTS_KEY);
+    if (!key) return null;
+    const raw = localStorage.getItem(key);
     if (!raw) return null;
     const { data } = JSON.parse(raw);
     return data ?? null;
@@ -125,7 +145,9 @@ export function getCachedProducts() {
 
 export function getCacheAge() {
   try {
-    const raw = localStorage.getItem(PRODUCTS_KEY);
+    const key = scopedKey(PRODUCTS_KEY);
+    if (!key) return null;
+    const raw = localStorage.getItem(key);
     if (!raw) return null;
     const { cached_at } = JSON.parse(raw);
     return Math.round((Date.now() - new Date(cached_at).getTime()) / 60000);
@@ -166,5 +188,9 @@ export function registerSyncListener(createSaleFn) {
 // ── Internal ───────────────────────────────────────────────────────────────────
 
 function saveQueue(queue) {
-  localStorage.setItem(QUEUE_KEY, JSON.stringify(queue));
+  const key = scopedKey(QUEUE_KEY);
+  if (!key) {
+    throw new Error("Cannot persist an offline sale without a tenant scope");
+  }
+  localStorage.setItem(key, JSON.stringify(queue));
 }

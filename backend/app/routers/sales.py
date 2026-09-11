@@ -15,7 +15,7 @@ from io import BytesIO as BytesIO_logo
 
 from app import models, schemas
 from app.database import get_db
-from app.dependencies import require_role, get_current_user, SUPERADMIN_ROLE
+from app.dependencies import require_role, require_tenant_role, get_current_user, SUPERADMIN_ROLE
 from app.utils.loyalty_service import apply_sale_loyalty
 
 router = APIRouter(prefix="/sales", tags=["Sales"])
@@ -89,7 +89,7 @@ def _list_branch_ids(current_user, requested_branch_id, db: Session) -> list[int
 def create_sale(
     sale: schemas.SaleCreate,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user)
+    current_user: models.User = Depends(require_tenant_role(["admin", "manager", "cashier"]))
 ):
     if not sale.items:
         raise HTTPException(status_code=400, detail="Sale must contain items")
@@ -525,7 +525,7 @@ def refund_sale(
     sale_id: int,
     refund_request: schemas.RefundCreate,
     db: Session = Depends(get_db),
-    user=Depends(require_role(["admin", "manager"]))
+    user=Depends(require_tenant_role(["admin", "manager"]))
 ):
     try:
         # The sale row is the concurrency boundary. PostgreSQL serializes all

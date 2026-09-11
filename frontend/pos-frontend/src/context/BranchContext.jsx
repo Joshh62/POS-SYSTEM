@@ -29,12 +29,21 @@ export function BranchProvider({ children }) {
   const [branches, setBranches]                = useState([]);
   const [activeBranchId, setActiveBranchIdRaw] = useState(getInitialBranchId);
 
+  const activeBusinessId = activeBranchId
+    ? (branches.find(b => b.branch_id === activeBranchId)?.business_id || user.business_id || null)
+    : (role === "superadmin" ? null : (user.business_id || null));
+
   // Keep localStorage in sync so api.js can read it without React context
   const setActiveBranchId = (id) => {
     setActiveBranchIdRaw(id);
     if (id) localStorage.setItem("activeBranchId", id);
     else     localStorage.removeItem("activeBranchId");
   };
+
+  useEffect(() => {
+    if (activeBusinessId) localStorage.setItem("activeBusinessId", activeBusinessId);
+    else localStorage.removeItem("activeBusinessId");
+  }, [activeBusinessId]);
 
   // Load branches for admin/superadmin so they can switch
   useEffect(() => {
@@ -66,7 +75,7 @@ export function BranchProvider({ children }) {
   }, [role]);
 
   return (
-    <BranchContext.Provider value={{ activeBranchId, setActiveBranchId, branches, role }}>
+    <BranchContext.Provider value={{ activeBranchId, activeBusinessId, setActiveBranchId, branches, role }}>
       {children}
     </BranchContext.Provider>
   );

@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app import models, schemas
-from app.dependencies import get_current_user, require_role, SUPERADMIN_ROLE
+from app.dependencies import get_current_user, require_tenant_role, SUPERADMIN_ROLE
 
 router = APIRouter(
     prefix="/categories",
@@ -31,7 +31,7 @@ def create_category(
     category: schemas.CategoryCreate,
     business_id: int | None = Query(None),
     db: Session = Depends(get_db),
-    user=Depends(require_role(["admin", "manager"])),
+    user=Depends(require_tenant_role(["admin", "manager"])),
 ):
     target_business_id = user.business_id
     if user.role == SUPERADMIN_ROLE:

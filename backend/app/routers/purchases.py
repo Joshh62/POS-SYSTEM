@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from app import models, schemas
 from app.database import get_db
-from app.dependencies import SUPERADMIN_ROLE, require_role
+from app.dependencies import SUPERADMIN_ROLE, require_role, require_tenant_role
 
 
 router = APIRouter(prefix="/purchases", tags=["Purchases"])
@@ -48,7 +48,7 @@ def _rollback_http(db: Session, exc: HTTPException):
 def create_purchase_order(
     data: schemas.PurchaseOrderCreate,
     db: Session = Depends(get_db),
-    user=Depends(require_role(["admin", "manager"])),
+    user=Depends(require_tenant_role(["admin", "manager"])),
 ):
     try:
         branch = _authorize_branch(user, data.branch_id, db)
@@ -143,7 +143,7 @@ def receive_purchase_order(
     po_id: int,
     data: schemas.PurchaseReceiptCreate,
     db: Session = Depends(get_db),
-    user=Depends(require_role(["admin", "manager"])),
+    user=Depends(require_tenant_role(["admin", "manager"])),
 ):
     try:
         po = db.query(models.PurchaseOrder).filter(

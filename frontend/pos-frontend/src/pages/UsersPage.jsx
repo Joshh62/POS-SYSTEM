@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import api from "../api/api";
 import { getPlanInfo, changePassword } from "../api/api";
+import { useBranch } from "../context/BranchContext";
 
 const UPGRADE_INFO = {
   solo: {
@@ -40,6 +41,8 @@ export default function UsersPage() {
   const [pwdSuccess, setPwdSuccess] = useState(null);
 
   const currentUser  = JSON.parse(localStorage.getItem("user") || "{}");
+  const isSuperadmin = currentUser.role === "superadmin";
+  const { activeBusinessId } = useBranch();
   const businessName = currentUser.business_name || "";
 
   const EMPTY_FORM = { full_name: "", username: "", password: "", role: "cashier", branch_id: "" };
@@ -52,9 +55,12 @@ export default function UsersPage() {
   branches.forEach(b => { branchMap[b.branch_id] = b.branch_name || b.name || `Branch ${b.branch_id}`; });
 
   const fetchUsers = async () => {
+    if (isSuperadmin && !activeBusinessId) {
+      setUsers([]); setError("Select a business branch to view its users."); setLoading(false); return;
+    }
     setLoading(true); setError(null);
     try {
-      const res = await api.get("/auth/users");
+      const res = await api.get("/auth/users", { params: { business_id: activeBusinessId || undefined } });
       setUsers(res.data);
     } catch { setError("Could not load users."); }
     finally { setLoading(false); }
@@ -62,7 +68,9 @@ export default function UsersPage() {
 
   const fetchBranches = async () => {
     try {
-      const res = await api.get(`/businesses/${currentUser.business_id}/branches`);
+      const targetBusinessId = isSuperadmin ? activeBusinessId : currentUser.business_id;
+      if (!targetBusinessId) { setBranches([]); return; }
+      const res = await api.get(`/businesses/${targetBusinessId}/branches`);
       setBranches(Array.isArray(res.data) ? res.data : []);
     } catch {
       try {
@@ -76,7 +84,7 @@ export default function UsersPage() {
     try { setPlanInfo(await getPlanInfo()); } catch {}
   };
 
-  useEffect(() => { fetchUsers(); fetchBranches(); fetchPlanInfo(); }, []);
+  useEffect(() => { fetchUsers(); fetchBranches(); if (!isSuperadmin) fetchPlanInfo(); }, [activeBusinessId]);
 
   const handleCreate = async () => {
     if (!form.full_name || !form.username || !form.password) {
@@ -108,13 +116,13 @@ export default function UsersPage() {
 
   const handleDeactivate = async (userId, username) => {
     if (!window.confirm(`Deactivate "${username}"?`)) return;
-    try { await api.patch(`/auth/users/${userId}/deactivate`); fetchUsers(); fetchPlanInfo(); }
+    try { await api.patch(`/auth/users/${userId}/deactivate`, null, { params: { business_id: activeBusinessId || undefined } }); fetchUsers(); if (!isSuperadmin) fetchPlanInfo(); }
     catch { alert("Failed to deactivate user."); }
   };
 
   const handleActivate = async (userId, username) => {
     if (!window.confirm(`Reactivate "${username}"?`)) return;
-    try { await api.patch(`/auth/users/${userId}/activate`); fetchUsers(); fetchPlanInfo(); }
+    try { await api.patch(`/auth/users/${userId}/activate`, null, { params: { business_id: activeBusinessId || undefined } }); fetchUsers(); if (!isSuperadmin) fetchPlanInfo(); }
     catch { alert("Failed to activate user."); }
   };
 
@@ -169,10 +177,10 @@ export default function UsersPage() {
           </span>
         )}
         <button onClick={openChangePwd} style={outlineBtn}>🔒 Change password</button>
-        {atLimit
+        {!isSuperadmin && (atLimit
           ? <button onClick={() => setShowUpgrade(true)} style={upgradeBtn}>⚡ Upgrade to add more staff</button>
           : <button onClick={() => setShowForm(true)} style={primaryBtn}>+ New user</button>
-        }
+        )}
       </div>
 
       {error && <div style={errorBox}>{error}</div>}

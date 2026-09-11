@@ -4,10 +4,12 @@ import {
   createProduct,
   updateProduct,
   getCategories,
+  createCategory,
   getProductByBarcode,
 } from "../api/api";
 import api from "../api/api";
 import { useBarcodeScanner } from "../hooks/useBarcodeScanner";
+import { useBranch } from "../context/BranchContext";
 
 const EMPTY_FORM = {
   product_name: "", barcode: "", category_id: "",
@@ -64,6 +66,9 @@ function printBarcodeLabel(barcode, productName, quantity = 1) {
 }
 
 export default function ProductsPage() {
+  const user = JSON.parse(localStorage.getItem("user") || "{}");
+  const isSuperadmin = user.role === "superadmin";
+  const { activeBusinessId } = useBranch();
   const [activeTab,   setActiveTab]   = useState("Products");
   const [products,    setProducts]    = useState([]);
   const [categories,  setCategories]  = useState([]);
@@ -80,6 +85,7 @@ export default function ProductsPage() {
   const [form,        setForm]        = useState(EMPTY_FORM);
   const [formLoading, setFormLoading] = useState(false);
   const [formError,   setFormError]   = useState(null);
+  const [newCategory, setNewCategory] = useState("");
 
   const [showBarcode,  setShowBarcode]  = useState(false);
   const [printQty,     setPrintQty]     = useState(1);
@@ -113,12 +119,17 @@ export default function ProductsPage() {
   });
 
   const fetchData = async () => {
+    if (isSuperadmin && !activeBusinessId) {
+      setProducts([]); setCategories([]); setSuppliers([]); setTotal(0);
+      setError("Select a business branch to view its product catalog.");
+      return;
+    }
     setLoading(true); setError(null);
     try {
       const [prod, cats, sups] = await Promise.all([
         getProducts(page, LIMIT, search),
         getCategories(),
-        api.get("/suppliers/").then(r => r.data).catch(() => []),
+        api.get("/suppliers/", { params: activeBusinessId ? { business_id: activeBusinessId } : {} }).then(r => r.data).catch(() => []),
       ]);
       setProducts(prod?.data || []);
       setTotal(prod?.total || 0);
@@ -129,7 +140,7 @@ export default function ProductsPage() {
     } finally { setLoading(false); }
   };
 
-  useEffect(() => { fetchData(); }, [page, search]);
+  useEffect(() => { fetchData(); }, [page, search, activeBusinessId]);
   useEffect(() => {
     const t = setTimeout(() => { setSearch(searchInput); setPage(1); }, 400);
     return () => clearTimeout(t);
@@ -173,6 +184,20 @@ export default function ProductsPage() {
       setShowForm(false); fetchData();
     } catch (err) {
       setFormError(err.response?.data?.detail || "Failed to save product.");
+    } finally { setFormLoading(false); }
+  };
+
+  const handleCreateCategory = async () => {
+    const name = newCategory.trim();
+    if (!name) return;
+    setFormLoading(true); setFormError(null);
+    try {
+      const created = await createCategory({ category_name: name });
+      setCategories(items => [...items, created].sort((a, b) => a.category_name.localeCompare(b.category_name)));
+      setForm(f => ({ ...f, category_id: created.category_id }));
+      setNewCategory("");
+    } catch (err) {
+      setFormError(err.response?.data?.detail || "Failed to create category.");
     } finally { setFormLoading(false); }
   };
 
@@ -265,7 +290,7 @@ export default function ProductsPage() {
 
       {/* Tabs */}
       <div style={{ display: "flex", gap: 4, marginBottom: 20, borderBottom: "1px solid var(--color-border-tertiary)" }}>
-        {TABS.map(tab => (
+        {(isSuperadmin ? ["Products"] : TABS).map(tab => (
           <button key={tab} onClick={() => setActiveTab(tab)} style={{
             padding: "8px 14px", border: "none", background: "none", fontSize: 13, cursor: "pointer",
             fontWeight: activeTab === tab ? 500 : 400,
@@ -276,7 +301,7 @@ export default function ProductsPage() {
             {tab}
           </button>
         ))}
-        {activeTab === "Products" && (
+        {activeTab === "Products" && !isSuperadmin && (
           <button onClick={openCreate} style={{ ...primaryBtn, marginLeft: "auto" }}>+ Add product</button>
         )}
       </div>
@@ -328,7 +353,7 @@ export default function ProductsPage() {
                     <td style={{ ...tdStyle, textAlign: "right" }}>
                       <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
                         <button onClick={() => setBarcodeModal({ barcode: p.barcode, product_name: p.product_name })} style={barcodeBtn} title="Print barcode label">🏷️</button>
-                        <button onClick={() => openEdit(p)} style={editBtn}>Edit</button>
+                        {!isSuperadmin && <button onClick={() => openEdit(p)} style={editBtn}>Edit</button>}
                       </div>
                     </td>
                   </tr>
@@ -536,6 +561,12 @@ export default function ProductsPage() {
                   <option value="">— None —</option>
                   {categories.map(c => <option key={c.category_id} value={c.category_id}>{c.category_name}</option>)}
                 </select>
+                <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
+                  <input value={newCategory} onChange={e => setNewCategory(e.target.value)}
+                    placeholder="New category name" style={{ ...inputStyle, marginTop: 0, flex: 1 }} />
+                  <button type="button" onClick={handleCreateCategory} disabled={formLoading || !newCategory.trim()}
+                    style={{ ...primaryBtn, padding: "6px 12px", whiteSpace: "nowrap" }}>+ Category</button>
+                </div>
               </div>
 
               <div>

@@ -1,8 +1,11 @@
 import { useState, useEffect, useCallback } from "react";
 import { getProducts } from "../../api/api";
 import ProductCard from "./ProductCard";
+import { useBranch } from "../../context/BranchContext";
 
-export default function ProductGrid({ externalSearch = false }) {
+export default function ProductGrid({ externalSearch = false, readOnly = false }) {
+  const user = JSON.parse(localStorage.getItem("user") || "{}");
+  const { activeBusinessId } = useBranch();
   const [products, setProducts]       = useState([]);
   const [total, setTotal]             = useState(0);
   const [page, setPage]               = useState(1);
@@ -28,6 +31,9 @@ export default function ProductGrid({ externalSearch = false }) {
   }, [searchInput]);
 
   const fetchProducts = useCallback(async () => {
+    if (user.role === "superadmin" && !activeBusinessId) {
+      setProducts([]); setTotal(0); setError("Select a business branch to view its products."); return;
+    }
     setLoading(true);
     setError(null);
     try {
@@ -42,7 +48,7 @@ export default function ProductGrid({ externalSearch = false }) {
     } finally {
       setLoading(false);
     }
-  }, [page, search]);
+  }, [page, search, activeBusinessId]);
 
   useEffect(() => { fetchProducts(); }, [fetchProducts]);
 
@@ -100,7 +106,7 @@ export default function ProductGrid({ externalSearch = false }) {
           alignContent: "start",
         }}>
           {products.map((p) => (
-            <ProductCard key={p.product_id} product={p} />
+            <ProductCard key={p.product_id} product={p} readOnly={readOnly} />
           ))}
         </div>
       )}

@@ -16,7 +16,7 @@ import pytz
 
 from app.database import get_db
 from app import models
-from app.dependencies import require_role, get_current_user, SUPERADMIN_ROLE
+from app.dependencies import require_role, require_tenant_role, get_current_user, SUPERADMIN_ROLE
 
 router = APIRouter(prefix="/payments", tags=["Payments"])
 
@@ -313,7 +313,7 @@ async def verify_payment(reference: str, db: Session = Depends(get_db), user=Dep
 
 
 @router.delete("/pending-downgrade")
-def cancel_pending_downgrade(db: Session = Depends(get_db), user=Depends(require_role(["admin"]))):
+def cancel_pending_downgrade(db: Session = Depends(get_db), user=Depends(require_tenant_role(["admin"]))):
     biz = db.query(models.Business).filter(models.Business.business_id == user.business_id).first()
     if not biz or not biz.pending_plan:
         raise HTTPException(status_code=404, detail="No pending downgrade found")
@@ -406,7 +406,7 @@ async def paystack_webhook(request: Request, db: Session = Depends(get_db),
 
 
 @router.post("/cancel")
-async def cancel_subscription(db: Session = Depends(get_db), user=Depends(require_role(["admin"]))):
+async def cancel_subscription(db: Session = Depends(get_db), user=Depends(require_tenant_role(["admin"]))):
     from app.email_service import subscription_cancelled as send_cancelled
 
     biz = db.query(models.Business).filter(models.Business.business_id == user.business_id).first()
