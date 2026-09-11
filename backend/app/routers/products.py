@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from app.database import get_db
 from app import models, schemas
 from app.dependencies import get_current_user, require_role, require_tenant_role, SUPERADMIN_ROLE
@@ -35,14 +35,17 @@ def _get_business_branches(db, user):
     ).all()
 
 
-def _product_dict(p, db):
+def _product_dict(p):
     supplier = None
-    if p.supplier_id:
-        s = db.query(models.Supplier).filter(
-            models.Supplier.supplier_id == p.supplier_id
-        ).first()
-        if s:
-            supplier = {"supplier_id": s.supplier_id, "supplier_name": s.supplier_name}
+    related_supplier = p.supplier
+    if (
+        related_supplier
+        and related_supplier.business_id == p.business_id
+    ):
+        supplier = {
+            "supplier_id": related_supplier.supplier_id,
+            "supplier_name": related_supplier.supplier_name,
+        }
     return {
         "product_id":    p.product_id,
         "business_id":   p.business_id,
@@ -121,7 +124,7 @@ def create_product(
 
     db.commit()
     db.refresh(new_product)
-    return _product_dict(new_product, db)
+    return _product_dict(new_product)
 
 
 # ── LIST ──────────────────────────────────────────────────────────────────────
@@ -148,10 +151,15 @@ def get_products(
         query = query.filter(models.Product.supplier_id == supplier_id)
 
     total    = query.count()
-    products = query.offset((max(1, page) - 1) * limit).limit(limit).all()
+    products = (
+        query.options(joinedload(models.Product.supplier))
+        .offset((max(1, page) - 1) * limit)
+        .limit(limit)
+        .all()
+    )
     return {
         "total": total, "page": page, "limit": limit,
-        "data":  [_product_dict(p, db) for p in products],
+        "data":  [_product_dict(p) for p in products],
     }
 
 
@@ -173,7 +181,7 @@ def get_product_by_barcode(
     product = query.first()
     if not product:
         raise HTTPException(status_code=404, detail="Product not found")
-    return _product_dict(product, db)
+    return _product_dict(product)
 
 
 # ── GET ONE ───────────────────────────────────────────────────────────────────
@@ -190,7 +198,7 @@ def get_product(
         raise HTTPException(status_code=404, detail="Product not found")
     if current_user.role != SUPERADMIN_ROLE and product.business_id != current_user.business_id:
         raise HTTPException(status_code=403, detail="Not authorized")
-    return _product_dict(product, db)
+    return _product_dict(product)
 
 
 # ── UPDATE ────────────────────────────────────────────────────────────────────
@@ -249,7 +257,7 @@ def update_product(
 
     db.commit()
     db.refresh(existing)
-    return _product_dict(existing, db)
+    return _product_dict(existing)
 
 
 # ── IMPORT TEMPLATE DOWNLOAD ──────────────────────────────────────────────────
