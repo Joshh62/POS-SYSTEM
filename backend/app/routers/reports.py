@@ -52,14 +52,15 @@ def _daily_dashboard_branch_ids(
     if user.role == SUPERADMIN_ROLE:
         return [resolved_branch_id] if resolved_branch_id else None
     if user.role == "admin":
-        if resolved_branch_id:
-            return [resolved_branch_id]
         rows = (
             db.query(models.Branch.branch_id)
             .filter(models.Branch.business_id == user.business_id)
             .all()
         )
-        return [row[0] for row in rows]
+        permitted_branch_ids = [row[0] for row in rows]
+        if resolved_branch_id in permitted_branch_ids:
+            return [resolved_branch_id]
+        return permitted_branch_ids
     return [user.branch_id]
 
 

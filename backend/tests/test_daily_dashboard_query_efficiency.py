@@ -26,14 +26,19 @@ def test_daily_dashboard_resolves_admin_branch_scope_once():
     ]
 
 
-def test_daily_dashboard_uses_resolved_branch_without_branch_lookup():
-    class NoQueryDB:
-        def query(self, *args):
-            raise AssertionError("branch lookup was not expected")
-
+def test_daily_dashboard_uses_permitted_resolved_branch():
     user = SimpleNamespace(role="admin", business_id=7, branch_id=11)
 
-    assert reports._daily_dashboard_branch_ids(NoQueryDB(), user, 12) == [12]
+    assert reports._daily_dashboard_branch_ids(BranchRowsDB(), user, 12) == [12]
+
+
+def test_daily_dashboard_rejects_cross_business_resolved_branch():
+    user = SimpleNamespace(role="admin", business_id=7, branch_id=11)
+
+    assert reports._daily_dashboard_branch_ids(BranchRowsDB(), user, 99) == [
+        11,
+        12,
+    ]
 
 
 def test_daily_dashboard_keeps_superadmin_all_branch_scope_unbounded():
@@ -45,6 +50,9 @@ def test_daily_dashboard_keeps_superadmin_all_branch_scope_unbounded():
 
 def test_dashboard_chart_always_describes_seven_days(monkeypatch):
     class ResultQuery:
+        def __init__(self, rows=None):
+            self.rows = rows or []
+
         def filter(self, *args):
             return self
 
@@ -55,7 +63,7 @@ def test_dashboard_chart_always_describes_seven_days(monkeypatch):
             return self
 
         def all(self):
-            return []
+            return self.rows
 
         def scalar(self):
             return 0
@@ -66,6 +74,8 @@ def test_dashboard_chart_always_describes_seven_days(monkeypatch):
 
         def query(self, *args):
             self.query_count += 1
+            if self.query_count == 1:
+                return ResultQuery([(11,)])
             return ResultQuery()
 
     monkeypatch.setattr(reports, "_resolve_branch", lambda user, branch_id: 11)
@@ -77,4 +87,4 @@ def test_dashboard_chart_always_describes_seven_days(monkeypatch):
     assert len(result["chart"]["labels"]) == 7
     assert len(result["chart"]["datasets"][0]["data"]) == 7
     assert result["chart"]["labels"][-1] == date.today().isoformat()
-    assert db.query_count == 3
+    assert db.query_count == 4
