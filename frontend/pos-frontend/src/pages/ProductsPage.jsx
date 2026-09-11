@@ -79,6 +79,7 @@ export default function ProductsPage() {
   const [searchInput, setSearchInput] = useState("");
   const [loading,     setLoading]     = useState(false);
   const [error,       setError]       = useState(null);
+  const requestRef = useRef(0);
 
   const [showForm,    setShowForm]    = useState(false);
   const [editing,     setEditing]     = useState(null);
@@ -119,6 +120,8 @@ export default function ProductsPage() {
   });
 
   const fetchData = async () => {
+    const requestId = ++requestRef.current;
+    setProducts([]); setCategories([]); setSuppliers([]); setTotal(0);
     if (isSuperadmin && !activeBusinessId) {
       setProducts([]); setCategories([]); setSuppliers([]); setTotal(0);
       setError("Select a business branch to view its product catalog.");
@@ -127,17 +130,19 @@ export default function ProductsPage() {
     setLoading(true); setError(null);
     try {
       const [prod, cats, sups] = await Promise.all([
-        getProducts(page, LIMIT, search),
+        getProducts(page, LIMIT, search, activeBusinessId),
         getCategories(),
         api.get("/suppliers/", { params: activeBusinessId ? { business_id: activeBusinessId } : {} }).then(r => r.data).catch(() => []),
       ]);
+      if (requestId !== requestRef.current) return;
       setProducts(prod?.data || []);
       setTotal(prod?.total || 0);
       setCategories(Array.isArray(cats) ? cats : []);
       setSuppliers(Array.isArray(sups) ? sups : []);
     } catch (err) {
+      if (requestId !== requestRef.current) return;
       console.error(err); setError("Failed to load products.");
-    } finally { setLoading(false); }
+    } finally { if (requestId === requestRef.current) setLoading(false); }
   };
 
   useEffect(() => { fetchData(); }, [page, search, activeBusinessId]);

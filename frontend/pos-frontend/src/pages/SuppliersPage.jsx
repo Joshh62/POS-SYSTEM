@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import api from "../api/api";
 import { useBranch } from "../context/BranchContext";
 
@@ -11,6 +11,8 @@ export default function SuppliersPage() {
   const [suppliers,  setSuppliers]  = useState([]);
   const [loading,    setLoading]    = useState(true);
   const [error,      setError]      = useState(null);
+  const requestRef = useRef(0);
+  const detailRequestRef = useRef(0);
   const [search,     setSearch]     = useState("");
 
   // ── Selected supplier detail ──────────────────────────────────────────────
@@ -28,27 +30,33 @@ export default function SuppliersPage() {
   const [deletingId, setDeletingId] = useState(null);
 
   const fetchSuppliers = async () => {
+    const requestId = ++requestRef.current;
+    ++detailRequestRef.current;
+    setSuppliers([]); setSelected(null);
     if (user.role === "superadmin" && !activeBusinessId) {
       setSuppliers([]); setError("Select a business branch to view its suppliers."); setLoading(false); return;
     }
     setLoading(true); setError(null);
     try {
       const res = await api.get("/suppliers/", { params: { search: search || undefined, business_id: activeBusinessId || undefined } });
+      if (requestId !== requestRef.current) return;
       setSuppliers(res.data);
-    } catch { setError("Failed to load suppliers."); }
-    finally { setLoading(false); }
+    } catch { if (requestId === requestRef.current) setError("Failed to load suppliers."); }
+    finally { if (requestId === requestRef.current) setLoading(false); }
   };
 
   useEffect(() => { fetchSuppliers(); }, [activeBusinessId]);
 
   const viewSupplier = async (s) => {
+    const detailRequestId = ++detailRequestRef.current;
     setSelected(null);
     setDetailLoad(true);
     try {
       const res = await api.get(`/suppliers/${s.supplier_id}`);
+      if (detailRequestId !== detailRequestRef.current) return;
       setSelected(res.data);
-    } catch { setSelected(s); }
-    finally { setDetailLoad(false); }
+    } catch { if (detailRequestId === detailRequestRef.current) setSelected(s); }
+    finally { if (detailRequestId === detailRequestRef.current) setDetailLoad(false); }
   };
 
   const openCreate = () => {

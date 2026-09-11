@@ -13,7 +13,8 @@
 const QUEUE_KEY    = "pos_offline_queue";
 const PRODUCTS_KEY = "pos_cached_products";
 
-function tenantScope() {
+function tenantScope(businessIdOverride = null) {
+  if (businessIdOverride) return `business-${businessIdOverride}`;
   try {
     const user = JSON.parse(localStorage.getItem("user") || "{}");
     const businessId = user.business_id ?? localStorage.getItem("activeBusinessId");
@@ -23,8 +24,8 @@ function tenantScope() {
   }
 }
 
-function scopedKey(baseKey) {
-  const scope = tenantScope();
+function scopedKey(baseKey, businessIdOverride = null) {
+  const scope = tenantScope(businessIdOverride);
   return scope ? `${baseKey}:${scope}` : null;
 }
 
@@ -117,9 +118,9 @@ export async function syncQueue(createSaleFn) {
 
 // ── Product cache for offline POS ─────────────────────────────────────────────
 
-export function cacheProducts(products) {
+export function cacheProducts(products, businessId = null) {
   try {
-    const key = scopedKey(PRODUCTS_KEY);
+    const key = scopedKey(PRODUCTS_KEY, businessId);
     if (!key) return;
     localStorage.setItem(key, JSON.stringify({
       cached_at: new Date().toISOString(),
@@ -130,9 +131,9 @@ export function cacheProducts(products) {
   }
 }
 
-export function getCachedProducts() {
+export function getCachedProducts(businessId = null) {
   try {
-    const key = scopedKey(PRODUCTS_KEY);
+    const key = scopedKey(PRODUCTS_KEY, businessId);
     if (!key) return null;
     const raw = localStorage.getItem(key);
     if (!raw) return null;
