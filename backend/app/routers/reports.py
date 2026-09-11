@@ -43,6 +43,32 @@ def _resolve_branch(user, branch_id_param: Optional[int]) -> Optional[int]:
     return get_active_branch_id(user, branch_id_param)
 
 
+def _daily_dashboard_branch_ids(
+    db: Session,
+    user,
+    resolved_branch_id: Optional[int],
+) -> Optional[list[int]]:
+    """Resolve dashboard branch scope once for the complete request."""
+    if user.role == SUPERADMIN_ROLE:
+        return [resolved_branch_id] if resolved_branch_id else None
+    if user.role == "admin":
+        if resolved_branch_id:
+            return [resolved_branch_id]
+        rows = (
+            db.query(models.Branch.branch_id)
+            .filter(models.Branch.business_id == user.business_id)
+            .all()
+        )
+        return [row[0] for row in rows]
+    return [user.branch_id]
+
+
+def _filter_branch_ids(query, model_with_branch, branch_ids: Optional[list[int]]):
+    if branch_ids is not None:
+        query = query.filter(model_with_branch.branch_id.in_(branch_ids))
+    return query
+
+
 def _get_expense_total(db, user, branch_id: Optional[int]) -> float:
     """Get total expenses for the current business/branch scope."""
     q = db.query(func.sum(models.Expense.amount)).filter(
@@ -361,18 +387,32 @@ def daily_dashboard(
 ):
     today    = date.today()
     resolved = _resolve_branch(user, branch_id)
+    scoped_branch_ids = _daily_dashboard_branch_ids(db, user, resolved)
 
-    days, sales_data = [], []
-    for i in range(6, -1, -1):
-        day = today - timedelta(days=i)
-        q   = (
-            db.query(func.sum(Sale.total_amount))
-            .filter(func.date(Sale.sale_date) == day)
-            .filter(Sale.status == "completed")
+    chart_days = [today - timedelta(days=i) for i in range(6, -1, -1)]
+    start_at = datetime.combine(chart_days[0], datetime.min.time())
+    end_at = datetime.combine(today + timedelta(days=1), datetime.min.time())
+
+    daily_sales_query = (
+        db.query(
+            func.date(Sale.sale_date).label("sale_day"),
+            func.sum(Sale.total_amount).label("total_sales"),
         )
-        q = _branch_filter(q, Sale, user, resolved)
-        days.append(day.strftime("%Y-%m-%d"))
-        sales_data.append(float(q.scalar() or 0))
+        .filter(Sale.sale_date >= start_at)
+        .filter(Sale.sale_date < end_at)
+        .filter(Sale.status == "completed")
+    )
+    daily_sales_query = _filter_branch_ids(
+        daily_sales_query,
+        Sale,
+        scoped_branch_ids,
+    )
+    totals_by_day = {
+        str(row.sale_day): float(row.total_sales or 0)
+        for row in daily_sales_query.group_by(func.date(Sale.sale_date)).all()
+    }
+    days = [day.strftime("%Y-%m-%d") for day in chart_days]
+    sales_data = [totals_by_day.get(day, 0.0) for day in days]
 
     total_sales = sales_data[-1]
 
@@ -381,7 +421,7 @@ def daily_dashboard(
         .filter(func.date(Sale.sale_date) == today)
         .filter(Sale.status == "completed")
     )
-    q_txns = _branch_filter(q_txns, Sale, user, resolved)
+    q_txns = _filter_branch_ids(q_txns, Sale, scoped_branch_ids)
 
     q_profit = (
         db.query(func.sum((SaleItem.unit_price - Product.cost_price) * SaleItem.quantity))
@@ -390,7 +430,7 @@ def daily_dashboard(
         .filter(func.date(Sale.sale_date) == today)
         .filter(Sale.status == "completed")
     )
-    q_profit = _branch_filter(q_profit, Sale, user, resolved)
+    q_profit = _filter_branch_ids(q_profit, Sale, scoped_branch_ids)
 
     return {
         "summary": {
