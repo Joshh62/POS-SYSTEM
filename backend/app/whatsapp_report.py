@@ -37,6 +37,40 @@ FALLBACK_NAME   = os.getenv("SHOP_NAME", "Your Shop")
 WHATSAPP_PLANS = {"business", "enterprise"}
 
 
+def _truthy_env(name: str) -> bool:
+    return os.getenv(name, "false").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _daily_report_canary_business_id() -> int | None:
+    raw = os.getenv("WHATSAPP_DAILY_REPORT_CANARY_BUSINESS_ID", "").strip()
+    if not raw:
+        return None
+    try:
+        value = int(raw)
+    except ValueError as exc:
+        raise RuntimeError("WHATSAPP_DAILY_REPORT_CANARY_BUSINESS_ID must be an integer") from exc
+    if value <= 0:
+        raise RuntimeError("WHATSAPP_DAILY_REPORT_CANARY_BUSINESS_ID must be positive")
+    return value
+
+
+def _scope_daily_report_businesses(businesses):
+    """Fail closed unless one canary tenant or explicit global rollout is authorized."""
+    canary_business_id = _daily_report_canary_business_id()
+    global_authorized = _truthy_env("WHATSAPP_DAILY_REPORT_GLOBAL_AUTHORIZED")
+
+    if canary_business_id is not None and global_authorized:
+        raise RuntimeError("Daily report canary and global rollout cannot both be authorized")
+    if canary_business_id is not None:
+        return [
+            business for business in businesses
+            if business.business_id == canary_business_id
+        ]
+    if global_authorized:
+        return list(businesses)
+    return []
+
+
 def _twilio_client():
     if not TWILIO_SID or not TWILIO_TOKEN:
         return None
@@ -88,6 +122,7 @@ def send_whatsapp_report_for_hour(db: Session, hour: int):
     ).all()
 
     qualifying = [b for b in businesses if _business_qualifies_for_report(b)]
+    qualifying = _scope_daily_report_businesses(qualifying)
 
     if not qualifying:
         print(f"[WhatsApp] Hour {hour:02d}: no businesses scheduled")
@@ -305,14 +340,10 @@ def send_whatsapp_report(db: Session):
         print("[WhatsApp] Missing Twilio credentials — skipping daily reports")
         return
 
-    businesses = _get_all_qualifying_businesses(db)
+    businesses = _scope_daily_report_businesses(_get_all_qualifying_businesses(db))
 
     if not businesses:
-        # Legacy fallback — single business via env vars
-        if FALLBACK_TO:
-            _send_legacy_report(db, client)
-        else:
-            print("[WhatsApp] No qualifying businesses found for daily report")
+        print("[WhatsApp] Daily report rollout has no authorized businesses")
         return
 
     sent, failed = 0, 0
