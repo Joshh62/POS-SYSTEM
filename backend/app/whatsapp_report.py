@@ -343,11 +343,7 @@ def send_whatsapp_report(db: Session):
     businesses = _scope_daily_report_businesses(_get_all_qualifying_businesses(db))
 
     if not businesses:
-        # Legacy fallback — single business via env vars
-        if FALLBACK_TO:
-            _send_legacy_report(db, client)
-        else:
-            print("[WhatsApp] No qualifying businesses found for daily report")
+        print("[WhatsApp] Daily report rollout has no authorized businesses")
         return
 
     sent, failed = 0, 0
