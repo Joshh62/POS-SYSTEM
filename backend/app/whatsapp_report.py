@@ -18,16 +18,18 @@ On Solo and Starter paid plans, daily reports are skipped (plan limitation).
 """
 
 import os
+import json
 from datetime import date, datetime, timedelta
 from sqlalchemy.orm import Session
-from sqlalchemy import func, and_
+from sqlalchemy import func, and_, false
 from dotenv import load_dotenv
+import pytz
 
 load_dotenv()
 
 TWILIO_SID   = os.getenv("TWILIO_ACCOUNT_SID")
 TWILIO_TOKEN = os.getenv("TWILIO_AUTH_TOKEN")
-FROM_NUMBER  = os.getenv("TWILIO_WHATSAPP_FROM", "whatsapp:+14155238886")
+LAGOS_TZ     = pytz.timezone("Africa/Lagos")
 
 # Fallback for legacy single-business setup
 FALLBACK_TO     = os.getenv("SHOP_OWNER_WHATSAPP")
@@ -80,6 +82,40 @@ def _twilio_client():
     except Exception as e:
         print(f"[WhatsApp] Twilio init failed: {e}")
         return None
+
+
+def _daily_report_content_sid() -> str:
+    """Return the approved daily-report template SID or fail closed."""
+    content_sid = os.getenv("WHATSAPP_DAILY_REPORT_CONTENT_SID", "").strip()
+    if not content_sid:
+        raise RuntimeError("WHATSAPP_DAILY_REPORT_CONTENT_SID is required")
+    if not content_sid.startswith("HX"):
+        raise RuntimeError("WHATSAPP_DAILY_REPORT_CONTENT_SID must start with HX")
+    return content_sid
+
+
+def _whatsapp_from_number() -> str:
+    """Require the explicitly configured production WhatsApp sender."""
+    from_number = os.getenv("TWILIO_WHATSAPP_FROM", "").strip()
+    if not from_number:
+        raise RuntimeError("TWILIO_WHATSAPP_FROM is required")
+    if not from_number.startswith("whatsapp:+"):
+        raise RuntimeError("TWILIO_WHATSAPP_FROM must use whatsapp:+E164 format")
+    return from_number
+
+
+def _send_daily_report_message(client, *, to_number: str, variables: dict):
+    """Send one business-initiated report through the approved template."""
+    kwargs = {
+        "from_": _whatsapp_from_number(),
+        "to": to_number,
+        "content_sid": _daily_report_content_sid(),
+        "content_variables": json.dumps(variables, ensure_ascii=False),
+    }
+    status_callback = os.getenv("TWILIO_WHATSAPP_STATUS_CALLBACK_URL", "").strip()
+    if status_callback:
+        kwargs["status_callback"] = status_callback
+    return client.messages.create(**kwargs)
 
 
 def _format_phone(phone: str) -> str:
@@ -139,8 +175,12 @@ def send_whatsapp_report_for_hour(db: Session, hour: int):
         if not to_number:
             continue
         try:
-            body    = build_daily_report(db, biz)
-            message = client.messages.create(from_=FROM_NUMBER, to=to_number, body=body)
+            variables = build_daily_report(db, biz, template_variables=True)
+            message = _send_daily_report_message(
+                client,
+                to_number=to_number,
+                variables=variables,
+            )
             sent += 1
             print(f"[WhatsApp] Report → {biz.name} ({to_number}) SID: {message.sid}")
         except Exception as e:
@@ -172,10 +212,10 @@ def _get_admin_phone(business, db: Session) -> str | None:
 
 
 # ── Build daily report for one business ──────────────────────────────────────
-def build_daily_report(db: Session, business=None) -> str:
+def build_daily_report(db: Session, business=None, *, template_variables: bool = False):
     from app import models
 
-    today     = date.today()
+    today     = datetime.now(LAGOS_TZ).date()
     shop_name = (business.name if business else None) or FALLBACK_NAME
     biz_id    = business.business_id if business else None
 
@@ -191,8 +231,9 @@ def build_daily_report(db: Session, business=None) -> str:
                     models.Branch.business_id == biz_id
                 ).all()
             ]
-            if branch_ids:
-                q = q.filter(models.Sale.branch_id.in_(branch_ids))
+            q = q.filter(
+                models.Sale.branch_id.in_(branch_ids) if branch_ids else false()
+            )
         return q
 
     sale_ids = [s.sale_id for s in sale_q().all()]
@@ -237,8 +278,9 @@ def build_daily_report(db: Session, business=None) -> str:
                 models.Branch.business_id == biz_id
             ).all()
         ]
-        if branch_ids:
-            low_q = low_q.filter(models.BranchInventory.branch_id.in_(branch_ids))
+        low_q = low_q.filter(
+            models.BranchInventory.branch_id.in_(branch_ids) if branch_ids else false()
+        )
     low_stock = low_q.filter(
         models.BranchInventory.stock_quantity <= models.BranchInventory.reorder_level
     ).all()
@@ -270,6 +312,34 @@ def build_daily_report(db: Session, business=None) -> str:
 
     expiring_soon_items.sort(key=lambda x: x[2])
     expired_items.sort(key=lambda x: x[2], reverse=True)
+
+    top_products_summary = (
+        "; ".join(f"{p.product_name} — {p.qty} units" for p in top_q)
+        if top_q else "No completed sales recorded today"
+    )
+    stock_parts = []
+    if low_stock:
+        stock_parts.append(f"{len(low_stock)} low-stock product{'s' if len(low_stock) != 1 else ''}")
+    else:
+        stock_parts.append("All products well stocked")
+    if expired_items:
+        stock_parts.append(f"{len(expired_items)} expired batch{'es' if len(expired_items) != 1 else ''}")
+    if expiring_soon_items:
+        stock_parts.append(f"{len(expiring_soon_items)} batch{'es' if len(expiring_soon_items) != 1 else ''} expiring soon")
+    if not expired_items and not expiring_soon_items:
+        stock_parts.append("no expiry alerts")
+    stock_expiry_summary = "; ".join(stock_parts)
+
+    if template_variables:
+        return {
+            "1": shop_name,
+            "2": today.strftime("%A, %d %B %Y"),
+            "3": f"{float(total_sales):,.2f}",
+            "4": str(txn_count),
+            "5": f"{float(profit):,.2f}",
+            "6": top_products_summary,
+            "7": stock_expiry_summary,
+        }
 
     lines = [
         f"📊 *Daily Sales Report — {shop_name}*",
@@ -353,11 +423,11 @@ def send_whatsapp_report(db: Session):
             print(f"[WhatsApp] {biz.name}: no phone number — skipping")
             continue
         try:
-            body    = build_daily_report(db, biz)
-            message = client.messages.create(
-                from_=FROM_NUMBER,
-                to=to_number,
-                body=body,
+            variables = build_daily_report(db, biz, template_variables=True)
+            message = _send_daily_report_message(
+                client,
+                to_number=to_number,
+                variables=variables,
             )
             sent += 1
             print(f"[WhatsApp] Report sent to {biz.name} ({to_number}) SID: {message.sid}")
