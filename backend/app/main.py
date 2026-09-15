@@ -24,7 +24,7 @@ else:
 # ── Imports ───────────────────────────────────────────────────────────────────
 import time
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, Depends, Response, status
+from fastapi import FastAPI, Depends, Response, Request, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from sqlalchemy import text
@@ -148,3 +148,30 @@ def trigger_whatsapp_report(
     from app.whatsapp_report import send_whatsapp_report
     sid = send_whatsapp_report(db)
     return {"message": "Report sent", "sid": sid}
+
+
+@app.post("/webhooks/twilio/whatsapp-status", include_in_schema=False)
+async def twilio_whatsapp_status(request: Request):
+    """Validate and record Twilio delivery-state callbacks without message content."""
+    from twilio.request_validator import RequestValidator
+
+    auth_token = os.getenv("TWILIO_AUTH_TOKEN", "").strip()
+    callback_url = os.getenv("TWILIO_WHATSAPP_STATUS_CALLBACK_URL", "").strip()
+    signature = request.headers.get("X-Twilio-Signature", "")
+    if not auth_token or not callback_url or not signature:
+        raise HTTPException(status_code=403, detail="Invalid callback signature")
+
+    form = await request.form()
+    fields = dict(form)
+    if not RequestValidator(auth_token).validate(callback_url, fields, signature):
+        raise HTTPException(status_code=403, detail="Invalid callback signature")
+
+    message_sid = str(fields.get("MessageSid", ""))
+    message_status = str(fields.get("MessageStatus", "unknown"))
+    error_code = str(fields.get("ErrorCode", ""))
+    print(
+        "[WhatsApp] Delivery status"
+        f" SID={message_sid} status={message_status}"
+        + (f" error_code={error_code}" if error_code else "")
+    )
+    return Response(status_code=204)
