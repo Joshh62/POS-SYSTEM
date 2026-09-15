@@ -23,6 +23,23 @@ def scheduled_whatsapp_reports_enabled() -> bool:
     }
 
 
+def scheduled_whatsapp_due_date_alerts_enabled() -> bool:
+    """Require explicit opt-in for template-backed customer due-date alerts."""
+    return os.getenv("WHATSAPP_DUE_DATE_ALERTS_ENABLED", "false").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+
+
+def scheduled_whatsapp_monthly_credit_summary_enabled() -> bool:
+    """Require explicit opt-in for template-backed monthly credit summaries."""
+    return os.getenv(
+        "WHATSAPP_MONTHLY_CREDIT_SUMMARY_ENABLED", "false"
+    ).strip().lower() in {"1", "true", "yes", "on"}
+
+
 def seconds_until(hour: int, minute: int = 0) -> float:
     now    = datetime.now(LAGOS_TZ)
     target = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
@@ -287,11 +304,17 @@ def start_scheduler():
         print("[Scheduler] Started — WhatsApp reports: hourly check, per-business report_hour")
     else:
         print("[Scheduler] WhatsApp scheduled reports disabled")
-    loop.create_task(due_date_alerts_loop())
-    loop.create_task(monthly_credit_summary_loop())
+    if scheduled_whatsapp_due_date_alerts_enabled():
+        loop.create_task(due_date_alerts_loop())
+        print("[Scheduler] Started — due date alerts at 8:00 AM Lagos")
+    else:
+        print("[Scheduler] WhatsApp due date alerts disabled")
+    if scheduled_whatsapp_monthly_credit_summary_enabled():
+        loop.create_task(monthly_credit_summary_loop())
+        print("[Scheduler] Started — monthly credit summary on 1st")
+    else:
+        print("[Scheduler] WhatsApp monthly credit summary disabled")
     loop.create_task(monthly_points_expiry_loop())
     loop.create_task(account_deletion_cleanup_loop())
-    print("[Scheduler] Started — due date alerts at 8:00 AM Lagos")
-    print("[Scheduler] Started — monthly credit summary on 1st")
     print("[Scheduler] Started — loyalty expiry on 1st")
     print("[Scheduler] Started — deletion cleanup at 2:00 AM Lagos")
