@@ -15,11 +15,52 @@ from sqlalchemy.orm import sessionmaker
 
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://user:password@localhost/posdb")
 
+
+def _positive_int(environment, name, default):
+    raw_value = environment.get(name, str(default))
+    try:
+        value = int(raw_value)
+    except (TypeError, ValueError) as exc:
+        raise RuntimeError(f"{name} must be a positive integer") from exc
+    if value <= 0:
+        raise RuntimeError(f"{name} must be a positive integer")
+    return value
+
+
+def database_engine_options(environment=None):
+    """Return bounded runtime-pool settings without exposing connection data."""
+    environment = os.environ if environment is None else environment
+    return {
+        "pool_pre_ping": True,
+        "pool_size": _positive_int(environment, "DATABASE_POOL_SIZE", 10),
+        "max_overflow": _positive_int(
+            environment, "DATABASE_MAX_OVERFLOW", 20
+        ),
+        "pool_timeout": _positive_int(
+            environment, "DATABASE_POOL_TIMEOUT_SECONDS", 30
+        ),
+        "pool_recycle": _positive_int(
+            environment, "DATABASE_POOL_RECYCLE_SECONDS", 300
+        ),
+        "pool_use_lifo": True,
+        "connect_args": {
+            "keepalives": 1,
+            "keepalives_idle": _positive_int(
+                environment, "DATABASE_KEEPALIVES_IDLE_SECONDS", 30
+            ),
+            "keepalives_interval": _positive_int(
+                environment, "DATABASE_KEEPALIVES_INTERVAL_SECONDS", 10
+            ),
+            "keepalives_count": _positive_int(
+                environment, "DATABASE_KEEPALIVES_COUNT", 5
+            ),
+        },
+    }
+
+
 engine = create_engine(
     DATABASE_URL,
-    pool_pre_ping=True,       # reconnect on stale connections
-    pool_size=10,
-    max_overflow=20,
+    **database_engine_options(),
 )
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)

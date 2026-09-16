@@ -69,7 +69,7 @@ No separate durable daily observation was preserved for 2026-09-10, 2026-09-12 o
 | Dates with durable bounded observations | 4 of 7: 2026-09-11, 2026-09-13, 2026-09-14 and 2026-09-16 |
 | Dates without separate durable observations | 3 of 7: 2026-09-10, 2026-09-12 and 2026-09-15 |
 | Documented service-check outcome | All recorded service and controlled-account checks passed at their observation points |
-| Material production incident recorded in this window | None in the preserved observations |
+| Material production exception recorded in this window | Post-closure Sentry review identified recurring database-readiness connection errors; customer impact was not established |
 | Customer activation outcome | No new first-value progression was evidenced in the closing observations |
 | Longitudinal effectiveness conclusion | Not established because daily coverage was incomplete and the window was short |
 
@@ -78,6 +78,18 @@ No separate durable daily observation was preserved for 2026-09-10, 2026-09-12 o
 The 2026-09-13 observation passed. Core service health, database access, tenant/branch boundaries, deployment state and the scheduled-report safeguard behaved as expected at the time checked.
 
 The closing observations support a bounded conclusion that ProfitTrack's API, database and tested user journeys were operating at the recorded check times. They do not establish seven-day uptime, retention, customer adoption, service-level performance or longitudinal control effectiveness. Customer activation remains the main unresolved operating issue.
+
+## Post-closure exception reconciliation — 2026-09-16
+
+After the bounded record was closed, the authoritative production monitor showed recurring database-readiness exceptions that occurred within the observation window but were not available in the preserved daily entries:
+
+- five `psycopg2.InterfaceError` events reporting a closed connection;
+- six `psycopg2.OperationalError` events reporting an unexpectedly closed SSL connection; and
+- one separate deliberate production-monitoring canary event.
+
+The two connection-error groups originated from the database-aware health check. Later successful health and controlled-account checks establish recovery at those observation points only. They do not erase the intervening readiness failures. No customer-facing failure was established from the evidence reviewed, so this record does not classify the exceptions as a confirmed customer-impacting incident.
+
+The connection-error issues remain open pending deployment of bounded connection-pool hardening and a separate 24–48-hour post-deployment observation. The canary is retained as expected test evidence and must not be counted as an operational failure.
 
 The result does not authorize global WhatsApp scheduled reporting. Activation remains dependent on a company-controlled production sender, approved template, explicit canary scope, a successful end-to-end canary and separate global authorization.
 
@@ -88,6 +100,7 @@ The result does not authorize global WhatsApp scheduled reporting. Activation re
 3. Complete approval of the aggregate lifecycle-query definitions before treating enabled or registered tenants as active.
 4. Complete the production WhatsApp single-tenant canary and review delivery-status evidence before any scheduled or global activation.
 5. Continue the separately governed post-incorporation transition actions.
+6. Deploy the reviewed database-pool hardening and observe the two production readiness issues for 24–48 hours before resolution or any stability claim.
 
 ## Window completion rule
 
