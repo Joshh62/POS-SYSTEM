@@ -89,7 +89,19 @@ After the bounded record was closed, the authoritative production monitor showed
 
 The two connection-error groups originated from the database-aware health check. Later successful health and controlled-account checks establish recovery at those observation points only. They do not erase the intervening readiness failures. No customer-facing failure was established from the evidence reviewed, so this record does not classify the exceptions as a confirmed customer-impacting incident.
 
-The connection-error issues remain open pending deployment of bounded connection-pool hardening and a separate 24–48-hour post-deployment observation. The canary is retained as expected test evidence and must not be counted as an operational failure.
+The connection-error issues remain open during a separate 24–48-hour post-deployment observation. The canary is retained as expected test evidence and must not be counted as an operational failure.
+
+### Remediation deployment checkpoint — 2026-09-16
+
+POS-SYSTEM PR #29 was squash-merged as commit `af47ccb` after 81 backend tests passed and 46 database-dependent tests were skipped in CI. The operator confirmed that `af47ccb` was manually redeployed and Live on Render.
+
+Immediate external checks after the confirmed deployment returned:
+
+- `/live`: HTTP 200 with service status `ok`;
+- `/health`: HTTP 200 with database `ok`; and
+- database latency: 1,149.8 ms.
+
+The latency is one observation and is not classified as a regression or performance trend. The deployment checkpoint starts the 24–48-hour watch for new occurrences of the two connection-error groups. Their Sentry issues remain open until event counts and last-seen timestamps are reviewed after the observation period.
 
 The result does not authorize global WhatsApp scheduled reporting. Activation remains dependent on a company-controlled production sender, approved template, explicit canary scope, a successful end-to-end canary and separate global authorization.
 
@@ -100,7 +112,7 @@ The result does not authorize global WhatsApp scheduled reporting. Activation re
 3. Complete approval of the aggregate lifecycle-query definitions before treating enabled or registered tenants as active.
 4. Complete the production WhatsApp single-tenant canary and review delivery-status evidence before any scheduled or global activation.
 5. Continue the separately governed post-incorporation transition actions.
-6. Deploy the reviewed database-pool hardening and observe the two production readiness issues for 24–48 hours before resolution or any stability claim.
+6. Observe the deployed database-pool hardening at commit `af47ccb` for 24–48 hours and review both production readiness issues before resolution or any stability claim.
 
 ## Window completion rule
 
