@@ -5,8 +5,8 @@
 | Field | Value |
 |---|---|
 | Observation window | 2026-09-10 through 2026-09-16 |
-| Current entry | 2026-09-13 |
-| Window status | In progress |
+| Current entry | 2026-09-16 |
+| Window status | Closed — bounded observation with incomplete daily coverage |
 | Owner | Founder and CEO / Technology |
 | Evidence classification | Sanitized operational summary |
 | Detailed evidence | Authoritative platform logs, product tests and private operator records |
@@ -15,6 +15,16 @@
 This record preserves bounded daily operating observations without customer identities, contact details, credentials, transaction data or revenue. A successful daily observation is point-in-time evidence and does not establish an uptime percentage, formal service-level objective, recovery effectiveness or longitudinal control effectiveness.
 
 ## Daily observations
+
+### 2026-09-11
+
+| Check | Result | Bounded evidence |
+|---|---|---|
+| API and database health | Pass | Health response returned HTTP 200 with database `ok`. |
+| Production issue watch | Pass at observation point | No new occurrences were observed for the two issues placed under the seven-day watch. Fixed-issue counts and last-seen state were reviewed separately in the authoritative monitoring source. |
+| Customer impact | None observed | No customer impact was reported for the bounded checks performed. |
+
+This was a point-in-time observation. It does not establish the absence of failures outside the checked period.
 
 ### 2026-09-13
 
@@ -28,15 +38,60 @@ This record preserves bounded daily operating observations without customer iden
 | Scheduled WhatsApp reports | Safeguard active | Scheduled reports remained disabled through `WHATSAPP_SCHEDULED_REPORTS_ENABLED=false`. |
 | Twilio activity | No post-safeguard attempts observed | No report-delivery attempts were observed after the safeguard became active. This does not establish production sender readiness. |
 
+### 2026-09-14
+
+| Check | Result | Bounded evidence |
+|---|---|---|
+| Customer-success follow-up | Recorded | A pseudonymous follow-up record was created in the private customer-success register. No identity or contact content is reproduced here. |
+| New-tenant activation | No progression observed | The newly registered tenant remained at an administrator-only setup state with no products recorded. |
+| Application smoke | Pass | The operator reported that the dashboard and relevant application pages loaded without error. |
+
+### 2026-09-16
+
+| Check | Result | Bounded evidence |
+|---|---|---|
+| API and database health | Pass | `/health` returned HTTP 200 with service status `ok`, database `ok` and observed database latency of 255.1 ms. This is one sample, not a performance objective. |
+| Superadmin smoke | Pass | The superadmin account loaded successfully. |
+| Test-tenant smoke | Pass | Sales, dashboard and general system functions operated successfully on the controlled test tenant. |
+| New-tenant activation | No progression observed | The new tenant still had only the administrator account and no products recorded. |
+| Existing-tenant activity | No new activity observed | No additional activity was observed on the older tenant account reviewed. |
+| Follow-up outcomes | No completed activation outcome | One previously contacted tenant had not responded. Another tenant that had indicated an intention to begin on Wednesday had not made further contact and had no additional test sales recorded. |
+
+### Observation coverage gaps
+
+No separate durable daily observation was preserved for 2026-09-10, 2026-09-12 or 2026-09-15. These dates are recorded as evidence gaps and are not reconstructed or counted as passes.
+
+## Closure summary
+
+| Measure | Result |
+|---|---|
+| Observation window | 2026-09-10 through 2026-09-16 |
+| Dates with durable bounded observations | 4 of 7: 2026-09-11, 2026-09-13, 2026-09-14 and 2026-09-16 |
+| Dates without separate durable observations | 3 of 7: 2026-09-10, 2026-09-12 and 2026-09-15 |
+| Documented service-check outcome | All recorded service and controlled-account checks passed at their observation points |
+| Material production incident recorded in this window | None in the preserved observations |
+| Customer activation outcome | No new first-value progression was evidenced in the closing observations |
+| Longitudinal effectiveness conclusion | Not established because daily coverage was incomplete and the window was short |
+
 ## Interpretation
 
 The 2026-09-13 observation passed. Core service health, database access, tenant/branch boundaries, deployment state and the scheduled-report safeguard behaved as expected at the time checked.
 
+The closing observations support a bounded conclusion that ProfitTrack's API, database and tested user journeys were operating at the recorded check times. They do not establish seven-day uptime, retention, customer adoption, service-level performance or longitudinal control effectiveness. Customer activation remains the main unresolved operating issue.
+
 The result does not authorize global WhatsApp scheduled reporting. Activation remains dependent on a company-controlled production sender, approved template, explicit canary scope, a successful end-to-end canary and separate global authorization.
+
+## Unresolved actions carried forward
+
+1. Contact the new tenant and record the blocker, outcome and next action in the private customer-success register.
+2. Continue follow-up with the two previously contacted tenants without publishing identities or support content.
+3. Complete approval of the aggregate lifecycle-query definitions before treating enabled or registered tenants as active.
+4. Complete the production WhatsApp single-tenant canary and review delivery-status evidence before any scheduled or global activation.
+5. Continue the separately governed post-incorporation transition actions.
 
 ## Window completion rule
 
-Do not close this record or publish the aggregate Week 37 corporate conclusion until the remaining scheduled observations are complete. At closure:
+This record is closed with explicit coverage gaps. At closure:
 
 1. retain detailed evidence in the operational source systems;
 2. record any material incident in its authoritative source;
