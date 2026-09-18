@@ -26,6 +26,17 @@ class FailingSession:
         self.closed = True
 
 
+class CleanupFailingSession:
+    close_attempted = False
+
+    def execute(self, _statement):
+        return 1
+
+    def close(self):
+        self.close_attempted = True
+        raise RuntimeError("postgresql://secret-host/private-database")
+
+
 def test_liveness_is_process_only():
     assert main.liveness_check() == {
         "status": "ok",
@@ -60,6 +71,21 @@ def test_readiness_returns_sanitized_503_and_closes_failed_session(monkeypatch):
     assert result["database"] == "unavailable"
     assert "secret-host" not in str(result)
     assert session.closed is True
+
+
+def test_readiness_contains_cleanup_failure_after_successful_query(monkeypatch):
+    session = CleanupFailingSession()
+    monkeypatch.setattr(main, "SessionLocal", lambda: session)
+    response = Response()
+
+    result = main.health_check(response)
+
+    assert response.status_code == 503
+    assert result["status"] == "unavailable"
+    assert result["database"] == "unavailable"
+    assert result["db_latency_ms"] is None
+    assert "secret-host" not in str(result)
+    assert session.close_attempted is True
 
 
 def test_platform_whatsapp_trigger_rejects_unauthenticated_request():

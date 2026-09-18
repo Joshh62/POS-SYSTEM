@@ -111,18 +111,29 @@ def health_check(response: Response):
     """Database-aware readiness check that does not disclose failure details."""
     start = time.time()
     db = None
+    db_status = "unavailable"
+    db_latency = None
     try:
         db = SessionLocal()
         db.execute(text("SELECT 1"))
         db_status = "ok"
         db_latency = round((time.time() - start) * 1000, 1)
     except Exception:
-        response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
-        db_status = "unavailable"
-        db_latency = None
+        pass
     finally:
         if db is not None:
-            db.close()
+            try:
+                db.close()
+            except Exception:
+                # A pooled connection can disappear after SELECT 1 succeeds but
+                # before SQLAlchemy rolls the transaction back during close.
+                # Treat that as failed readiness without exposing an unhandled
+                # database exception to the caller.
+                db_status = "unavailable"
+                db_latency = None
+
+    if db_status != "ok":
+        response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
 
     return {
         "status": "ok" if db_status == "ok" else "unavailable",
