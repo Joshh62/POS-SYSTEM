@@ -6,6 +6,8 @@ This weekly review helps the Founder & CEO distinguish tenant registration,
 setup, first value, recent use and commercial follow-up without exposing
 customer, product, cashier, payment, revenue or transaction-level information.
 
+The canonical lifecycle definitions and approved read-only query draft are maintained in `docs/operations/profittrack-tenant-lifecycle-query-specification.md`. Where this review summary and that specification differ, the specification governs after explicit operational approval.
+
 ## Metric definitions
 
 | Signal | Definition |
