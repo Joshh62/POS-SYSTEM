@@ -105,6 +105,18 @@ The latency is one observation and is not classified as a regression or performa
 
 The result does not authorize global WhatsApp scheduled reporting. Activation remains dependent on a company-controlled production sender, approved template, explicit canary scope, a successful end-to-end canary and separate global authorization.
 
+## Post-fix observation closure — 2026-09-20
+
+The separate 24–48-hour post-deployment observation is complete. At the closing review:
+
+- `/live` returned HTTP 200 with service status `ok`;
+- `/health` returned HTTP 200 with database status `ok`;
+- controlled tenant dashboard and branch switching continued to operate successfully;
+- the latest recorded events for the two database-readiness issue groups did not advance, while their last-seen ages continued to recede; and
+- both issue groups were manually resolved and no longer appeared in the unresolved monitor view.
+
+Counters shown by different Sentry time windows were not compared as if they were equivalent totals. Closure relied on stable latest-event evidence, receding last-seen state and successful bounded service checks. This supports closure of the remediation observation, but does not establish continuous availability or longitudinal control effectiveness.
+
 ## Unresolved actions carried forward
 
 1. Contact the new tenant and record the blocker, outcome and next action in the private customer-success register.
@@ -112,7 +124,6 @@ The result does not authorize global WhatsApp scheduled reporting. Activation re
 3. Complete approval of the aggregate lifecycle-query definitions before treating enabled or registered tenants as active.
 4. Complete the production WhatsApp single-tenant canary and review delivery-status evidence before any scheduled or global activation.
 5. Continue the separately governed post-incorporation transition actions.
-6. Observe the deployed database-pool hardening at commit `af47ccb` for 24–48 hours and review both production readiness issues before resolution or any stability claim.
 
 ## Window completion rule
 
