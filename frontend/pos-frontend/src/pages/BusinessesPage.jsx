@@ -23,6 +23,23 @@ const FOLLOW_UP_LABELS = {
   reactivation_follow_up: "Reactivation follow-up",
 };
 
+const SUBSCRIPTION_STYLES = {
+  trial:     { label: "Trial",       bg: "#E6F1FB", color: "#185FA5" },
+  active:    { label: "Active",      bg: "#EAF3DE", color: "#3B6D11" },
+  past_due:  { label: "Past due",    bg: "#FCEBEB", color: "#A32D2D" },
+  cancelled: { label: "Cancelled",   bg: "#F1EFE8", color: "#5F5E5A" },
+  expired:   { label: "Expired",     bg: "#FCEBEB", color: "#A32D2D" },
+  deletion_pending: { label: "Deletion pending", bg: "#FAEEDA", color: "#854F0B" },
+};
+
+const subscriptionStyle = (status) => (
+  SUBSCRIPTION_STYLES[status] || {
+    label: status ? status.replaceAll("_", " ") : "Unknown",
+    bg: "#F1EFE8",
+    color: "#5F5E5A",
+  }
+);
+
 const formatActivityDate = (value) => {
   if (!value) return "No sale recorded";
   const date = new Date(value);
@@ -49,6 +66,10 @@ export default function BusinessesPage() {
   const [businesses, setBusinesses] = useState([]);
   const [loading, setLoading]       = useState(true);
   const [error, setError]           = useState(null);
+  const [search, setSearch]         = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [planFilter, setPlanFilter] = useState("all");
+  const [activityFilter, setActivityFilter] = useState("all");
 
   // ── New business form ─────────────────────────────────────────────────────
   const [showForm, setShowForm]   = useState(false);
@@ -167,6 +188,40 @@ export default function BusinessesPage() {
     return summary;
   }, { registered: 0, setupReady: 0, firstValue: 0, recentlyActive: 0, followUp: 0 });
 
+  const subscriptionSummary = businesses.reduce((summary, biz) => {
+    const status = biz.subscription_status || "unknown";
+    summary[status] = (summary[status] || 0) + 1;
+    return summary;
+  }, {});
+
+  const normalizedSearch = search.trim().toLowerCase();
+  const filteredBusinesses = businesses.filter((biz) => {
+    const matchesSearch = !normalizedSearch || [
+      biz.name,
+      biz.owner_name,
+      biz.phone,
+      String(biz.business_id),
+    ].some(value => String(value || "").toLowerCase().includes(normalizedSearch));
+    const matchesStatus = statusFilter === "all" || biz.subscription_status === statusFilter;
+    const matchesPlan = planFilter === "all" || biz.plan === planFilter;
+    const matchesActivity = activityFilter === "all" || biz.activity?.status === activityFilter;
+    return matchesSearch && matchesStatus && matchesPlan && matchesActivity;
+  });
+
+  const clearFilters = () => {
+    setSearch("");
+    setStatusFilter("all");
+    setPlanFilter("all");
+    setActivityFilter("all");
+  };
+
+  const hasFilters = Boolean(
+    normalizedSearch
+    || statusFilter !== "all"
+    || planFilter !== "all"
+    || activityFilter !== "all"
+  );
+
   return (
     <div style={{ padding: "16px 24px", overflowY: "auto", height: "100%", boxSizing: "border-box" }}>
 
@@ -187,25 +242,77 @@ export default function BusinessesPage() {
       {loading && <div style={centreMsg}>Loading businesses...</div>}
 
       {!loading && (
-        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 16 }}>
-          {[
-            ["Registered", adoptionSummary.registered],
-            ["Setup ready", adoptionSummary.setupReady],
-            ["First value", adoptionSummary.firstValue],
-            ["Active · 30d", adoptionSummary.recentlyActive],
-            ["Follow-up due", adoptionSummary.followUp],
-          ].map(([label, value]) => (
-            <div key={label} style={statItem}>
-              <div style={statVal}>{value}</div>
-              <div style={statLabel}>{label}</div>
-            </div>
-          ))}
+        <div style={{ marginBottom: 16 }}>
+          <div style={sectionLabel}>Subscription overview</div>
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 12 }}>
+            {[
+              ["Trial", subscriptionSummary.trial || 0],
+              ["Active", subscriptionSummary.active || 0],
+              ["Expired", subscriptionSummary.expired || 0],
+              ["Past due", subscriptionSummary.past_due || 0],
+              ["Cancelled", subscriptionSummary.cancelled || 0],
+            ].map(([label, value]) => (
+              <div key={label} style={statItem}>
+                <div style={statVal}>{value}</div>
+                <div style={statLabel}>{label}</div>
+              </div>
+            ))}
+          </div>
+
+          <div style={sectionLabel}>Adoption overview</div>
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+            {[
+              ["Registered", adoptionSummary.registered],
+              ["Setup ready", adoptionSummary.setupReady],
+              ["First value", adoptionSummary.firstValue],
+              ["Active · 30d", adoptionSummary.recentlyActive],
+              ["Follow-up due", adoptionSummary.followUp],
+            ].map(([label, value]) => (
+              <div key={label} style={statItem}>
+                <div style={statVal}>{value}</div>
+                <div style={statLabel}>{label}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {!loading && (
+        <div style={filterBar}>
+          <input
+            value={search}
+            onChange={event => setSearch(event.target.value)}
+            placeholder="Search name, owner, phone or business ID"
+            aria-label="Search businesses"
+            style={{ ...filterControl, flex: "1 1 260px" }}
+          />
+          <select value={statusFilter} onChange={event => setStatusFilter(event.target.value)} aria-label="Filter by subscription" style={filterControl}>
+            <option value="all">All subscriptions</option>
+            {Object.entries(SUBSCRIPTION_STYLES).map(([value, style]) => (
+              <option key={value} value={value}>{style.label}</option>
+            ))}
+          </select>
+          <select value={planFilter} onChange={event => setPlanFilter(event.target.value)} aria-label="Filter by plan" style={filterControl}>
+            <option value="all">All plans</option>
+            {PLAN_OPTIONS.map(plan => <option key={plan} value={plan}>{plan.charAt(0).toUpperCase() + plan.slice(1)}</option>)}
+          </select>
+          <select value={activityFilter} onChange={event => setActivityFilter(event.target.value)} aria-label="Filter by activity" style={filterControl}>
+            <option value="all">All activity</option>
+            {Object.entries(ACTIVITY_STYLES).map(([value, style]) => (
+              <option key={value} value={value}>{style.label}</option>
+            ))}
+          </select>
+          {hasFilters && <button type="button" onClick={clearFilters} style={clearFilterBtn}>Clear</button>}
+          <div style={{ fontSize: 11, color: "var(--color-text-tertiary)", marginLeft: "auto" }}>
+            Showing {filteredBusinesses.length} of {businesses.length}
+          </div>
         </div>
       )}
 
       {/* Business cards */}
-      {!loading && businesses.map(biz => {
+      {!loading && filteredBusinesses.map(biz => {
         const pc = planColor(biz.plan);
+        const subscription = subscriptionStyle(biz.subscription_status);
         const activity = biz.activity || {
           status: "no_sales",
           total_sales: 0,
@@ -226,7 +333,10 @@ export default function BusinessesPage() {
             {/* Top row */}
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 }}>
               <div>
-                <div style={{ fontSize: 14, fontWeight: 600, color: "var(--color-text-primary)" }}>{biz.name}</div>
+                <div style={{ display: "flex", gap: 7, alignItems: "center", flexWrap: "wrap" }}>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: "var(--color-text-primary)" }}>{biz.name}</div>
+                  <span style={businessIdBadge}>ID {biz.business_id}</span>
+                </div>
                 <div style={{ fontSize: 11, color: "var(--color-text-tertiary)", marginTop: 2 }}>
                   {biz.owner_name || "—"} · {biz.phone || "—"} · {biz.address || "—"}
                 </div>
@@ -237,6 +347,9 @@ export default function BusinessesPage() {
                 </span>
                 <span style={{ fontSize: 11, fontWeight: 500, padding: "2px 8px", borderRadius: 20, background: activityStyle.bg, color: activityStyle.color }}>
                   {activityStyle.label}
+                </span>
+                <span style={{ fontSize: 11, fontWeight: 600, padding: "2px 8px", borderRadius: 20, background: subscription.bg, color: subscription.color }}>
+                  {subscription.label}
                 </span>
                 <span style={{ fontSize: 11, fontWeight: 500, padding: "2px 8px", borderRadius: 20, background: biz.is_active ? "#EAF3DE" : "#FCEBEB", color: biz.is_active ? "#3B6D11" : "#A32D2D" }}>
                   {biz.is_active ? "Enabled" : "Disabled"}
@@ -312,6 +425,13 @@ export default function BusinessesPage() {
           </div>
         );
       })}
+
+      {!loading && filteredBusinesses.length === 0 && (
+        <div style={centreMsg}>
+          No businesses match the selected filters.
+          {hasFilters && <button type="button" onClick={clearFilters} style={{ ...clearFilterBtn, marginLeft: 8 }}>Clear filters</button>}
+        </div>
+      )}
 
       {/* ── New business modal ── */}
       {showForm && (
@@ -455,6 +575,11 @@ const bizCard     = { background: "var(--color-background-primary)", border: "1p
 const statItem    = { display: "flex", flexDirection: "column", alignItems: "center", background: "var(--color-background-secondary)", borderRadius: 8, padding: "6px 12px", minWidth: 56 };
 const statVal     = { fontSize: 16, fontWeight: 600, color: "var(--color-text-primary)" };
 const statLabel   = { fontSize: 10, color: "var(--color-text-tertiary)", marginTop: 1 };
+const sectionLabel = { fontSize: 10, fontWeight: 600, color: "var(--color-text-tertiary)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 6 };
+const filterBar = { display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", background: "var(--color-background-secondary)", border: "1px solid var(--color-border-tertiary)", borderRadius: 10, padding: 10, marginBottom: 12 };
+const filterControl = { minHeight: 34, padding: "6px 9px", borderRadius: 7, border: "1px solid var(--color-border-tertiary)", background: "var(--color-background-primary)", color: "var(--color-text-primary)", fontSize: 12, fontFamily: "inherit" };
+const clearFilterBtn = { minHeight: 32, padding: "5px 10px", borderRadius: 7, border: "1px solid var(--color-border-tertiary)", background: "transparent", color: "var(--color-text-secondary)", fontSize: 11, fontWeight: 500, cursor: "pointer" };
+const businessIdBadge = { fontSize: 10, fontWeight: 600, padding: "2px 6px", borderRadius: 5, background: "var(--color-background-secondary)", color: "var(--color-text-tertiary)" };
 const overlayStyle = { position: "fixed", inset: 0, background: "rgba(0,0,0,0.65)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 9999 };
 const modalStyle   = { background: "#151b28", borderRadius: 14, padding: 24, width: "100%", maxWidth: 400, maxHeight: "85vh", overflowY: "auto", boxShadow: "0 20px 60px rgba(0,0,0,0.6)", border: "1px solid #2a3247" };
 const modalTitle   = { fontSize: 16, fontWeight: 600, color: "#e8ecf2", margin: 0 };
