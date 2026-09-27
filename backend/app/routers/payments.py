@@ -17,6 +17,11 @@ import pytz
 from app.database import get_db
 from app import models
 from app.dependencies import require_role, require_tenant_role, get_current_user, SUPERADMIN_ROLE
+from app.utils.subscriptions import (
+    reconcile_business_subscription,
+    subscription_has_access,
+    subscription_snapshot,
+)
 
 router = APIRouter(prefix="/payments", tags=["Payments"])
 
@@ -166,13 +171,12 @@ def get_subscription(db: Session = Depends(get_db), user=Depends(get_current_use
     biz = db.query(models.Business).filter(models.Business.business_id == user.business_id).first()
     if not biz: raise HTTPException(status_code=404, detail="Business not found")
 
-    now             = datetime.utcnow()
-    trial_active    = biz.subscription_status == "trial" and biz.trial_ends_at and biz.trial_ends_at > now
-    trial_days_left = max(0, (biz.trial_ends_at - now).days) if trial_active else 0
-
-    if biz.subscription_status == "trial" and biz.trial_ends_at and biz.trial_ends_at <= now:
-        biz.subscription_status = "expired"
+    now = datetime.utcnow()
+    reconciliation = reconcile_business_subscription(biz, now)
+    if reconciliation.changed:
         db.commit()
+
+    if reconciliation.trial_expired:
         try:
             from app.email_service import trial_expired as send_trial_expired
             if biz.email:
@@ -186,23 +190,15 @@ def get_subscription(db: Session = Depends(get_db), user=Depends(get_current_use
         except Exception as e:
             print(f"[Email] trial_expired failed: {e}")
 
-    if (biz.pending_plan and biz.current_period_end and
-            biz.current_period_end <= now and biz.subscription_status in ("active", "cancelled")):
-        biz.plan = biz.pending_plan
-        biz.pending_plan = None
-        biz.pending_billing = None
-        db.commit()
+    snapshot = subscription_snapshot(biz, now)
 
     return {
-        "subscription_status":     biz.subscription_status,
+        **snapshot,
         "plan":                    biz.plan,
-        "trial_active":            trial_active,
-        "trial_days_left":         trial_days_left,
-        "trial_ends_at":           biz.trial_ends_at.isoformat() if biz.trial_ends_at else None,
         "current_period_end":      biz.current_period_end.isoformat() if biz.current_period_end else None,
         "pending_plan":            biz.pending_plan,
         "pending_billing":         biz.pending_billing,
-        "has_active_subscription": biz.subscription_status in ("trial", "active", "past_due", "cancelled"),
+        "has_active_subscription": subscription_has_access(biz, now),
     }
 
 

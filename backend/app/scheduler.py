@@ -249,6 +249,71 @@ async def trial_reminder_loop():
         await asyncio.sleep(60)
 
 
+async def subscription_reconciliation_loop():
+    """Persist due trial, billing-period, cancellation and grace transitions."""
+    while True:
+        try:
+            from app.database import SessionLocal
+            from app import models
+            from app.utils.subscriptions import reconcile_business_subscription
+
+            db = SessionLocal()
+            try:
+                businesses = db.query(models.Business).filter(
+                    models.Business.subscription_status.in_(
+                        ["trial", "active", "past_due", "cancelled"]
+                    )
+                ).all()
+                reconciled = 0
+                expired_trials = []
+                now = datetime.utcnow()
+                for biz in businesses:
+                    result = reconcile_business_subscription(biz, now)
+                    if result.changed:
+                        reconciled += 1
+                    if result.trial_expired:
+                        expired_trials.append(biz)
+                if reconciled:
+                    db.commit()
+                    print(
+                        f"[Scheduler] Subscription reconciliation: "
+                        f"{reconciled} updated"
+                    )
+                else:
+                    db.rollback()
+
+                if expired_trials:
+                    from app.email_service import trial_expired as send_trial_expired
+                    for biz in expired_trials:
+                        if not biz.email:
+                            continue
+                        admin = db.query(models.User).filter(
+                            models.User.business_id == biz.business_id,
+                            models.User.role == "admin",
+                            models.User.is_active == True,
+                        ).first()
+                        try:
+                            send_trial_expired(
+                                to_email=biz.email,
+                                full_name=admin.full_name if admin else "Admin",
+                                business_name=biz.name,
+                                plan=biz.plan,
+                            )
+                        except Exception as exc:
+                            print(
+                                f"[Scheduler] Trial expiry email failed "
+                                f"for business {biz.business_id}: {exc}"
+                            )
+            except Exception:
+                db.rollback()
+                raise
+            finally:
+                db.close()
+        except Exception as exc:
+            print(f"[Scheduler] Subscription reconciliation error: {exc}")
+        await asyncio.sleep(seconds_until_next_hour())
+
+
 def _delete_business(db, biz):
     from app import models
     biz_id = biz.business_id
@@ -316,5 +381,9 @@ def start_scheduler():
         print("[Scheduler] WhatsApp monthly credit summary disabled")
     loop.create_task(monthly_points_expiry_loop())
     loop.create_task(account_deletion_cleanup_loop())
+    loop.create_task(trial_reminder_loop())
+    loop.create_task(subscription_reconciliation_loop())
     print("[Scheduler] Started — loyalty expiry on 1st")
     print("[Scheduler] Started — deletion cleanup at 2:00 AM Lagos")
+    print("[Scheduler] Started — trial reminders at 10:00 AM Lagos")
+    print("[Scheduler] Started — subscription reconciliation hourly")

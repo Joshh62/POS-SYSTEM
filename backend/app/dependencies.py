@@ -7,6 +7,7 @@ from typing import List
 from app.database import get_db
 from app import models
 from app.auth import SECRET_KEY, ALGORITHM
+from app.utils.subscriptions import reconcile_business_subscription
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
 
@@ -34,6 +35,21 @@ def get_current_user(
     # Superadmin bypasses branch requirement — they span all businesses
     if user.role == SUPERADMIN_ROLE:
         return user
+
+    business = db.query(models.Business).filter(
+        models.Business.business_id == user.business_id
+    ).first()
+    if business is None:
+        raise HTTPException(status_code=403, detail="Business account unavailable")
+
+    reconciliation = reconcile_business_subscription(business)
+    if reconciliation.changed:
+        db.commit()
+    if reconciliation.current_status == "expired":
+        raise HTTPException(
+            status_code=403,
+            detail="Your subscription has expired. Please renew at profittrack.ng",
+        )
 
     if not user.branch_id:
         raise HTTPException(status_code=400, detail="Branch not assigned. Please log in again.")

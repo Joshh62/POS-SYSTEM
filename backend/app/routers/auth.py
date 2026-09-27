@@ -3,7 +3,6 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func
 from typing import Optional
 from pydantic import BaseModel
-from datetime import datetime
 
 from app import models, schemas
 from app.database import get_db
@@ -11,6 +10,10 @@ from app.models import User, Business
 from app.auth import hash_password, verify_password, create_access_token
 from app.dependencies import require_role, get_current_user, SUPERADMIN_ROLE
 from app.utils.plans import get_plan_limits, is_user_limit_reached
+from app.utils.subscriptions import (
+    reconcile_business_subscription,
+    subscription_snapshot,
+)
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
@@ -24,25 +27,7 @@ def _count_business_users(db: Session, business_id: int) -> int:
 
 def _get_subscription_info(biz: Business) -> dict:
     """Returns subscription/trial status for a business."""
-    if not biz:
-        return {"subscription_status": "active", "trial_active": False, "trial_days_left": 0}
-
-    now          = datetime.utcnow()
-    status       = biz.subscription_status or "active"
-    trial_active = status == "trial" and biz.trial_ends_at and biz.trial_ends_at > now
-
-    # Auto-expire trial
-    if status == "trial" and biz.trial_ends_at and biz.trial_ends_at <= now:
-        status = "expired"
-
-    trial_days_left = max(0, (biz.trial_ends_at - now).days) if trial_active and biz.trial_ends_at else 0
-
-    return {
-        "subscription_status": status,
-        "trial_active":        trial_active,
-        "trial_days_left":     trial_days_left,
-        "trial_ends_at":       biz.trial_ends_at.isoformat() if biz.trial_ends_at else None,
-    }
+    return subscription_snapshot(biz)
 
 
 # ── List users ────────────────────────────────────────────────────────────────
@@ -169,6 +154,11 @@ def login(
         biz = db.query(Business).filter(
             Business.business_id == user.business_id
         ).first()
+        if not biz:
+            raise HTTPException(status_code=403, detail="Business account unavailable")
+        reconciliation = reconcile_business_subscription(biz)
+        if reconciliation.changed:
+            db.commit()
         subscription_info = _get_subscription_info(biz)
 
         # Block login if subscription fully expired (not just trial)
