@@ -25,6 +25,8 @@ from sqlalchemy import func, and_, false
 from dotenv import load_dotenv
 import pytz
 
+from app.utils.subscriptions import effective_subscription_status
+
 load_dotenv()
 
 TWILIO_SID   = os.getenv("TWILIO_ACCOUNT_SID")
@@ -135,7 +137,7 @@ def _business_qualifies_for_report(business) -> bool:
     - Active/past_due businesses qualify only on Business or Enterprise plan
     - Cancelled/expired businesses are skipped
     """
-    status = business.subscription_status or "active"
+    status = effective_subscription_status(business)
     if status == "trial":
         return True
     if status in ("active", "past_due"):
@@ -555,11 +557,14 @@ def send_monthly_credit_summary(db: Session):
     businesses = db.query(models.Business).filter(
         models.Business.is_active == True,
         models.Business.phone.isnot(None),
-        models.Business.subscription_status.in_(["trial", "active", "past_due"]),
     ).all()
 
     sent = 0
     for biz in businesses:
+        if effective_subscription_status(biz) not in {
+            "trial", "active", "past_due"
+        }:
+            continue
         to_number = _get_admin_phone(biz, db)
         if not to_number:
             continue
