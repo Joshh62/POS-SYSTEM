@@ -264,6 +264,18 @@ async def initialize_payment(
                          "user_id": user.user_id, "is_upgrade": upgrade},
         "channels":     ["card", "bank", "ussd", "bank_transfer"],
     })
+    reference = result.get("reference")
+    if not isinstance(reference, str) or not reference or len(reference) > 120:
+        raise HTTPException(status_code=502, detail="Invalid payment provider reference")
+    db.add(models.SubscriptionPaymentIntent(
+        reference=reference, business_id=user.business_id, plan=data.plan,
+        billing=data.billing, amount=amount, currency="NGN", created_at=datetime.utcnow(),
+    ))
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise HTTPException(status_code=503, detail="Could not securely record payment; retry checkout")
     return {"type": "payment_required", "payment_url": result["authorization_url"],
             "reference": result["reference"], "amount": amount / 100,
             "email": billing_email, "plan": data.plan, "billing": data.billing, "is_upgrade": upgrade}
@@ -303,6 +315,13 @@ def _apply_verified_payment(db, result, reference, expected_business_id=None):
     ).with_for_update().first()
     if biz is None:
         raise HTTPException(status_code=404, detail="Business not found")
+    intent = db.query(models.SubscriptionPaymentIntent).filter(
+        models.SubscriptionPaymentIntent.reference == reference
+    ).first()
+    if intent is None or (intent.business_id, intent.plan, intent.billing, intent.amount, intent.currency) != (
+        business_id, plan, billing, amount, "NGN"
+    ):
+        raise HTTPException(status_code=403, detail="Payment reference is not authorized for this subscription")
     existing = db.query(models.SubscriptionPaymentActivation).filter(
         models.SubscriptionPaymentActivation.reference == reference
     ).first()
