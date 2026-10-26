@@ -1,5 +1,6 @@
 """Payment activation validation regression tests (no live Paystack calls)."""
 import pytest
+import asyncio
 from fastapi import HTTPException
 from app.routers.payments import _validate_successful_payment, PLANS
 
@@ -42,8 +43,7 @@ def test_cross_tenant_payment_is_rejected():
 
 
 
-@pytest.mark.asyncio
-async def test_initialize_requires_tenant_admin_before_paystack(monkeypatch):
+def test_initialize_requires_tenant_admin_before_paystack(monkeypatch):
     from app.routers.payments import initialize_payment, InitializePaymentRequest
     from types import SimpleNamespace
 
@@ -54,15 +54,14 @@ async def test_initialize_requires_tenant_admin_before_paystack(monkeypatch):
     for role in ("cashier", "manager", "superadmin"):
         user = SimpleNamespace(role=role, business_id=21)
         with pytest.raises(HTTPException) as error:
-            await initialize_payment(
+            asyncio.run(initialize_payment(
                 InitializePaymentRequest(plan="starter", billing="monthly"),
                 db=None, user=user,
-            )
+            ))
         assert error.value.status_code == 403
 
 
-@pytest.mark.asyncio
-async def test_verify_requires_tenant_admin_before_paystack(monkeypatch):
+def test_verify_requires_tenant_admin_before_paystack(monkeypatch):
     from app.routers.payments import verify_payment
     from types import SimpleNamespace
 
@@ -73,12 +72,11 @@ async def test_verify_requires_tenant_admin_before_paystack(monkeypatch):
     for role in ("cashier", "manager", "superadmin"):
         user = SimpleNamespace(role=role, business_id=21)
         with pytest.raises(HTTPException) as error:
-            await verify_payment("ref-1", db=None, user=user)
+            asyncio.run(verify_payment("ref-1", db=None, user=user))
         assert error.value.status_code == 403
 
 
-@pytest.mark.asyncio
-async def test_webhook_rejects_missing_secret(monkeypatch):
+def test_webhook_rejects_missing_secret(monkeypatch):
     from app.routers.payments import paystack_webhook
     from types import SimpleNamespace
 
@@ -89,5 +87,5 @@ async def test_webhook_rejects_missing_secret(monkeypatch):
 
     request = SimpleNamespace(body=body)
     with pytest.raises(HTTPException) as error:
-        await paystack_webhook(request, db=None, x_paystack_signature=None)
+        asyncio.run(paystack_webhook(request, db=None, x_paystack_signature=None))
     assert error.value.status_code == 503
