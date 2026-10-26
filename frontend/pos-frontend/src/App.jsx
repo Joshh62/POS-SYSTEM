@@ -48,6 +48,18 @@ export default function App() {
       .catch(() => {});
   }, []);
 
+  // Paystack hosted checkout returns a reference in the callback URL.
+  // Verify it server-side, then return the customer to the billing screen.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const reference = params.get("reference") || params.get("trxref");
+    if (params.get("payment") !== "success" || !reference || !localStorage.getItem("token")) return;
+    setActivePage("billing");
+    api.get(`/payments/verify/${encodeURIComponent(reference)}`)
+      .then(() => { window.history.replaceState({}, "", window.location.pathname); })
+      .catch(() => { /* Billing page remains available for retry/support. */ });
+  }, []);
+
   const [isLoggedIn, setIsLoggedIn] = useState(() => !!localStorage.getItem("token"));
 
   const [view, setView] = useState(() => {
