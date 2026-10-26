@@ -99,24 +99,13 @@ export default function PricingPage() {
         setPaying(false);
         return;
       }
-      const { payment_url, reference, amount, email: billingEmail } = initRes.data;
-      if (!window.PaystackPop) { window.location.href = payment_url; return; }
-      const PUBLIC_KEY = import.meta.env.VITE_PAYSTACK_PUBLIC_KEY || "";
-      const handler = window.PaystackPop.setup({
-        key: PUBLIC_KEY, email: billingEmail, amount: amount * 100, ref: reference,
-        currency: "NGN", channels: ["card", "bank", "ussd", "bank_transfer"],
-        metadata: { business_id: user.business_id, plan: selectedPlan, billing },
-        onSuccess: async (transaction) => {
-          try {
-            const verifyRes = await api.get(`/payments/verify/${transaction.reference}`);
-            setSuccessMsg(`🎉 Payment successful! Your ${PLANS.find(p => p.key === verifyRes.data.plan)?.name} plan is now active.`);
-            setTimeout(() => { window.location.href = window.location.href; }, 3000);
-          } catch { setError("Payment received but verification failed. Contact support."); }
-          setPaying(false);
-        },
-        onCancel: () => { setPaying(false); },
-      });
-      handler.openIframe();
+      // Use the server-initialized Paystack checkout. Do not create a second
+      // browser-controlled transaction with separately supplied metadata.
+      const { payment_url } = initRes.data;
+      if (!payment_url || !/^https:\/\/(?:[a-z0-9-]+\.)*paystack\.com\//i.test(payment_url)) {
+        throw new Error("Invalid Paystack checkout URL");
+      }
+      window.location.assign(payment_url);
     } catch (err) {
       setError(err.response?.data?.detail || "Payment initialization failed.");
       setPaying(false);
