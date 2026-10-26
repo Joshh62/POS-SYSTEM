@@ -16,7 +16,7 @@ import pytz
 
 from app.database import get_db
 from app import models
-from app.dependencies import require_role, require_tenant_role, get_current_user, SUPERADMIN_ROLE
+from app.dependencies import require_role, require_tenant_role, get_current_user, get_current_user_for_billing, SUPERADMIN_ROLE
 from app.utils.subscriptions import (
     reconcile_business_subscription,
     subscription_has_access,
@@ -89,7 +89,7 @@ def _get_admin(db: Session, business_id: int):
 class InitializePaymentRequest(BaseModel):
     plan:    str
     billing: str
-    email:   str
+    email:   Optional[str] = None
 
 
 class PublicSignupRequest(BaseModel):
@@ -164,7 +164,7 @@ async def public_signup(data: PublicSignupRequest, db: Session = Depends(get_db)
 
 
 @router.get("/subscription")
-def get_subscription(db: Session = Depends(get_db), user=Depends(get_current_user)):
+def get_subscription(db: Session = Depends(get_db), user=Depends(get_current_user_for_billing)):
     if user.role == SUPERADMIN_ROLE:
         return {"subscription_status": "active", "plan": "enterprise", "trial": False}
 
@@ -206,7 +206,7 @@ def get_subscription(db: Session = Depends(get_db), user=Depends(get_current_use
 async def initialize_payment(
     data: InitializePaymentRequest,
     db: Session = Depends(get_db),
-    user=Depends(get_current_user),
+    user=Depends(get_current_user_for_billing),
 ):
     from app.email_service import downgrade_scheduled as send_downgrade
 
@@ -249,8 +249,11 @@ async def initialize_payment(
     plan   = PLANS[data.plan]
     amount = plan["annual_price"] if data.billing == "annual" else plan["monthly_price"]
     frontend_url = os.getenv("FRONTEND_URL", "https://www.profittrack.ng")
+    billing_email = (biz.email or "").strip()
+    if not billing_email:
+        raise HTTPException(status_code=400, detail="Add a registered business email before renewing")
     result = await _paystack_post("/transaction/initialize", {
-        "email":        data.email,
+        "email":        billing_email,
         "amount":       amount,
         "currency":     "NGN",
         "callback_url": f"{frontend_url}/?payment=success&plan={data.plan}&billing={data.billing}",
@@ -265,16 +268,25 @@ async def initialize_payment(
 
 
 @router.get("/verify/{reference}")
-async def verify_payment(reference: str, db: Session = Depends(get_db), user=Depends(get_current_user)):
+async def verify_payment(reference: str, db: Session = Depends(get_db), user=Depends(get_current_user_for_billing)):
     from app.email_service import payment_success as send_payment_success
 
     result = await _paystack_get(f"/transaction/verify/{reference}")
     if result["status"] != "success":
         raise HTTPException(status_code=400, detail=f"Payment not successful: {result['status']}")
 
-    metadata = result.get("metadata", {})
-    plan     = metadata.get("plan", "starter")
-    billing  = metadata.get("billing", "monthly")
+    metadata = result.get("metadata") or {}
+    if str(metadata.get("business_id")) != str(user.business_id):
+        raise HTTPException(status_code=403, detail="Payment does not belong to this business")
+
+    plan = metadata.get("plan")
+    billing = metadata.get("billing")
+    if plan not in PLANS or billing not in ("monthly", "annual"):
+        raise HTTPException(status_code=400, detail="Payment plan details are invalid")
+
+    expected_amount = PLANS[plan]["annual_price"] if billing == "annual" else PLANS[plan]["monthly_price"]
+    if result.get("currency") != "NGN" or result.get("amount") != expected_amount:
+        raise HTTPException(status_code=400, detail="Payment amount or currency does not match the selected plan")
 
     biz = db.query(models.Business).filter(models.Business.business_id == user.business_id).first()
     if not biz: raise HTTPException(status_code=404, detail="Business not found")
