@@ -89,3 +89,78 @@ def test_webhook_rejects_missing_secret(monkeypatch):
     with pytest.raises(HTTPException) as error:
         asyncio.run(paystack_webhook(request, db=None, x_paystack_signature=None))
     assert error.value.status_code == 503
+
+
+def test_activation_rejects_missing_server_payment_intent():
+    from app.routers.payments import _apply_verified_payment
+    from app import models
+    from types import SimpleNamespace
+
+    class Query:
+        def __init__(self, model):
+            self.model = model
+
+        def filter(self, *args):
+            return self
+
+        def with_for_update(self):
+            return self
+
+        def first(self):
+            if self.model is models.Business:
+                return SimpleNamespace(business_id=21)
+            return None
+
+    class Session:
+        def query(self, model):
+            return Query(model)
+
+        def add(self, value):
+            raise AssertionError("No activation may be recorded")
+
+        def commit(self):
+            raise AssertionError("No subscription may be activated")
+
+    with pytest.raises(HTTPException) as error:
+        _apply_verified_payment(Session(), transaction(), "ref-1", 21)
+    assert error.value.status_code == 403
+
+
+def test_activation_rejects_mismatched_server_payment_intent():
+    from app.routers.payments import _apply_verified_payment
+    from app import models
+    from types import SimpleNamespace
+
+    class Query:
+        def __init__(self, model):
+            self.model = model
+
+        def filter(self, *args):
+            return self
+
+        def with_for_update(self):
+            return self
+
+        def first(self):
+            if self.model is models.Business:
+                return SimpleNamespace(business_id=21)
+            if self.model is models.SubscriptionPaymentIntent:
+                return SimpleNamespace(
+                    business_id=22, plan="starter", billing="monthly",
+                    amount=PLANS["starter"]["monthly_price"], currency="NGN",
+                )
+            return None
+
+    class Session:
+        def query(self, model):
+            return Query(model)
+
+        def add(self, value):
+            raise AssertionError("No activation may be recorded")
+
+        def commit(self):
+            raise AssertionError("No subscription may be activated")
+
+    with pytest.raises(HTTPException) as error:
+        _apply_verified_payment(Session(), transaction(), "ref-1", 21)
+    assert error.value.status_code == 403
