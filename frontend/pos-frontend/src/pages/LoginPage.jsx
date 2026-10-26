@@ -20,7 +20,7 @@ export default function LoginPage({ onLogin }) {
       const data = await login(username, password);
       localStorage.setItem("token", data.access_token);
       localStorage.setItem("user", JSON.stringify(data.user));
-      onLogin();
+      onLogin(data.subscription_status === "expired" ? "billing" : undefined);
     } catch (err) {
       const detail = err.response?.data?.detail;
       setError(typeof detail === "string" ? detail : "Login failed. Check your credentials.");
