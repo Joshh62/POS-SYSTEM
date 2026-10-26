@@ -14,10 +14,7 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
 SUPERADMIN_ROLE = "superadmin"
 
 
-def get_current_user(
-    token: str = Depends(oauth2_scheme),
-    db: Session = Depends(get_db)
-) -> models.User:
+def _resolve_current_user(token: str, db: Session, allow_expired: bool = False) -> models.User:
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         username: str = payload.get("sub")
@@ -45,7 +42,7 @@ def get_current_user(
     reconciliation = reconcile_business_subscription(business)
     if reconciliation.changed:
         db.commit()
-    if reconciliation.current_status == "expired":
+    if reconciliation.current_status == "expired" and not allow_expired:
         raise HTTPException(
             status_code=403,
             detail="Your subscription has expired. Please renew at profittrack.ng",
@@ -55,6 +52,22 @@ def get_current_user(
         raise HTTPException(status_code=400, detail="Branch not assigned. Please log in again.")
 
     return user
+
+
+def get_current_user(
+    token: str = Depends(oauth2_scheme),
+    db: Session = Depends(get_db)
+) -> models.User:
+    """Authenticate a user and enforce subscription access for normal app routes."""
+    return _resolve_current_user(token, db, allow_expired=False)
+
+
+def get_current_user_for_billing(
+    token: str = Depends(oauth2_scheme),
+    db: Session = Depends(get_db)
+) -> models.User:
+    """Authenticate for payment recovery while leaving normal app access blocked."""
+    return _resolve_current_user(token, db, allow_expired=True)
 
 
 def require_role(allowed_roles: List[str]):

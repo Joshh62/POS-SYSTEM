@@ -227,3 +227,35 @@ def test_superadmin_bypasses_tenant_subscription_lookup(monkeypatch):
 
     assert dependencies.get_current_user(token="token", db=db) is user
     assert db.queries == [models.User]
+
+
+def test_expired_tenant_can_authenticate_for_billing_only(monkeypatch):
+    user = auth_user()
+    tenant = business(trial_ends_at=NOW - timedelta(seconds=1))
+    db = FakeSession(user, tenant)
+    monkeypatch.setattr(
+        dependencies.jwt,
+        "decode",
+        lambda *args, **kwargs: {"sub": user.username},
+    )
+
+    assert dependencies.get_current_user_for_billing(token="token", db=db) is user
+    assert tenant.subscription_status == "expired"
+    assert db.commits == 1
+
+
+def test_expired_tenant_stays_blocked_from_normal_app_access(monkeypatch):
+    user = auth_user()
+    tenant = business(trial_ends_at=NOW - timedelta(seconds=1))
+    db = FakeSession(user, tenant)
+    monkeypatch.setattr(
+        dependencies.jwt,
+        "decode",
+        lambda *args, **kwargs: {"sub": user.username},
+    )
+
+    with pytest.raises(HTTPException) as exc:
+        dependencies.get_current_user(token="token", db=db)
+
+    assert exc.value.status_code == 403
+    assert tenant.subscription_status == "expired"

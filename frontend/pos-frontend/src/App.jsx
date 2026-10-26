@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import api from "./api/api";
 import { CartProvider }   from "./context/CartContext";
 import { BranchProvider } from "./context/BranchContext";
 import POSLayout          from "./components/layout/POSLayout";
@@ -36,6 +37,29 @@ export default function App() {
     return () => clearTimeout(t);
   }, []);
 
+  // If an existing session expires while the browser remains signed in,
+  // route it to billing instead of leaving the user on a blocked POS screen.
+  useEffect(() => {
+    if (!localStorage.getItem("token")) return;
+    api.get("/payments/subscription")
+      .then(({ data }) => {
+        if (data.subscription_status === "expired") setActivePage("billing");
+      })
+      .catch(() => {});
+  }, []);
+
+  // Paystack hosted checkout returns a reference in the callback URL.
+  // Verify it server-side, then return the customer to the billing screen.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const reference = params.get("reference") || params.get("trxref");
+    if (params.get("payment") !== "success" || !reference || !localStorage.getItem("token")) return;
+    setActivePage("billing");
+    api.get(`/payments/verify/${encodeURIComponent(reference)}`)
+      .then(() => { window.history.replaceState({}, "", window.location.pathname); })
+      .catch(() => { /* Billing page remains available for retry/support. */ });
+  }, []);
+
   const [isLoggedIn, setIsLoggedIn] = useState(() => !!localStorage.getItem("token"));
 
   const [view, setView] = useState(() => {
@@ -46,10 +70,10 @@ export default function App() {
   const [activePage, setActivePage] = useState("pos");
   const [lastScan,   setLastScan]   = useState(null);
 
-  const handleLogin = () => {
+  const handleLogin = (initialPage) => {
     setIsLoggedIn(true);
     setView("app");
-    setActivePage("pos");
+    setActivePage(initialPage === "billing" ? "billing" : "pos");
   };
 
   const handleLogout = () => {

@@ -16,7 +16,7 @@ import pytz
 
 from app.database import get_db
 from app import models
-from app.dependencies import require_role, require_tenant_role, get_current_user, SUPERADMIN_ROLE
+from app.dependencies import require_role, require_tenant_role, get_current_user, get_current_user_for_billing, SUPERADMIN_ROLE
 from app.utils.subscriptions import (
     reconcile_business_subscription,
     subscription_has_access,
@@ -89,7 +89,7 @@ def _get_admin(db: Session, business_id: int):
 class InitializePaymentRequest(BaseModel):
     plan:    str
     billing: str
-    email:   str
+    email:   Optional[str] = None
 
 
 class PublicSignupRequest(BaseModel):
@@ -164,7 +164,7 @@ async def public_signup(data: PublicSignupRequest, db: Session = Depends(get_db)
 
 
 @router.get("/subscription")
-def get_subscription(db: Session = Depends(get_db), user=Depends(get_current_user)):
+def get_subscription(db: Session = Depends(get_db), user=Depends(get_current_user_for_billing)):
     if user.role == SUPERADMIN_ROLE:
         return {"subscription_status": "active", "plan": "enterprise", "trial": False}
 
@@ -206,10 +206,12 @@ def get_subscription(db: Session = Depends(get_db), user=Depends(get_current_use
 async def initialize_payment(
     data: InitializePaymentRequest,
     db: Session = Depends(get_db),
-    user=Depends(get_current_user),
+    user=Depends(get_current_user_for_billing),
 ):
     from app.email_service import downgrade_scheduled as send_downgrade
 
+    if user.role != "admin" or not user.business_id:
+        raise HTTPException(status_code=403, detail="Tenant administrator required for billing")
     if data.plan not in PLANS: raise HTTPException(status_code=400, detail="Invalid plan")
     if data.billing not in ("monthly", "annual"): raise HTTPException(status_code=400, detail="Invalid billing")
 
@@ -249,8 +251,11 @@ async def initialize_payment(
     plan   = PLANS[data.plan]
     amount = plan["annual_price"] if data.billing == "annual" else plan["monthly_price"]
     frontend_url = os.getenv("FRONTEND_URL", "https://www.profittrack.ng")
+    billing_email = (biz.email or "").strip()
+    if not billing_email:
+        raise HTTPException(status_code=400, detail="Add a registered business email before renewing")
     result = await _paystack_post("/transaction/initialize", {
-        "email":        data.email,
+        "email":        billing_email,
         "amount":       amount,
         "currency":     "NGN",
         "callback_url": f"{frontend_url}/?payment=success&plan={data.plan}&billing={data.billing}",
@@ -259,53 +264,123 @@ async def initialize_payment(
                          "user_id": user.user_id, "is_upgrade": upgrade},
         "channels":     ["card", "bank", "ussd", "bank_transfer"],
     })
+    reference = result.get("reference")
+    if not isinstance(reference, str) or not reference or len(reference) > 120:
+        raise HTTPException(status_code=502, detail="Invalid payment provider reference")
+    db.add(models.SubscriptionPaymentIntent(
+        reference=reference, business_id=user.business_id, plan=data.plan,
+        billing=data.billing, amount=amount, currency="NGN", created_at=datetime.utcnow(),
+    ))
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise HTTPException(status_code=503, detail="Could not securely record payment; retry checkout")
     return {"type": "payment_required", "payment_url": result["authorization_url"],
             "reference": result["reference"], "amount": amount / 100,
-            "plan": data.plan, "billing": data.billing, "is_upgrade": upgrade}
+            "email": billing_email, "plan": data.plan, "billing": data.billing, "is_upgrade": upgrade}
+
+
+def _validate_successful_payment(result, reference, expected_business_id=None):
+    """Never grant entitlement from browser/webhook-supplied metadata alone."""
+    if result.get("status") != "success" or result.get("reference") != reference:
+        raise HTTPException(status_code=400, detail="Transaction not verified as successful")
+    metadata = result.get("metadata") or {}
+    try:
+        business_id = int(metadata["business_id"])
+    except (KeyError, TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="Invalid payment business")
+    if expected_business_id is not None and business_id != expected_business_id:
+        raise HTTPException(status_code=403, detail="Payment does not belong to this business")
+    plan, billing = metadata.get("plan"), metadata.get("billing")
+    if plan not in PLANS or billing not in ("monthly", "annual"):
+        raise HTTPException(status_code=400, detail="Invalid payment plan")
+    amount = PLANS[plan]["annual_price" if billing == "annual" else "monthly_price"]
+    if result.get("currency") != "NGN" or type(result.get("amount")) is not int or result["amount"] != amount:
+        raise HTTPException(status_code=400, detail="Payment amount or currency mismatch")
+    return business_id, plan, billing, amount
+
+
+def _apply_verified_payment(db, result, reference, expected_business_id=None):
+    """Atomic, replay-safe activation. Unique reference protects concurrent callbacks."""
+    from sqlalchemy.exc import IntegrityError
+
+    business_id, plan, billing, amount = _validate_successful_payment(
+        result, reference, expected_business_id
+    )
+    # Serialize activations for a business so concurrent distinct payments
+    # cannot overwrite one another without ordering.
+    biz = db.query(models.Business).filter(
+        models.Business.business_id == business_id
+    ).with_for_update().first()
+    if biz is None:
+        raise HTTPException(status_code=404, detail="Business not found")
+    intent = db.query(models.SubscriptionPaymentIntent).filter(
+        models.SubscriptionPaymentIntent.reference == reference
+    ).first()
+    if intent is None or (intent.business_id, intent.plan, intent.billing, intent.amount, intent.currency) != (
+        business_id, plan, billing, amount, "NGN"
+    ):
+        raise HTTPException(status_code=403, detail="Payment reference is not authorized for this subscription")
+    existing = db.query(models.SubscriptionPaymentActivation).filter(
+        models.SubscriptionPaymentActivation.reference == reference
+    ).first()
+    if existing:
+        if (existing.business_id, existing.plan, existing.billing, existing.amount, existing.currency) != (
+            business_id, plan, billing, amount, "NGN"
+        ):
+            raise HTTPException(status_code=409, detail="Conflicting payment reference")
+        return biz, False
+    now = datetime.utcnow()
+    # Renewal extends an existing paid term; expired/trial accounts start today.
+    start = max(now, biz.current_period_end) if biz.subscription_status == "active" and biz.current_period_end else now
+    period_end = start + timedelta(days=365 if billing == "annual" else 30)
+    db.add(models.SubscriptionPaymentActivation(
+        reference=reference, business_id=business_id, plan=plan,
+        billing=billing, amount=amount, currency="NGN", activated_at=now,
+    ))
+    biz.plan = plan
+    biz.subscription_status = "active"
+    biz.current_period_end = period_end
+    biz.pending_plan = None
+    biz.pending_billing = None
+    customer = result.get("customer") or {}
+    if customer.get("customer_code"):
+        biz.paystack_customer_code = customer["customer_code"]
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Payment activation conflict; retry verification")
+    return biz, True
 
 
 @router.get("/verify/{reference}")
-async def verify_payment(reference: str, db: Session = Depends(get_db), user=Depends(get_current_user)):
+async def verify_payment(reference: str, db: Session = Depends(get_db), user=Depends(get_current_user_for_billing)):
     from app.email_service import payment_success as send_payment_success
 
+    if user.role != "admin" or not user.business_id:
+        raise HTTPException(status_code=403, detail="Tenant administrator required for billing")
     result = await _paystack_get(f"/transaction/verify/{reference}")
-    if result["status"] != "success":
-        raise HTTPException(status_code=400, detail=f"Payment not successful: {result['status']}")
-
-    metadata = result.get("metadata", {})
-    plan     = metadata.get("plan", "starter")
-    billing  = metadata.get("billing", "monthly")
-
-    biz = db.query(models.Business).filter(models.Business.business_id == user.business_id).first()
-    if not biz: raise HTTPException(status_code=404, detail="Business not found")
-
-    now        = datetime.utcnow()
-    period_end = now + timedelta(days=365 if billing == "annual" else 30)
-    biz.plan = plan; biz.subscription_status = "active"
-    biz.current_period_end = period_end
-    biz.pending_plan = None; biz.pending_billing = None
-    customer = result.get("customer", {})
-    if customer.get("customer_code"): biz.paystack_customer_code = customer["customer_code"]
-    db.commit()
-
-    try:
-        if biz.email:
-            admin = _get_admin(db, biz.business_id)
-            send_payment_success(
-                to_email=biz.email,
-                full_name=admin.full_name if admin else "Admin",
-                business_name=biz.name,
-                plan=plan, billing=billing,
-                amount_paid=result["amount"] / 100,
-                period_end=_fmt_date(period_end),
-                reference=reference,
-            )
-    except Exception as e:
-        print(f"[Email] payment_success failed: {e}")
-
-    return {"message": "Payment successful! Your subscription is now active.",
+    biz, newly_applied = _apply_verified_payment(db, result, reference, user.business_id)
+    metadata = result["metadata"]
+    plan, billing = metadata["plan"], metadata["billing"]
+    if newly_applied:
+        try:
+            if biz.email:
+                admin = _get_admin(db, biz.business_id)
+                send_payment_success(
+                    to_email=biz.email, full_name=admin.full_name if admin else "Admin",
+                    business_name=biz.name, plan=plan, billing=billing,
+                    amount_paid=result["amount"] / 100,
+                    period_end=_fmt_date(biz.current_period_end), reference=reference,
+                )
+        except Exception as e:
+            print(f"[Email] payment_success failed: {e}")
+    return {"message": "Payment verified. Subscription active.",
             "plan": plan, "billing": billing,
-            "period_end": period_end.isoformat(), "amount_paid": result["amount"] / 100}
+            "period_end": biz.current_period_end.isoformat(),
+            "amount_paid": result["amount"] / 100, "already_applied": not newly_applied}
 
 
 @router.delete("/pending-downgrade")
@@ -326,7 +401,9 @@ async def paystack_webhook(request: Request, db: Session = Depends(get_db),
     )
 
     body         = await request.body()
-    secret       = os.getenv("PAYSTACK_SECRET_KEY", "")
+    secret       = os.getenv("PAYSTACK_SECRET_KEY")
+    if not secret:
+        raise HTTPException(status_code=503, detail="Payment webhook unavailable")
     expected_sig = hmac.new(secret.encode("utf-8"), body, hashlib.sha512).hexdigest()
     if x_paystack_signature != expected_sig:
         raise HTTPException(status_code=400, detail="Invalid webhook signature")
@@ -336,35 +413,33 @@ async def paystack_webhook(request: Request, db: Session = Depends(get_db),
     print(f"[Webhook] {event}")
 
     if event == "charge.success":
-        metadata    = data.get("metadata", {})
-        business_id = metadata.get("business_id")
-        plan        = metadata.get("plan", "starter")
-        billing     = metadata.get("billing", "monthly")
-        if business_id:
-            biz = db.query(models.Business).filter(models.Business.business_id == business_id).first()
-            if biz:
-                now = datetime.utcnow()
-                period_end = now + timedelta(days=365 if billing == "annual" else 30)
-                biz.plan = plan; biz.subscription_status = "active"
-                biz.current_period_end = period_end
-                biz.pending_plan = None; biz.pending_billing = None
-                customer = data.get("customer", {})
-                if customer.get("customer_code"): biz.paystack_customer_code = customer["customer_code"]
-                db.commit()
-                try:
-                    if biz.email:
-                        admin = _get_admin(db, biz.business_id)
-                        send_payment_success(
-                            to_email=biz.email,
-                            full_name=admin.full_name if admin else "Admin",
-                            business_name=biz.name,
-                            plan=plan, billing=billing,
-                            amount_paid=data.get("amount", 0) / 100,
-                            period_end=_fmt_date(period_end),
-                            reference=data.get("reference", "—"),
-                        )
-                except Exception as e:
-                    print(f"[Webhook] payment_success email failed: {e}")
+        reference = data.get("reference")
+        if not isinstance(reference, str) or not reference:
+            raise HTTPException(status_code=400, detail="Missing transaction reference")
+        # Signed event is only a notification: independently fetch the verified
+        # Paystack transaction before applying entitlement.
+        verified = await _paystack_get(f"/transaction/verify/{reference}")
+        # Signed and independently verified Paystack callback has no tenant JWT.
+        # Scope the privileged context to this activation only and restore it.
+        from app.database import _rls_business_id
+        token = _rls_business_id.set(0)
+        try:
+            biz, newly_applied = _apply_verified_payment(db, verified, reference)
+        finally:
+            _rls_business_id.reset(token)
+        if newly_applied:
+            try:
+                if biz.email:
+                    admin = _get_admin(db, biz.business_id)
+                    metadata = verified["metadata"]
+                    send_payment_success(
+                        to_email=biz.email, full_name=admin.full_name if admin else "Admin",
+                        business_name=biz.name, plan=metadata["plan"], billing=metadata["billing"],
+                        amount_paid=verified["amount"] / 100,
+                        period_end=_fmt_date(biz.current_period_end), reference=reference,
+                    )
+            except Exception as exc:
+                print(f"[Webhook] payment_success email failed: {exc}")
 
     elif event == "subscription.disable":
         cc = data.get("customer", {}).get("customer_code")

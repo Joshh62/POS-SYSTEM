@@ -161,12 +161,8 @@ def login(
             db.commit()
         subscription_info = _get_subscription_info(biz)
 
-        # Block login if subscription fully expired (not just trial)
-        if subscription_info["subscription_status"] == "expired":
-            raise HTTPException(
-                status_code=403,
-                detail="Your subscription has expired. Please renew at profittrack.ng"
-            )
+        # Expired tenants may authenticate to reach billing and renew.
+        # get_current_user still blocks normal operational API access.
 
     access_token = create_access_token({
         "sub":         user.username,
