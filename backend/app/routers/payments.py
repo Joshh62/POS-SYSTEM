@@ -396,7 +396,14 @@ async def paystack_webhook(request: Request, db: Session = Depends(get_db),
         # Signed event is only a notification: independently fetch the verified
         # Paystack transaction before applying entitlement.
         verified = await _paystack_get(f"/transaction/verify/{reference}")
-        biz, newly_applied = _apply_verified_payment(db, verified, reference)
+        # Signed and independently verified Paystack callback has no tenant JWT.
+        # Scope the privileged context to this activation only and restore it.
+        from app.database import _rls_business_id
+        token = _rls_business_id.set(0)
+        try:
+            biz, newly_applied = _apply_verified_payment(db, verified, reference)
+        finally:
+            _rls_business_id.reset(token)
         if newly_applied:
             try:
                 if biz.email:
