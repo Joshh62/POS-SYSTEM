@@ -46,10 +46,10 @@ export default function App() {
   const [activePage, setActivePage] = useState("pos");
   const [lastScan,   setLastScan]   = useState(null);
 
-  const handleLogin = () => {
+  const handleLogin = (initialPage) => {
     setIsLoggedIn(true);
     setView("app");
-    setActivePage("pos");
+    setActivePage(initialPage === "billing" ? "billing" : "pos");
   };
 
   const handleLogout = () => {
