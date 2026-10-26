@@ -264,7 +264,7 @@ async def initialize_payment(
     })
     return {"type": "payment_required", "payment_url": result["authorization_url"],
             "reference": result["reference"], "amount": amount / 100,
-            "plan": data.plan, "billing": data.billing, "is_upgrade": upgrade}
+            "email": billing_email, "plan": data.plan, "billing": data.billing, "is_upgrade": upgrade}
 
 
 @router.get("/verify/{reference}")
