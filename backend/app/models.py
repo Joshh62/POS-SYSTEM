@@ -741,3 +741,16 @@ class SubscriptionPaymentActivation(Base):
     amount = Column(Integer, nullable=False)
     currency = Column(String(3), nullable=False)
     activated_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+
+
+class SubscriptionPaymentIntent(Base):
+    """Immutable tenant and price authorization for a Paystack reference."""
+    __tablename__ = "subscription_payment_intents"
+
+    reference = Column(String(120), primary_key=True)
+    business_id = Column(Integer, ForeignKey("businesses.business_id"), nullable=False, index=True)
+    plan = Column(String(30), nullable=False)
+    billing = Column(String(20), nullable=False)
+    amount = Column(Integer, nullable=False)
+    currency = Column(String(3), nullable=False)
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
