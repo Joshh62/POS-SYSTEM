@@ -99,11 +99,11 @@ export default function PricingPage() {
         setPaying(false);
         return;
       }
-      const { payment_url, reference, amount } = initRes.data;
+      const { payment_url, reference, amount, email: billingEmail } = initRes.data;
       if (!window.PaystackPop) { window.location.href = payment_url; return; }
       const PUBLIC_KEY = import.meta.env.VITE_PAYSTACK_PUBLIC_KEY || "";
       const handler = window.PaystackPop.setup({
-        key: PUBLIC_KEY, email: branding?.email || "", amount: amount * 100, ref: reference,
+        key: PUBLIC_KEY, email: billingEmail, amount: amount * 100, ref: reference,
         currency: "NGN", channels: ["card", "bank", "ussd", "bank_transfer"],
         metadata: { business_id: user.business_id, plan: selectedPlan, billing },
         onSuccess: async (transaction) => {
