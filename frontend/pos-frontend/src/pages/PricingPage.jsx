@@ -90,10 +90,9 @@ export default function PricingPage() {
 
   const handlePay = async () => {
     if (!selectedPlan) return;
-    if (!branding?.email) { setError("Please add your email in Branding & Settings first."); return; }
     setPaying(true); setError(null); setInfoMsg(null);
     try {
-      const initRes = await api.post("/payments/initialize", { plan: selectedPlan, billing, email: branding.email });
+      const initRes = await api.post("/payments/initialize", { plan: selectedPlan, billing, email: branding?.email || "" });
       if (initRes.data.type === "downgrade_scheduled") {
         setInfoMsg(initRes.data.message);
         setSubscription(s => ({ ...s, pending_plan: selectedPlan, pending_billing: billing }));
@@ -104,7 +103,7 @@ export default function PricingPage() {
       if (!window.PaystackPop) { window.location.href = payment_url; return; }
       const PUBLIC_KEY = import.meta.env.VITE_PAYSTACK_PUBLIC_KEY || "";
       const handler = window.PaystackPop.setup({
-        key: PUBLIC_KEY, email: branding.email, amount: amount * 100, ref: reference,
+        key: PUBLIC_KEY, email: branding?.email || "", amount: amount * 100, ref: reference,
         currency: "NGN", channels: ["card", "bank", "ussd", "bank_transfer"],
         metadata: { business_id: user.business_id, plan: selectedPlan, billing },
         onSuccess: async (transaction) => {
