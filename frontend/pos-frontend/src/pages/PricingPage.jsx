@@ -47,7 +47,7 @@ export default function PricingPage() {
   const [error,         setError]         = useState(null);
   const [successMsg,    setSuccessMsg]    = useState(null);
   const [infoMsg,       setInfoMsg]       = useState(null);
-  const [branding,      setBranding]      = useState(null);
+  const billingEmail = subscription?.billing_email || "";
   const [activeGuide,   setActiveGuide]   = useState(null);
   const [showGuide,     setShowGuide]     = useState(false);
   const [cancelling,    setCancelling]    = useState(false);
@@ -58,12 +58,8 @@ export default function PricingPage() {
     const fetchData = async () => {
       setLoading(true);
       try {
-        const [subRes, brandRes] = await Promise.all([
-          api.get("/payments/subscription"),
-          api.get("/businesses/my/branding").catch(() => ({ data: null })),
-        ]);
+        const subRes = await api.get("/payments/subscription");
         setSubscription(subRes.data);
-        setBranding(brandRes.data);
         setSelectedPlan(subRes.data.plan || "starter");
       } catch { setError("Failed to load subscription details."); }
       finally { setLoading(false); }
@@ -92,7 +88,7 @@ export default function PricingPage() {
     if (!selectedPlan) return;
     setPaying(true); setError(null); setInfoMsg(null);
     try {
-      const initRes = await api.post("/payments/initialize", { plan: selectedPlan, billing, email: branding?.email || "" });
+      const initRes = await api.post("/payments/initialize", { plan: selectedPlan, billing, email: billingEmail });
       if (initRes.data.type === "downgrade_scheduled") {
         setInfoMsg(initRes.data.message);
         setSubscription(s => ({ ...s, pending_plan: selectedPlan, pending_billing: billing }));
@@ -273,9 +269,9 @@ export default function PricingPage() {
         )}
         {infoMsg && <div style={{ background: "#E6F1FB", border: "1px solid rgba(24,95,165,0.3)", borderRadius: 10, padding: "12px 16px", marginBottom: 16, fontSize: 13, color: "#185FA5" }}>ℹ️ {infoMsg}</div>}
         {error && <div style={{ background: "var(--error-bg)", color: "var(--error-text)", borderRadius: 8, padding: "10px 14px", fontSize: 13, marginBottom: 16 }}>{error}</div>}
-        {!branding?.email && (
+        {!billingEmail && (
           <div style={{ background: "#FAEEDA", border: "1px solid rgba(133,79,11,0.2)", borderRadius: 8, padding: "10px 14px", fontSize: 12, color: "#854F0B", marginBottom: 16 }}>
-            ⚠️ Add your email in <strong>Branding & Settings</strong> before making a payment.
+            ⚠️ Your business has no registered billing email. Please contact ProfitTrack support to update it before renewing.
           </div>
         )}
 
@@ -369,12 +365,12 @@ export default function PricingPage() {
               🎉 You save {fmt(annualSaving)} compared to monthly billing
             </div>
           )}
-          <button onClick={handlePay} disabled={btnState.disabled || !branding?.email}
+          <button onClick={handlePay} disabled={btnState.disabled || !billingEmail}
             style={{
               width: "100%", padding: "13px 0", borderRadius: 10, border: "none",
-              background: btnState.disabled || !branding?.email ? "var(--color-background-secondary)" : btnState.isSchedule ? "#854F0B" : "var(--color-primary)",
-              color: btnState.disabled || !branding?.email ? "var(--color-text-tertiary)" : "#fff",
-              fontSize: 15, fontWeight: 600, cursor: btnState.disabled || !branding?.email ? "not-allowed" : "pointer", transition: "all 0.2s",
+              background: btnState.disabled || !billingEmail ? "var(--color-background-secondary)" : btnState.isSchedule ? "#854F0B" : "var(--color-primary)",
+              color: btnState.disabled || !billingEmail ? "var(--color-text-tertiary)" : "#fff",
+              fontSize: 15, fontWeight: 600, cursor: btnState.disabled || !billingEmail ? "not-allowed" : "pointer", transition: "all 0.2s",
             }}>
             {btnState.text}
           </button>

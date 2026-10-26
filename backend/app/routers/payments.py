@@ -199,6 +199,8 @@ def get_subscription(db: Session = Depends(get_db), user=Depends(get_current_use
         "pending_plan":            biz.pending_plan,
         "pending_billing":         biz.pending_billing,
         "has_active_subscription": subscription_has_access(biz, now),
+        # Billing-only email source: branding endpoints reject expired subscriptions.
+        "billing_email": (biz.email or "").strip() if user.role == "admin" else None,
     }
 
 
