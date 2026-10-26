@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import api from "./api/api";
 import { CartProvider }   from "./context/CartContext";
 import { BranchProvider } from "./context/BranchContext";
 import POSLayout          from "./components/layout/POSLayout";
@@ -34,6 +35,17 @@ export default function App() {
   useEffect(() => {
     const t = setTimeout(() => setBooting(false), 1200);
     return () => clearTimeout(t);
+  }, []);
+
+  // If an existing session expires while the browser remains signed in,
+  // route it to billing instead of leaving the user on a blocked POS screen.
+  useEffect(() => {
+    if (!localStorage.getItem("token")) return;
+    api.get("/payments/subscription")
+      .then(({ data }) => {
+        if (data.subscription_status === "expired") setActivePage("billing");
+      })
+      .catch(() => {});
   }, []);
 
   const [isLoggedIn, setIsLoggedIn] = useState(() => !!localStorage.getItem("token"));
