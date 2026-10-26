@@ -210,6 +210,8 @@ async def initialize_payment(
 ):
     from app.email_service import downgrade_scheduled as send_downgrade
 
+    if user.role != "admin" or not user.business_id:
+        raise HTTPException(status_code=403, detail="Tenant administrator required for billing")
     if data.plan not in PLANS: raise HTTPException(status_code=400, detail="Invalid plan")
     if data.billing not in ("monthly", "annual"): raise HTTPException(status_code=400, detail="Invalid billing")
 
@@ -338,8 +340,8 @@ def _apply_verified_payment(db, result, reference, expected_business_id=None):
 async def verify_payment(reference: str, db: Session = Depends(get_db), user=Depends(get_current_user_for_billing)):
     from app.email_service import payment_success as send_payment_success
 
-    if user.role == SUPERADMIN_ROLE or not user.business_id:
-        raise HTTPException(status_code=403, detail="Tenant billing account required")
+    if user.role != "admin" or not user.business_id:
+        raise HTTPException(status_code=403, detail="Tenant administrator required for billing")
     result = await _paystack_get(f"/transaction/verify/{reference}")
     biz, newly_applied = _apply_verified_payment(db, result, reference, user.business_id)
     metadata = result["metadata"]
@@ -380,7 +382,9 @@ async def paystack_webhook(request: Request, db: Session = Depends(get_db),
     )
 
     body         = await request.body()
-    secret       = os.getenv("PAYSTACK_SECRET_KEY", "")
+    secret       = os.getenv("PAYSTACK_SECRET_KEY")
+    if not secret:
+        raise HTTPException(status_code=503, detail="Payment webhook unavailable")
     expected_sig = hmac.new(secret.encode("utf-8"), body, hashlib.sha512).hexdigest()
     if x_paystack_signature != expected_sig:
         raise HTTPException(status_code=400, detail="Invalid webhook signature")
