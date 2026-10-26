@@ -728,3 +728,16 @@ class LoyaltyTransaction(Base):
             name="ck_loyalty_transactions_nonnegative_amount",
         ),
     )
+
+
+class SubscriptionPaymentActivation(Base):
+    """One committed entitlement activation per Paystack transaction reference."""
+    __tablename__ = "subscription_payment_activations"
+
+    reference = Column(String(120), primary_key=True)
+    business_id = Column(Integer, ForeignKey("businesses.business_id"), nullable=False, index=True)
+    plan = Column(String(30), nullable=False)
+    billing = Column(String(20), nullable=False)
+    amount = Column(Integer, nullable=False)
+    currency = Column(String(3), nullable=False)
+    activated_at = Column(DateTime, nullable=False, default=datetime.utcnow)
